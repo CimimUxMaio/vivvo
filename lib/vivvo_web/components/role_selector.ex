@@ -43,9 +43,8 @@ defmodule VivvoWeb.Components.RoleSelector do
   @impl true
   def handle_event("switch_role", %{"current_role" => role}, socket) do
     user = socket.assigns.user
-    role_atom = String.to_existing_atom(role)
 
-    case Accounts.update_user_current_role(user, %{current_role: role_atom}) do
+    case Accounts.update_user_current_role(user, %{current_role: role}) do
       {:ok, _updated_user} ->
         {:noreply,
          socket
