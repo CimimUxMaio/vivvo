@@ -54,6 +54,15 @@ defmodule VivvoWeb.Layouts do
             <.theme_toggle />
           </li>
           <%= if @current_scope do %>
+            <%= if length(@current_scope.user.preferred_roles) > 1 do %>
+              <li>
+                <.live_component
+                  module={VivvoWeb.Components.RoleSelector}
+                  id="role-selector"
+                  user={@current_scope.user}
+                />
+              </li>
+            <% end %>
             <li class="text-sm">
               {@current_scope.user.email}
             </li>

@@ -513,4 +513,54 @@ defmodule Vivvo.AccountsTest do
       refute inspect(%User{password: "123456"}) =~ "password: \"123456\""
     end
   end
+
+  describe "change_user_current_role/2" do
+    test "returns a changeset for changing current_role" do
+      user = user_fixture()
+      assert %Ecto.Changeset{} = changeset = Accounts.change_user_current_role(user)
+      assert changeset.data == user
+      assert changeset.required == [:current_role]
+    end
+
+    test "allows setting current_role attribute" do
+      user = user_fixture(%{preferred_roles: [:owner, :tenant], current_role: :owner})
+
+      changeset =
+        Accounts.change_user_current_role(user, %{current_role: :tenant})
+
+      assert changeset.valid?
+      assert get_change(changeset, :current_role) == :tenant
+    end
+  end
+
+  describe "update_user_current_role/2" do
+    test "updates the current_role successfully" do
+      user =
+        user_fixture(%{preferred_roles: [:owner, :tenant], current_role: :owner})
+
+      assert {:ok, updated_user} =
+               Accounts.update_user_current_role(user, %{current_role: :tenant})
+
+      assert updated_user.current_role == :tenant
+      assert updated_user.id == user.id
+    end
+
+    test "returns error when current_role is not in preferred_roles" do
+      user = user_fixture(%{preferred_roles: [:owner], current_role: :owner})
+
+      assert {:error, changeset} =
+               Accounts.update_user_current_role(user, %{current_role: :tenant})
+
+      assert "must be one of the preferred roles" in errors_on(changeset).current_role
+    end
+
+    test "returns error when current_role is nil" do
+      user = user_fixture(%{preferred_roles: [:owner], current_role: :owner})
+
+      assert {:error, changeset} =
+               Accounts.update_user_current_role(user, %{current_role: nil})
+
+      assert "can't be blank" in errors_on(changeset).current_role
+    end
+  end
 end

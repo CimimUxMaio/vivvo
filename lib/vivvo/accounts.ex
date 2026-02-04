@@ -296,6 +296,39 @@ defmodule Vivvo.Accounts do
     :ok
   end
 
+  ## Role management
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing the user's current_role.
+
+  ## Examples
+
+      iex> change_user_current_role(user)
+      %Ecto.Changeset{data: %User{}}
+
+  """
+  def change_user_current_role(user, attrs \\ %{}) do
+    User.current_role_changeset(user, attrs)
+  end
+
+  @doc """
+  Updates the user's current_role.
+
+  ## Examples
+
+      iex> update_user_current_role(user, %{current_role: :tenant})
+      {:ok, %User{}}
+
+      iex> update_user_current_role(user, %{current_role: :invalid})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_user_current_role(user, attrs) do
+    user
+    |> User.current_role_changeset(attrs)
+    |> Repo.update()
+  end
+
   ## Token helper
 
   defp update_user_and_delete_all_tokens(changeset) do
