@@ -195,18 +195,7 @@ defmodule Vivvo.Accounts.User do
     user
     |> cast(attrs, [:current_role])
     |> validate_required([:current_role])
-    |> validate_current_role_in_preferred()
-  end
-
-  defp validate_current_role_in_preferred(changeset) do
-    preferred_roles = get_field(changeset, :preferred_roles) || []
-    current_role = get_field(changeset, :current_role)
-
-    if current_role && current_role not in preferred_roles do
-      add_error(changeset, :current_role, "must be one of the preferred roles")
-    else
-      changeset
-    end
+    |> validate_current_role()
   end
 
   @doc """
