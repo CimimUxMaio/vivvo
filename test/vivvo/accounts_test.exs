@@ -69,11 +69,13 @@ defmodule Vivvo.AccountsTest do
 
     test "validates email uniqueness" do
       %{email: email} = user_fixture()
-      {:error, changeset} = Accounts.register_user(%{email: email})
+      {:error, changeset} = Accounts.register_user(valid_user_attributes(email: email))
       assert "has already been taken" in errors_on(changeset).email
 
       # Now try with the uppercased email too, to check that email case is ignored.
-      {:error, changeset} = Accounts.register_user(%{email: String.upcase(email)})
+      {:error, changeset} =
+        Accounts.register_user(valid_user_attributes(email: String.upcase(email)))
+
       assert "has already been taken" in errors_on(changeset).email
     end
 
@@ -84,6 +86,123 @@ defmodule Vivvo.AccountsTest do
       assert is_nil(user.hashed_password)
       assert is_nil(user.confirmed_at)
       assert is_nil(user.password)
+    end
+
+    test "registers users with all required fields" do
+      attrs =
+        valid_user_attributes(
+          first_name: "John",
+          last_name: "Doe",
+          phone_number: "+1234567890",
+          preferred_roles: ["owner", "tenant"],
+          current_role: "owner"
+        )
+
+      {:ok, user} = Accounts.register_user(attrs)
+      assert user.first_name == "John"
+      assert user.last_name == "Doe"
+      assert user.phone_number == "+1234567890"
+      assert user.preferred_roles == [:owner, :tenant]
+      assert user.current_role == :owner
+    end
+
+    test "requires first_name to be set" do
+      {:error, changeset} = Accounts.register_user(valid_user_attributes(%{first_name: nil}))
+      assert %{first_name: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "requires last_name to be set" do
+      {:error, changeset} = Accounts.register_user(valid_user_attributes(%{last_name: nil}))
+      assert %{last_name: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "requires phone_number to be set" do
+      {:error, changeset} = Accounts.register_user(valid_user_attributes(%{phone_number: nil}))
+      assert %{phone_number: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "validates phone_number format" do
+      {:error, changeset} =
+        Accounts.register_user(valid_user_attributes(%{phone_number: "abcdefghijk"}))
+
+      assert %{phone_number: ["must be a valid phone number"]} = errors_on(changeset)
+    end
+
+    test "validates phone_number minimum length" do
+      {:error, changeset} = Accounts.register_user(valid_user_attributes(%{phone_number: "123"}))
+      assert "should be at least 10 character(s)" in errors_on(changeset).phone_number
+    end
+
+    test "validates phone_number maximum length" do
+      {:error, changeset} =
+        Accounts.register_user(valid_user_attributes(%{phone_number: "123456789012345678901"}))
+
+      assert "should be at most 20 character(s)" in errors_on(changeset).phone_number
+    end
+
+    test "validates first_name maximum length" do
+      {:error, changeset} =
+        Accounts.register_user(valid_user_attributes(%{first_name: String.duplicate("a", 101)}))
+
+      assert "should be at most 100 character(s)" in errors_on(changeset).first_name
+    end
+
+    test "validates last_name maximum length" do
+      {:error, changeset} =
+        Accounts.register_user(valid_user_attributes(%{last_name: String.duplicate("a", 101)}))
+
+      assert "should be at most 100 character(s)" in errors_on(changeset).last_name
+    end
+
+    test "requires at least one preferred_role" do
+      {:error, changeset} = Accounts.register_user(valid_user_attributes(%{preferred_roles: []}))
+      assert %{preferred_roles: ["must select at least one role"]} = errors_on(changeset)
+    end
+
+    test "validates current_role is in preferred_roles" do
+      {:error, changeset} =
+        Accounts.register_user(
+          valid_user_attributes(%{
+            preferred_roles: ["owner"],
+            current_role: "tenant"
+          })
+        )
+
+      assert %{current_role: ["must be one of the preferred roles"]} = errors_on(changeset)
+    end
+  end
+
+  describe "change_user_registration/3" do
+    test "returns a changeset for new registration" do
+      assert %Ecto.Changeset{} = changeset = Accounts.change_user_registration(%User{})
+      # Check that all required fields are present (order may vary)
+      assert Enum.sort(changeset.required) == [
+               :current_role,
+               :email,
+               :first_name,
+               :last_name,
+               :phone_number,
+               :preferred_roles
+             ]
+    end
+
+    test "validates uniqueness when validate_unique is true" do
+      user = user_fixture()
+
+      changeset =
+        Accounts.change_user_registration(%User{}, %{email: user.email}, validate_unique: true)
+
+      {:error, validated_changeset} = Repo.insert(changeset)
+      assert "has already been taken" in errors_on(validated_changeset).email
+    end
+
+    test "skips uniqueness validation when validate_unique is false" do
+      user = user_fixture()
+
+      changeset =
+        Accounts.change_user_registration(%User{}, %{email: user.email}, validate_unique: false)
+
+      refute Keyword.has_key?(changeset.errors, :email)
     end
   end
 

@@ -8,6 +8,11 @@ defmodule Vivvo.Accounts.User do
     field :hashed_password, :string, redact: true
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
+    field :first_name, :string
+    field :last_name, :string
+    field :phone_number, :string
+    field :preferred_roles, {:array, Ecto.Enum}, values: [:owner, :tenant]
+    field :current_role, Ecto.Enum, values: [:owner, :tenant]
 
     timestamps(type: :utc_datetime)
   end
@@ -27,6 +32,65 @@ defmodule Vivvo.Accounts.User do
     user
     |> cast(attrs, [:email])
     |> validate_email(opts)
+  end
+
+  @doc """
+  A user changeset for registration.
+
+  Validates all required fields for user registration including email,
+  first name, last name, phone number, and role preferences.
+
+  ## Options
+
+    * `:validate_unique` - Set to false if you don't want to validate the
+      uniqueness of the email, useful when displaying live validations.
+      Defaults to `true`.
+  """
+  def registration_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [
+      :email,
+      :first_name,
+      :last_name,
+      :phone_number,
+      :preferred_roles,
+      :current_role
+    ])
+    |> validate_required([
+      :first_name,
+      :last_name,
+      :phone_number,
+      :preferred_roles,
+      :current_role
+    ])
+    |> validate_length(:first_name, min: 1, max: 100)
+    |> validate_length(:last_name, min: 1, max: 100)
+    |> validate_format(:phone_number, ~r/^[\d\s\-\(\)\+]+$/,
+      message: "must be a valid phone number"
+    )
+    |> validate_length(:phone_number, min: 10, max: 20)
+    |> validate_preferred_roles()
+    |> validate_current_role()
+    |> validate_email(opts)
+  end
+
+  defp validate_preferred_roles(changeset) do
+    case get_field(changeset, :preferred_roles) do
+      nil -> add_error(changeset, :preferred_roles, "must select at least one role")
+      [] -> add_error(changeset, :preferred_roles, "must select at least one role")
+      _ -> changeset
+    end
+  end
+
+  defp validate_current_role(changeset) do
+    preferred_roles = get_field(changeset, :preferred_roles) || []
+    current_role = get_field(changeset, :current_role)
+
+    if current_role && current_role not in preferred_roles do
+      add_error(changeset, :current_role, "must be one of the preferred roles")
+    else
+      changeset
+    end
   end
 
   defp validate_email(changeset, opts) do

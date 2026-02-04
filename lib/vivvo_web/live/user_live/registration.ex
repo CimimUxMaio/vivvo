@@ -24,13 +24,53 @@ defmodule VivvoWeb.UserLive.Registration do
 
         <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
           <.input
+            field={@form[:first_name]}
+            type="text"
+            label="First Name"
+            required
+            phx-mounted={JS.focus()}
+          />
+
+          <.input field={@form[:last_name]} type="text" label="Last Name" required />
+
+          <.input
             field={@form[:email]}
             type="email"
             label="Email"
             autocomplete="username"
             required
-            phx-mounted={JS.focus()}
           />
+
+          <.input field={@form[:phone_number]} type="text" label="Phone Number" required />
+
+          <div class="space-y-2">
+            <label class="block text-sm font-semibold leading-6 text-zinc-800">
+              I'm interested in using Vivvo as a
+            </label>
+            <div class="space-y-2">
+              <label class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="user[preferred_roles][]"
+                  value="owner"
+                  checked={:owner in (@form[:preferred_roles].value || [])}
+                  class="rounded border-zinc-300 text-brand focus:ring-brand"
+                />
+                <span class="text-sm">Property Owner</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="user[preferred_roles][]"
+                  value="tenant"
+                  checked={:tenant in (@form[:preferred_roles].value || [])}
+                  class="rounded border-zinc-300 text-brand focus:ring-brand"
+                />
+                <span class="text-sm">Tenant</span>
+              </label>
+            </div>
+            <.input_errors field={@form[:preferred_roles]} />
+          </div>
 
           <.button phx-disable-with="Creating account..." class="btn btn-primary w-full">
             Create an account
@@ -48,13 +88,20 @@ defmodule VivvoWeb.UserLive.Registration do
   end
 
   def mount(_params, _session, socket) do
-    changeset = Accounts.change_user_email(%User{}, %{}, validate_unique: false)
+    changeset = Accounts.change_user_registration(%User{}, %{}, validate_unique: false)
 
     {:ok, assign_form(socket, changeset), temporary_assigns: [form: nil]}
   end
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
+    # Auto-calculate current_role based on preferred_roles
+    user_params =
+      case user_params["preferred_roles"] do
+        [first_role | _] -> Map.put(user_params, "current_role", first_role)
+        _ -> Map.put(user_params, "current_role", nil)
+      end
+
     case Accounts.register_user(user_params) do
       {:ok, user} ->
         {:ok, _} =
@@ -77,7 +124,14 @@ defmodule VivvoWeb.UserLive.Registration do
   end
 
   def handle_event("validate", %{"user" => user_params}, socket) do
-    changeset = Accounts.change_user_email(%User{}, user_params, validate_unique: false)
+    # Auto-calculate current_role based on preferred_roles
+    user_params =
+      case user_params["preferred_roles"] do
+        [first_role | _] -> Map.put(user_params, "current_role", first_role)
+        _ -> Map.put(user_params, "current_role", nil)
+      end
+
+    changeset = Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
     {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
 

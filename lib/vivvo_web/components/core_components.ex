@@ -227,7 +227,7 @@ defmodule VivvoWeb.CoreComponents do
           />{@label}
         </span>
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <.input_errors errors={@errors} />
     </div>
     """
   end
@@ -248,7 +248,7 @@ defmodule VivvoWeb.CoreComponents do
           {Phoenix.HTML.Form.options_for_select(@options, @value)}
         </select>
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <.input_errors errors={@errors} />
     </div>
     """
   end
@@ -268,7 +268,7 @@ defmodule VivvoWeb.CoreComponents do
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <.input_errors errors={@errors} />
     </div>
     """
   end
@@ -291,17 +291,35 @@ defmodule VivvoWeb.CoreComponents do
           {@rest}
         />
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <.input_errors errors={@errors} />
     </div>
     """
   end
 
-  # Helper used by inputs to generate form errors
-  defp error(assigns) do
+  @doc """
+  Renders form error messages with consistent styling.
+
+  ## Examples
+
+      <.input_errors errors={@errors} />
+      <.input_errors field={@form[:email]} />
+  """
+  attr :field, Phoenix.HTML.FormField, required: false, doc: "a form field struct"
+  attr :errors, :list, default: [], doc: "list of error message strings"
+  attr :class, :string, default: nil, doc: "additional CSS classes"
+
+  def input_errors(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do
+    assigns
+    |> assign(:errors, Enum.map(field.errors, &translate_error(&1)))
+    |> assign(:field, nil)
+    |> input_errors()
+  end
+
+  def input_errors(%{errors: errors} = assigns) when is_list(errors) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
+    <p :for={msg <- @errors} class={["mt-1.5 flex gap-2 items-center text-sm text-error", @class]}>
       <.icon name="hero-exclamation-circle" class="size-5" />
-      {render_slot(@inner_block)}
+      {msg}
     </p>
     """
   end

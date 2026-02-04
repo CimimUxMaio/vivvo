@@ -14,7 +14,12 @@ defmodule Vivvo.AccountsFixtures do
 
   def valid_user_attributes(attrs \\ %{}) do
     Enum.into(attrs, %{
-      email: unique_user_email()
+      first_name: "Test",
+      last_name: "User",
+      email: unique_user_email(),
+      phone_number: "+1234567890",
+      preferred_roles: ["owner", "tenant"],
+      current_role: "owner"
     })
   end
 
