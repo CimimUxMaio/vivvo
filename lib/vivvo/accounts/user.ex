@@ -1,4 +1,12 @@
 defmodule Vivvo.Accounts.User do
+  @moduledoc """
+  User schema and changeset functions.
+
+  This module defines the User schema and provides functions for
+  validating and changing user data including registration,
+  email changes, and password changes.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 

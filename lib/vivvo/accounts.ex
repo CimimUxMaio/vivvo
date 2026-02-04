@@ -6,7 +6,7 @@ defmodule Vivvo.Accounts do
   import Ecto.Query, warn: false
   alias Vivvo.Repo
 
-  alias Vivvo.Accounts.{User, UserToken, UserNotifier}
+  alias Vivvo.Accounts.{User, UserNotifier, UserToken}
 
   ## Database getters
 

@@ -1,8 +1,16 @@
 defmodule Vivvo.Accounts.UserNotifier do
+  @moduledoc """
+  Module for sending user notification emails.
+
+  This module handles the delivery of various emails including
+  email update instructions, login instructions, and confirmation
+  instructions.
+  """
+
   import Swoosh.Email
 
-  alias Vivvo.Mailer
   alias Vivvo.Accounts.User
+  alias Vivvo.Mailer
 
   # Delivers the email using the application mailer.
   defp deliver(recipient, subject, body) do

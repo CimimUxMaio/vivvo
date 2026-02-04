@@ -1,4 +1,12 @@
 defmodule VivvoWeb.UserAuth do
+  @moduledoc """
+  User authentication and authorization functions.
+
+  This module provides functions for logging users in and out,
+  fetching the current user scope from sessions and cookies,
+  and handling LiveView authentication mounts.
+  """
+
   use VivvoWeb, :verified_routes
 
   import Plug.Conn

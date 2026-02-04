@@ -1,4 +1,12 @@
 defmodule Vivvo.Accounts.UserToken do
+  @moduledoc """
+  Schema and functions for user tokens.
+
+  This module handles the creation and verification of various
+  user tokens including session tokens, magic link tokens, and
+  email change tokens.
+  """
+
   use Ecto.Schema
   import Ecto.Query
   alias Vivvo.Accounts.UserToken

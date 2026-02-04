@@ -44,9 +44,12 @@ defmodule VivvoWeb.ConnCase do
   It stores an updated connection and a registered user in the
   test context.
   """
+  alias Vivvo.Accounts.Scope
+  alias Vivvo.AccountsFixtures
+
   def register_and_log_in_user(%{conn: conn} = context) do
-    user = Vivvo.AccountsFixtures.user_fixture()
-    scope = Vivvo.Accounts.Scope.for_user(user)
+    user = AccountsFixtures.user_fixture()
+    scope = Scope.for_user(user)
 
     opts =
       context
