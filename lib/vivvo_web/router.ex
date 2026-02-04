@@ -17,12 +17,6 @@ defmodule VivvoWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", VivvoWeb do
-    pipe_through :browser
-
-    get "/", PageController, :home
-  end
-
   # Other scopes may use custom stacks.
   # scope "/api", VivvoWeb do
   #   pipe_through :api
@@ -52,6 +46,7 @@ defmodule VivvoWeb.Router do
 
     live_session :require_authenticated_user,
       on_mount: [{VivvoWeb.UserAuth, :require_authenticated}] do
+      live "/", HomeLive, :index
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end

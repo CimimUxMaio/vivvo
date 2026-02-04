@@ -53,6 +53,24 @@ defmodule VivvoWeb.Layouts do
           <li>
             <.theme_toggle />
           </li>
+          <%= if @current_scope do %>
+            <li class="text-sm">
+              {@current_scope.user.email}
+            </li>
+            <li>
+              <.link href={~p"/users/settings"} class="btn btn-ghost">Settings</.link>
+            </li>
+            <li>
+              <.link href={~p"/users/log-out"} method="delete" class="btn btn-ghost">Log out</.link>
+            </li>
+          <% else %>
+            <li>
+              <.link href={~p"/users/register"} class="btn btn-ghost">Register</.link>
+            </li>
+            <li>
+              <.link href={~p"/users/log-in"} class="btn btn-ghost">Log in</.link>
+            </li>
+          <% end %>
           <li>
             <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
               Get Started <span aria-hidden="true">&rarr;</span>
