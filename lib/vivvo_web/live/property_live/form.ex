@@ -49,7 +49,7 @@ defmodule VivvoWeb.PropertyLive.Form do
   end
 
   defp apply_action(socket, :new, _params) do
-    property = %Property{user_id: socket.assigns.current_scope.user.id}
+    property = %Property{}
 
     socket
     |> assign(:page_title, "New Property")
