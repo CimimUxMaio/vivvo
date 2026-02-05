@@ -6,6 +6,7 @@ defmodule Vivvo.Contracts.Contract do
   import Ecto.Changeset
 
   alias Vivvo.Accounts.User
+  alias Vivvo.Payments.Payment
   alias Vivvo.Properties.Property
 
   schema "contracts" do
@@ -21,6 +22,8 @@ defmodule Vivvo.Contracts.Contract do
 
     field :archived, :boolean, default: false
     belongs_to :archived_by, User
+
+    has_many :payments, Payment
 
     timestamps(type: :utc_datetime)
   end
