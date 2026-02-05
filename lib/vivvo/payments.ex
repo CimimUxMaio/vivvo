@@ -160,8 +160,6 @@ defmodule Vivvo.Payments do
 
   """
   def change_payment(%Scope{} = scope, %Payment{} = payment, attrs \\ %{}) do
-    true = payment.user_id == scope.user.id
-
     Payment.changeset(payment, attrs, scope)
   end
 
