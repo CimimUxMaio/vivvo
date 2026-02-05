@@ -142,8 +142,6 @@ defmodule Vivvo.Properties do
 
   """
   def change_property(%Scope{} = scope, %Property{} = property, attrs \\ %{}) do
-    true = property.user_id == scope.user.id
-
     Property.changeset(property, attrs, scope)
   end
 end
