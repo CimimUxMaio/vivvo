@@ -79,7 +79,7 @@ defmodule Vivvo.Contracts do
     from(c in Contract,
       where:
         c.property_id == ^property_id and c.user_id == ^scope.user.id and c.archived == false,
-      preload: [:tenant]
+      preload: [:tenant, :payments]
     )
     |> Repo.one()
   end
@@ -267,6 +267,29 @@ defmodule Vivvo.Contracts do
     |> where([c], c.archived == false)
     |> preload([:property, :payments])
     |> Repo.all()
+  end
+
+  @doc """
+  Gets a single contract for a tenant by ID.
+
+  Returns nil if the contract doesn't exist or doesn't belong to the tenant.
+
+  ## Examples
+
+      iex> get_contract_for_tenant(scope, 123)
+      %Contract{}
+
+      iex> get_contract_for_tenant(scope, 456)
+      nil
+
+  """
+  def get_contract_for_tenant(%Scope{user: user} = _scope, contract_id) do
+    Contract
+    |> where([c], c.id == ^contract_id)
+    |> where([c], c.tenant_id == ^user.id)
+    |> where([c], c.archived == false)
+    |> preload([:property, :payments])
+    |> Repo.one()
   end
 
   @doc """

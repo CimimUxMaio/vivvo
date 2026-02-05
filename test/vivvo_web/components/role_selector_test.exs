@@ -101,7 +101,7 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
   end
 
   describe "HomeLive with current role display" do
-    test "displays role for authenticated user", %{conn: conn} do
+    test "displays home page for authenticated user", %{conn: conn} do
       user =
         user_fixture(%{preferred_roles: [:owner, :tenant], current_role: :owner})
 
@@ -110,7 +110,8 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      assert html =~ "Home: owner"
+      # User without a contract should see "No Active Lease" message
+      assert html =~ "No Active Lease"
     end
 
     test "redirects unauthenticated user to login", %{conn: conn} do

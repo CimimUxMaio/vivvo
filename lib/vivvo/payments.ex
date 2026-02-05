@@ -49,6 +49,24 @@ defmodule Vivvo.Payments do
   @doc """
   Gets a single payment.
 
+  Returns nil if the Payment does not exist.
+
+  ## Examples
+
+      iex> get_payment(scope, 123)
+      %Payment{}
+
+      iex> get_payment(scope, 456)
+      nil
+
+  """
+  def get_payment(%Scope{} = scope, id) do
+    Repo.get_by(Payment, id: id, user_id: scope.user.id)
+  end
+
+  @doc """
+  Gets a single payment.
+
   Raises `Ecto.NoResultsError` if the Payment does not exist.
 
   ## Examples
