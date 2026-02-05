@@ -160,7 +160,7 @@ defmodule VivvoWeb.CoreComponents do
   attr :id, :any, default: nil
   attr :name, :any
   attr :label, :string, default: nil
-  attr :value, :any, default: nil
+  attr :value, :any
 
   attr :type, :string,
     default: "text",
@@ -190,6 +190,14 @@ defmodule VivvoWeb.CoreComponents do
     |> assign(:errors, Enum.map(errors, &translate_error(&1)))
     |> assign_new(:name, fn -> if assigns.multiple, do: field.name <> "[]", else: field.name end)
     |> assign_new(:value, fn -> field.value end)
+    |> input()
+  end
+
+  # When no field is provided, ensure value has a default and mark field as processed
+  def input(assigns) when not is_map_key(assigns, :field) do
+    assigns
+    |> assign(:field, nil)
+    |> assign_new(:value, fn -> nil end)
     |> input()
   end
 
