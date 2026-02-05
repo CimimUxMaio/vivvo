@@ -6,6 +6,7 @@ defmodule Vivvo.Accounts do
   import Ecto.Query, warn: false
   alias Vivvo.Repo
 
+  alias Vivvo.Accounts.Scope
   alias Vivvo.Accounts.{User, UserNotifier, UserToken}
 
   ## Database getters
@@ -59,6 +60,24 @@ defmodule Vivvo.Accounts do
 
   """
   def get_user!(id), do: Repo.get!(User, id)
+
+  @doc """
+  Returns the list of users who have :tenant in their preferred_roles.
+
+  Results are ordered by last_name, then first_name for consistent display.
+
+  ## Examples
+
+      iex> list_users_with_tenant_role(scope)
+      [%User{}, ...]
+  """
+  def list_users_with_tenant_role(%Scope{} = _scope) do
+    from(u in User,
+      where: :tenant in u.preferred_roles,
+      order_by: [u.last_name, u.first_name]
+    )
+    |> Repo.all()
+  end
 
   ## User registration
 

@@ -563,4 +563,95 @@ defmodule Vivvo.AccountsTest do
       assert "can't be blank" in errors_on(changeset).current_role
     end
   end
+
+  describe "list_users_with_tenant_role/1" do
+    test "returns only users with :tenant in preferred_roles" do
+      scope = user_scope_fixture()
+      tenant_user = user_fixture(%{preferred_roles: [:tenant]})
+      _owner_user = user_fixture(%{preferred_roles: [:owner]})
+
+      users = Accounts.list_users_with_tenant_role(scope)
+      user_ids = Enum.map(users, & &1.id)
+
+      assert tenant_user.id in user_ids
+      refute Enum.any?(users, fn u -> u.preferred_roles == [:owner] end)
+    end
+
+    test "includes users with both :owner and :tenant" do
+      scope = user_scope_fixture()
+      both_roles_user = user_fixture(%{preferred_roles: [:owner, :tenant]})
+
+      users = Accounts.list_users_with_tenant_role(scope)
+      user_ids = Enum.map(users, & &1.id)
+
+      assert both_roles_user.id in user_ids
+    end
+
+    test "excludes users with only :owner role" do
+      scope = user_scope_fixture()
+      owner_user = user_fixture(%{preferred_roles: [:owner]})
+
+      users = Accounts.list_users_with_tenant_role(scope)
+      user_ids = Enum.map(users, & &1.id)
+
+      refute owner_user.id in user_ids
+    end
+
+    test "ordering is by last_name, first_name" do
+      scope = user_scope_fixture()
+      user_a = user_fixture(%{preferred_roles: [:tenant], first_name: "Alice", last_name: "Zulu"})
+
+      user_b =
+        user_fixture(%{preferred_roles: [:tenant], first_name: "Bob", last_name: "Alpha"})
+
+      user_c =
+        user_fixture(%{preferred_roles: [:tenant], first_name: "Charlie", last_name: "Alpha"})
+
+      users = Accounts.list_users_with_tenant_role(scope)
+
+      # Should be ordered: Alpha Charlie, Alpha Bob, Zulu Alice
+      charlie_idx = Enum.find_index(users, &(&1.id == user_c.id))
+      bob_idx = Enum.find_index(users, &(&1.id == user_b.id))
+      alice_idx = Enum.find_index(users, &(&1.id == user_a.id))
+
+      assert charlie_idx < alice_idx
+      assert bob_idx < alice_idx
+    end
+
+    test "empty list when no tenant users exist" do
+      scope = user_scope_fixture()
+      _owner1 = user_fixture(%{preferred_roles: [:owner]})
+      _owner2 = user_fixture(%{preferred_roles: [:owner]})
+
+      users = Accounts.list_users_with_tenant_role(scope)
+
+      # Filter out the scope user if they have tenant role
+      tenant_only_users =
+        Enum.reject(users, fn u -> u.id == scope.user.id end)
+
+      # Should have no additional tenant users besides potentially the scope user
+      assert tenant_only_users == []
+    end
+
+    test "returns correct user fields (id, first_name, last_name, email)" do
+      scope = user_scope_fixture()
+
+      tenant =
+        user_fixture(%{
+          preferred_roles: [:tenant],
+          first_name: "Test",
+          last_name: "Tenant",
+          email: "tenant@test.com"
+        })
+
+      users = Accounts.list_users_with_tenant_role(scope)
+      tenant_user = Enum.find(users, &(&1.id == tenant.id))
+
+      assert tenant_user != nil
+      assert tenant_user.id == tenant.id
+      assert tenant_user.first_name == "Test"
+      assert tenant_user.last_name == "Tenant"
+      assert tenant_user.email == "tenant@test.com"
+    end
+  end
 end
