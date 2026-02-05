@@ -12,7 +12,7 @@ defmodule VivvoWeb.HomeLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="text-center">
         <.header>
-          Home
+          Home{if @current_scope, do: ": #{@current_scope.user.current_role}", else: ""}
         </.header>
       </div>
     </Layouts.app>
