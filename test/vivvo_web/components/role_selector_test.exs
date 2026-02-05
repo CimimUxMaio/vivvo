@@ -110,8 +110,8 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      # User without a contract should see "No Active Lease" message
-      assert html =~ "No Active Lease"
+      # User with owner role should see "Home: Owner" message
+      assert html =~ "Home: Owner"
     end
 
     test "redirects unauthenticated user to login", %{conn: conn} do

@@ -1,6 +1,7 @@
 defmodule VivvoWeb.HomeLive do
   use VivvoWeb, :live_view
 
+  alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts
   alias Vivvo.Payments
 
@@ -8,18 +9,14 @@ defmodule VivvoWeb.HomeLive do
   def mount(_params, _session, socket) do
     scope = socket.assigns.current_scope
 
-    # Get all contracts for the tenant with payments preloaded
-    contracts = Contracts.list_contracts_for_tenant(scope)
+    contracts =
+      if Scope.tenant?(scope) do
+        Contracts.list_contracts_for_tenant(scope)
+      else
+        []
+      end
 
-    # For now, we support single contract display per tenant
-    contract = List.first(contracts)
-
-    socket =
-      socket
-      |> assign(:contracts, contracts)
-      |> assign(:contract, contract)
-      |> assign(:payment_status, contract && Contracts.contract_payment_status(scope, contract))
-      |> assign(:months, contract && Contracts.get_months_up_to_current(contract))
+    socket = assign(socket, :contracts, contracts)
 
     {:ok, socket}
   end
@@ -28,24 +25,35 @@ defmodule VivvoWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="space-y-8">
-        <%= if @contract do %>
-          <%!-- Contract Card with Status Badge --%>
-          <.contract_card contract={@contract} payment_status={@payment_status} />
+      <%= if Scope.tenant?(@current_scope) do %>
+        <div class="space-y-8">
+          <%= if @contracts != [] do %>
+            <%= for contract <- @contracts do %>
+              <div class="space-y-6">
+                <%!-- Contract Card with Status Badge --%>
+                <.contract_card
+                  contract={contract}
+                  payment_status={Contracts.contract_payment_status(@current_scope, contract)}
+                />
 
-          <%!-- Monthly Payments List --%>
-          <.monthly_payments_section
-            contract={@contract}
-            months={@months}
-            scope={@current_scope}
-          />
+                <%!-- Monthly Payments List --%>
+                <.monthly_payments_section
+                  contract={contract}
+                  months={Contracts.get_months_up_to_current(contract)}
+                  scope={@current_scope}
+                />
 
-          <%!-- Payment History Table --%>
-          <.payment_history_section payments={@contract.payments} />
-        <% else %>
-          <.no_contract_message />
-        <% end %>
-      </div>
+                <%!-- Payment History Table --%>
+                <.payment_history_section payments={contract.payments} />
+              </div>
+            <% end %>
+          <% else %>
+            <.no_contract_message />
+          <% end %>
+        </div>
+      <% else %>
+        Home: Owner
+      <% end %>
     </Layouts.app>
     """
   end
