@@ -41,7 +41,7 @@ defmodule Vivvo.Properties do
 
   """
   def list_properties(%Scope{} = scope) do
-    Repo.all_by(Property, user_id: scope.user.id)
+    Repo.all_by(Property, user_id: scope.user.id, archived: false)
   end
 
   @doc """
@@ -59,7 +59,7 @@ defmodule Vivvo.Properties do
 
   """
   def get_property!(%Scope{} = scope, id) do
-    Repo.get_by!(Property, id: id, user_id: scope.user.id)
+    Repo.get_by!(Property, id: id, user_id: scope.user.id, archived: false)
   end
 
   @doc """
@@ -124,7 +124,9 @@ defmodule Vivvo.Properties do
     true = property.user_id == scope.user.id
 
     with {:ok, property = %Property{}} <-
-           Repo.delete(property) do
+           property
+           |> Property.archive_changeset(scope)
+           |> Repo.update() do
       broadcast_property(scope, {:deleted, property})
       {:ok, property}
     end

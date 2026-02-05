@@ -106,6 +106,15 @@ defmodule VivvoWeb.PropertyLiveTest do
       assert index_live |> element("#properties-#{property.id} a", "Delete") |> render_click()
       refute has_element?(index_live, "#properties-#{property.id}")
     end
+
+    test "deleted properties do not reappear in listing", %{conn: conn, scope: scope} do
+      property = property_fixture(scope, %{name: "Deleted Property"})
+      {:ok, _} = Vivvo.Properties.delete_property(scope, property)
+
+      {:ok, _index_live, html} = live(conn, ~p"/properties")
+
+      refute html =~ "Deleted Property"
+    end
   end
 
   describe "Show" do
