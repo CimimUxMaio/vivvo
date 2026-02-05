@@ -7,6 +7,19 @@
 # General application configuration
 import Config
 
+config :vivvo, :scopes,
+  user: [
+    default: true,
+    module: Vivvo.Accounts.Scope,
+    assign_key: :current_scope,
+    access_path: [:user, :id],
+    schema_key: :user_id,
+    schema_type: :id,
+    schema_table: :users,
+    test_data_fixture: Vivvo.AccountsFixtures,
+    test_setup_helper: :register_and_log_in_user
+  ]
+
 config :vivvo,
   ecto_repos: [Vivvo.Repo],
   generators: [timestamp_type: :utc_datetime]
