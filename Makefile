@@ -59,6 +59,17 @@ db.down:
 		echo "No database container '$(DB_CONTAINER_NAME)' found"; \
 	fi
 
+.PHONY: db.shell
+## Open a psql shell in the database container
+db.shell:
+	@if [ "$$(docker ps -q -f name=$(DB_CONTAINER_NAME))" ]; then \
+		docker exec -it $(DB_CONTAINER_NAME) psql -U postgres -d vivvo_dev; \
+	else \
+		echo "Error: Database container '$(DB_CONTAINER_NAME)' is not running"; \
+		echo "Run 'make db.up' to start the database container"; \
+		exit 1; \
+	fi
+
 # Colors for terminal output
 BOLD := \033[1m
 DIM := \033[2m
@@ -85,6 +96,7 @@ help:
 	@echo "  $(YELLOW)db.up$(RESET)         Start the PostgreSQL Docker container"
 	@echo "  $(YELLOW)db.setup$(RESET)      Create database, run migrations, and seed data"
 	@echo "  $(YELLOW)db.down$(RESET)       Stop and remove the database container"
+	@echo "  $(YELLOW)db.shell$(RESET)      Open a psql shell in the database container"
 	@echo ""
 	@echo "$(CYAN)$(BOLD)Other Commands:$(RESET)"
 	@echo "  $(DIM)help$(RESET)          Display this help message"
