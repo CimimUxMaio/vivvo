@@ -59,7 +59,13 @@ defmodule VivvoWeb.PropertyLive.Form do
 
   @impl true
   def handle_event("validate", %{"property" => property_params}, socket) do
-    changeset = Properties.change_property(socket.assigns.current_scope, socket.assigns.property, property_params)
+    changeset =
+      Properties.change_property(
+        socket.assigns.current_scope,
+        socket.assigns.property,
+        property_params
+      )
+
     {:noreply, assign(socket, form: to_form(changeset, action: :validate))}
   end
 
@@ -68,7 +74,11 @@ defmodule VivvoWeb.PropertyLive.Form do
   end
 
   defp save_property(socket, :edit, property_params) do
-    case Properties.update_property(socket.assigns.current_scope, socket.assigns.property, property_params) do
+    case Properties.update_property(
+           socket.assigns.current_scope,
+           socket.assigns.property,
+           property_params
+         ) do
       {:ok, property} ->
         {:noreply,
          socket

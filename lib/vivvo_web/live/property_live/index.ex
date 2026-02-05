@@ -68,7 +68,8 @@ defmodule VivvoWeb.PropertyLive.Index do
   @impl true
   def handle_info({type, %Vivvo.Properties.Property{}}, socket)
       when type in [:created, :updated, :deleted] do
-    {:noreply, stream(socket, :properties, list_properties(socket.assigns.current_scope), reset: true)}
+    {:noreply,
+     stream(socket, :properties, list_properties(socket.assigns.current_scope), reset: true)}
   end
 
   defp list_properties(current_scope) do

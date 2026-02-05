@@ -30,4 +30,28 @@ defmodule Vivvo.Accounts.Scope do
   end
 
   def for_user(nil), do: nil
+
+  @doc """
+  Checks if the scope's user has the given role.
+
+  Returns true if the user's current_role matches the given role.
+  Returns false if the scope has no user or the role doesn't match.
+  """
+  def has_role?(%__MODULE__{user: %User{current_role: role}}, role), do: true
+  def has_role?(%__MODULE__{}, _role), do: false
+  def has_role?(nil, _role), do: false
+
+  @doc """
+  Checks if the scope's user has the :owner role.
+
+  This is a convenience function that calls `has_role?(scope, :owner)`.
+  """
+  def owner?(scope), do: has_role?(scope, :owner)
+
+  @doc """
+  Checks if the scope's user has the :tenant role.
+
+  This is a convenience function that calls `has_role?(scope, :tenant)`.
+  """
+  def tenant?(scope), do: has_role?(scope, :tenant)
 end

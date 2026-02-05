@@ -253,6 +253,21 @@ defmodule VivvoWeb.UserAuth do
     end
   end
 
+  def on_mount(:require_owner_role, _params, _session, socket) do
+    if socket.assigns.current_scope &&
+         socket.assigns.current_scope.user &&
+         socket.assigns.current_scope.user.current_role == :owner do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(:error, "You must be an owner to access this page.")
+        |> Phoenix.LiveView.redirect(to: ~p"/")
+
+      {:halt, socket}
+    end
+  end
+
   defp mount_current_scope(socket, session) do
     Phoenix.Component.assign_new(socket, :current_scope, fn ->
       {user, _} =

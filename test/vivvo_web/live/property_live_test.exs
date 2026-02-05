@@ -4,11 +4,33 @@ defmodule VivvoWeb.PropertyLiveTest do
   import Phoenix.LiveViewTest
   import Vivvo.PropertiesFixtures
 
-  @create_attrs %{name: "some name", address: "some address", area: 42, rooms: 42, notes: "some notes"}
-  @update_attrs %{name: "some updated name", address: "some updated address", area: 43, rooms: 43, notes: "some updated notes"}
+  alias Vivvo.Accounts
+  alias Vivvo.Accounts.Scope
+
+  @create_attrs %{
+    name: "some name",
+    address: "some address",
+    area: 42,
+    rooms: 42,
+    notes: "some notes"
+  }
+  @update_attrs %{
+    name: "some updated name",
+    address: "some updated address",
+    area: 43,
+    rooms: 43,
+    notes: "some updated notes"
+  }
   @invalid_attrs %{name: nil, address: nil, area: nil, rooms: nil, notes: nil}
 
   setup :register_and_log_in_user
+
+  defp ensure_owner_role(%{user: user} = context) do
+    # Update user to ensure owner role
+    {:ok, updated_user} = Accounts.update_user_current_role(user, %{current_role: :owner})
+    updated_scope = Scope.for_user(updated_user)
+    Map.merge(context, %{user: updated_user, scope: updated_scope})
+  end
 
   defp create_property(%{scope: scope}) do
     property = property_fixture(scope)
@@ -17,7 +39,7 @@ defmodule VivvoWeb.PropertyLiveTest do
   end
 
   describe "Index" do
-    setup [:create_property]
+    setup [:ensure_owner_role, :create_property]
 
     test "lists all properties", %{conn: conn, property: property} do
       {:ok, _index_live, html} = live(conn, ~p"/properties")
@@ -87,7 +109,7 @@ defmodule VivvoWeb.PropertyLiveTest do
   end
 
   describe "Show" do
-    setup [:create_property]
+    setup [:ensure_owner_role, :create_property]
 
     test "displays property", %{conn: conn, property: property} do
       {:ok, _show_live, html} = live(conn, ~p"/properties/#{property}")
@@ -120,6 +142,62 @@ defmodule VivvoWeb.PropertyLiveTest do
       html = render(show_live)
       assert html =~ "Property updated successfully"
       assert html =~ "some updated name"
+    end
+  end
+
+  describe "Authorization" do
+    setup :ensure_owner_role
+    setup :create_property
+
+    defp set_tenant_role(%{user: user, conn: conn} = context) do
+      {:ok, updated_user} = Accounts.update_user_current_role(user, %{current_role: :tenant})
+      # Re-log in with updated role
+      conn = VivvoWeb.ConnCase.log_in_user(conn, updated_user)
+      Map.merge(context, %{user: updated_user, conn: conn})
+    end
+
+    test "non-owner cannot access property index", %{conn: conn, user: user} do
+      context = set_tenant_role(%{user: user, conn: conn})
+
+      assert {:error,
+              {:redirect,
+               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+               live(context.conn, ~p"/properties")
+    end
+
+    test "non-owner cannot access property new form", %{conn: conn, user: user} do
+      context = set_tenant_role(%{user: user, conn: conn})
+
+      assert {:error,
+              {:redirect,
+               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+               live(context.conn, ~p"/properties/new")
+    end
+
+    test "non-owner cannot access property show page", %{
+      conn: conn,
+      property: property,
+      user: user
+    } do
+      context = set_tenant_role(%{user: user, conn: conn})
+
+      assert {:error,
+              {:redirect,
+               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+               live(context.conn, ~p"/properties/#{property}")
+    end
+
+    test "non-owner cannot access property edit form", %{
+      conn: conn,
+      property: property,
+      user: user
+    } do
+      context = set_tenant_role(%{user: user, conn: conn})
+
+      assert {:error,
+              {:redirect,
+               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+               live(context.conn, ~p"/properties/#{property}/edit")
     end
   end
 end

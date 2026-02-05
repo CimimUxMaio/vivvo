@@ -6,8 +6,8 @@ defmodule Vivvo.Properties do
   import Ecto.Query, warn: false
   alias Vivvo.Repo
 
-  alias Vivvo.Properties.Property
   alias Vivvo.Accounts.Scope
+  alias Vivvo.Properties.Property
 
   @doc """
   Subscribes to scoped notifications about any property changes.

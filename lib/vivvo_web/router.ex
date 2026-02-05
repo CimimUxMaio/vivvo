@@ -51,6 +51,17 @@ defmodule VivvoWeb.Router do
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
 
+    live_session :require_owner,
+      on_mount: [
+        {VivvoWeb.UserAuth, :require_authenticated},
+        {VivvoWeb.UserAuth, :require_owner_role}
+      ] do
+      live "/properties", PropertyLive.Index, :index
+      live "/properties/new", PropertyLive.Form, :new
+      live "/properties/:id", PropertyLive.Show, :show
+      live "/properties/:id/edit", PropertyLive.Form, :edit
+    end
+
     post "/users/update-password", UserSessionController, :update_password
   end
 

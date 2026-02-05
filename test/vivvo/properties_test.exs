@@ -25,11 +25,21 @@ defmodule Vivvo.PropertiesTest do
       property = property_fixture(scope)
       other_scope = user_scope_fixture()
       assert Properties.get_property!(scope, property.id) == property
-      assert_raise Ecto.NoResultsError, fn -> Properties.get_property!(other_scope, property.id) end
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Properties.get_property!(other_scope, property.id)
+      end
     end
 
     test "create_property/2 with valid data creates a property" do
-      valid_attrs = %{name: "some name", address: "some address", area: 42, rooms: 42, notes: "some notes"}
+      valid_attrs = %{
+        name: "some name",
+        address: "some address",
+        area: 42,
+        rooms: 42,
+        notes: "some notes"
+      }
+
       scope = user_scope_fixture()
 
       assert {:ok, %Property{} = property} = Properties.create_property(scope, valid_attrs)
@@ -49,9 +59,18 @@ defmodule Vivvo.PropertiesTest do
     test "update_property/3 with valid data updates the property" do
       scope = user_scope_fixture()
       property = property_fixture(scope)
-      update_attrs = %{name: "some updated name", address: "some updated address", area: 43, rooms: 43, notes: "some updated notes"}
 
-      assert {:ok, %Property{} = property} = Properties.update_property(scope, property, update_attrs)
+      update_attrs = %{
+        name: "some updated name",
+        address: "some updated address",
+        area: 43,
+        rooms: 43,
+        notes: "some updated notes"
+      }
+
+      assert {:ok, %Property{} = property} =
+               Properties.update_property(scope, property, update_attrs)
+
       assert property.name == "some updated name"
       assert property.address == "some updated address"
       assert property.area == 43
@@ -72,7 +91,10 @@ defmodule Vivvo.PropertiesTest do
     test "update_property/3 with invalid data returns error changeset" do
       scope = user_scope_fixture()
       property = property_fixture(scope)
-      assert {:error, %Ecto.Changeset{}} = Properties.update_property(scope, property, @invalid_attrs)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Properties.update_property(scope, property, @invalid_attrs)
+
       assert property == Properties.get_property!(scope, property.id)
     end
 

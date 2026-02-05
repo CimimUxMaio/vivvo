@@ -5,6 +5,8 @@ defmodule VivvoWeb.Layouts do
   """
   use VivvoWeb, :html
 
+  alias Vivvo.Accounts.Scope
+
   # Embed all files in layouts/* within this module.
   # The default root.html.heex file contains the HTML
   # skeleton of your application, namely HTML headers
@@ -41,6 +43,9 @@ defmodule VivvoWeb.Layouts do
           <img src={~p"/images/logo.svg"} width="36" />
           <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
         </a>
+        <%= if @current_scope && Scope.owner?(@current_scope) do %>
+          <.link href={~p"/properties"} class="btn btn-ghost ml-4">Properties</.link>
+        <% end %>
       </div>
       <div class="flex-none">
         <ul class="flex flex-column px-1 space-x-4 items-center">
