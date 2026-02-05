@@ -187,6 +187,18 @@ defmodule Vivvo.Accounts.User do
   end
 
   @doc """
+  A user changeset for updating the current_role field.
+
+  Validates that the current_role is one of the user's preferred roles.
+  """
+  def current_role_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:current_role])
+    |> validate_required([:current_role])
+    |> validate_current_role()
+  end
+
+  @doc """
   Verifies the password.
 
   If there is no user or the user doesn't have a password, we call
