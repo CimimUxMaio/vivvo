@@ -6,6 +6,7 @@ defmodule Vivvo.Properties.Property do
   import Ecto.Changeset
 
   alias Vivvo.Accounts.User
+  alias Vivvo.Contracts.Contract
 
   schema "properties" do
     field :name, :string
@@ -17,6 +18,8 @@ defmodule Vivvo.Properties.Property do
     belongs_to :archived_by, User
 
     belongs_to :user, User
+    has_many :contracts, Contract
+    has_one :current_contract, Contract, where: [archived: false]
 
     timestamps(type: :utc_datetime)
   end
