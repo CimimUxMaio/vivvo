@@ -1,6 +1,7 @@
 defmodule VivvoWeb.PropertyLive.Show do
   use VivvoWeb, :live_view
 
+  alias Vivvo.Contracts
   alias Vivvo.Properties
 
   @impl true
@@ -27,6 +28,57 @@ defmodule VivvoWeb.PropertyLive.Show do
         <:item title="Rooms">{@property.rooms}</:item>
         <:item title="Notes">{@property.notes}</:item>
       </.list>
+
+      <%!-- CONTRACT SECTION --%>
+      <div class="mt-8">
+        <.header>
+          Contract Information
+          <:actions>
+            <%= if @contract do %>
+              <.button phx-click="show_contract_modal">
+                <.icon name="hero-eye" /> View Details
+              </.button>
+              <.button
+                variant="primary"
+                navigate={~p"/properties/#{@property}/contracts/#{@contract}/edit"}
+              >
+                <.icon name="hero-pencil-square" /> Edit Contract
+              </.button>
+            <% else %>
+              <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
+                <.icon name="hero-plus" /> Create Contract
+              </.button>
+            <% end %>
+          </:actions>
+        </.header>
+
+        <%= if @contract do %>
+          <.list>
+            <:item title="Tenant">
+              {@contract.tenant.first_name} {@contract.tenant.last_name}
+            </:item>
+            <:item title="Monthly Rent">
+              {format_currency(@contract.rent)}
+            </:item>
+            <:item title="Status">
+              <.contract_status_badge status={Contracts.contract_status(@contract)} />
+            </:item>
+          </.list>
+        <% else %>
+          <p class="text-gray-500 mt-4">No active contract for this property.</p>
+        <% end %>
+      </div>
+
+      <%!-- CONTRACT MODAL --%>
+      <%= if @show_contract_modal && @contract do %>
+        <.live_component
+          module={VivvoWeb.ContractLive.ShowModal}
+          id="contract-modal"
+          contract={@contract}
+          property={@property}
+          current_scope={@current_scope}
+        />
+      <% end %>
     </Layouts.app>
     """
   end
@@ -35,15 +87,60 @@ defmodule VivvoWeb.PropertyLive.Show do
   def mount(%{"id" => id}, _session, socket) do
     if connected?(socket) do
       Properties.subscribe_properties(socket.assigns.current_scope)
+      Contracts.subscribe_contracts(socket.assigns.current_scope)
     end
+
+    property = Properties.get_property!(socket.assigns.current_scope, id)
+    contract = Contracts.get_contract_for_property(socket.assigns.current_scope, property.id)
 
     {:ok,
      socket
      |> assign(:page_title, "Show Property")
-     |> assign(:property, Properties.get_property!(socket.assigns.current_scope, id))}
+     |> assign(:property, property)
+     |> assign(:contract, contract)
+     |> assign(:show_contract_modal, false)}
   end
 
   @impl true
+  def handle_event("show_contract_modal", _params, socket) do
+    {:noreply, assign(socket, :show_contract_modal, true)}
+  end
+
+  @impl true
+  def handle_info(:close_contract_modal, socket) do
+    {:noreply, assign(socket, :show_contract_modal, false)}
+  end
+
+  def handle_info(
+        {:created, %Vivvo.Contracts.Contract{property_id: property_id} = contract},
+        socket
+      )
+      when property_id == socket.assigns.property.id do
+    # Preload tenant if not already loaded
+    contract = Vivvo.Repo.preload(contract, :tenant)
+    {:noreply, assign(socket, :contract, contract)}
+  end
+
+  def handle_info(
+        {:updated, %Vivvo.Contracts.Contract{property_id: property_id} = contract},
+        socket
+      )
+      when property_id == socket.assigns.property.id do
+    # Preload tenant if not already loaded
+    contract = Vivvo.Repo.preload(contract, :tenant)
+    {:noreply, assign(socket, :contract, contract)}
+  end
+
+  def handle_info({:deleted, %Vivvo.Contracts.Contract{property_id: property_id}}, socket)
+      when property_id == socket.assigns.property.id do
+    {:noreply, assign(socket, :contract, nil)}
+  end
+
+  # Ignore contract events for other properties
+  def handle_info({_action, %Vivvo.Contracts.Contract{}}, socket) do
+    {:noreply, socket}
+  end
+
   def handle_info(
         {:updated, %Vivvo.Properties.Property{id: id} = property},
         %{assigns: %{property: %{id: id}}} = socket

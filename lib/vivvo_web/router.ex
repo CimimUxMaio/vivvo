@@ -60,6 +60,10 @@ defmodule VivvoWeb.Router do
       live "/properties/new", PropertyLive.Form, :new
       live "/properties/:id", PropertyLive.Show, :show
       live "/properties/:id/edit", PropertyLive.Form, :edit
+
+      # Contract routes
+      live "/properties/:property_id/contracts/new", ContractLive.Form, :new
+      live "/properties/:property_id/contracts/:id/edit", ContractLive.Form, :edit
     end
 
     post "/users/update-password", UserSessionController, :update_password

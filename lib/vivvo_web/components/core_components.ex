@@ -488,6 +488,75 @@ defmodule VivvoWeb.CoreComponents do
   end
 
   @doc """
+  Renders a status badge for contract status.
+
+  ## Examples
+
+      <.contract_status_badge status={:active} />
+      <.contract_status_badge status={:upcoming} />
+      <.contract_status_badge status={:expired} />
+  """
+  attr :status, :atom, required: true, values: [:upcoming, :active, :expired]
+
+  def contract_status_badge(assigns) do
+    ~H"""
+    <span class={[
+      "inline-flex items-center gap-x-1.5 rounded-md px-2 py-1 text-xs font-medium",
+      @status == :upcoming && "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
+      @status == :active && "bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20",
+      @status == :expired && "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20"
+    ]}>
+      <svg class="h-1.5 w-1.5 fill-current" viewBox="0 0 6 6" aria-hidden="true">
+        <circle cx="3" cy="3" r="3" />
+      </svg>
+      {status_text(@status)}
+    </span>
+    """
+  end
+
+  defp status_text(:upcoming), do: "Upcoming"
+  defp status_text(:active), do: "Active"
+  defp status_text(:expired), do: "Expired"
+
+  @doc """
+  Formats a monetary amount as USD currency.
+
+  ## Examples
+
+      iex> format_currency(Decimal.new("1234.56"))
+      "$1,234.56"
+
+      iex> format_currency(100)
+      "$100.00"
+
+      iex> format_currency(1234.56)
+      "$1,234.56"
+  """
+  def format_currency(amount) when is_struct(amount, Decimal) do
+    amount
+    |> Decimal.to_float()
+    |> format_currency()
+  end
+
+  def format_currency(amount) when is_float(amount) or is_integer(amount) do
+    # Convert to float and format with 2 decimal places
+    formatted = :erlang.float_to_binary(amount * 1.0, decimals: 2)
+
+    # Add thousands separator
+    [dollars, cents] = String.split(formatted, ".")
+
+    dollars_with_commas =
+      dollars
+      |> String.graphemes()
+      |> Enum.reverse()
+      |> Enum.chunk_every(3)
+      |> Enum.map_join(",", &Enum.join(&1, ""))
+      |> String.reverse()
+
+    "$#{dollars_with_commas}.#{cents}"
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

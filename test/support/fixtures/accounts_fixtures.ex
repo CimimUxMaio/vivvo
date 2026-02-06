@@ -13,13 +13,27 @@ defmodule Vivvo.AccountsFixtures do
   def valid_user_password, do: "hello world!"
 
   def valid_user_attributes(attrs \\ %{}) do
+    # Convert keyword list to map if needed
+    attrs = if is_list(attrs), do: Map.new(attrs), else: attrs
+
+    # Extract preferred_roles to determine default current_role
+    preferred_roles = Map.get(attrs, :preferred_roles, [:owner, :tenant])
+
+    # Determine default current_role based on preferred_roles
+    default_current_role =
+      cond do
+        :owner in preferred_roles -> :owner
+        :tenant in preferred_roles -> :tenant
+        true -> :owner
+      end
+
     Enum.into(attrs, %{
       first_name: "Test",
       last_name: "User",
       email: unique_user_email(),
       phone_number: "+1234567890",
-      preferred_roles: ["owner", "tenant"],
-      current_role: "owner"
+      preferred_roles: preferred_roles,
+      current_role: Map.get(attrs, :current_role, default_current_role)
     })
   end
 
