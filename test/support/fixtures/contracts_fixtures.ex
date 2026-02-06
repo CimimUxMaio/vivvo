@@ -26,9 +26,11 @@ defmodule Vivvo.ContractsFixtures do
         property_fixture(scope)
       end
 
+    today = Date.utc_today()
+
     default_attrs = %{
-      start_date: ~D[2026-02-04],
-      end_date: ~D[2026-03-04],
+      start_date: Date.add(today, 1),
+      end_date: Date.add(today, 30),
       expiration_day: 5,
       notes: "some notes",
       rent: "120.5"
