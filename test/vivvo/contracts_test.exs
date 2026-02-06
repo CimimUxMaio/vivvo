@@ -395,9 +395,10 @@ defmodule Vivvo.ContractsTest do
   describe "payment_overdue?/1" do
     test "returns true when current day > expiration_day" do
       today = Date.utc_today()
+      expiration_day = max(today.day - 1, 1)
 
       contract = %Contract{
-        expiration_day: today.day - 1
+        expiration_day: expiration_day
       }
 
       assert Contracts.payment_overdue?(contract) == true
@@ -418,9 +419,10 @@ defmodule Vivvo.ContractsTest do
 
     test "returns false when current day = expiration_day" do
       today = Date.utc_today()
+      expiration_day = min(today.day, 20)
 
       contract = %Contract{
-        expiration_day: today.day
+        expiration_day: expiration_day
       }
 
       assert Contracts.payment_overdue?(contract) == false
