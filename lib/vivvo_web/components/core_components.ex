@@ -550,7 +550,7 @@ defmodule VivvoWeb.CoreComponents do
       |> String.graphemes()
       |> Enum.reverse()
       |> Enum.chunk_every(3)
-      |> Enum.join(",")
+      |> Enum.map_join(",", &Enum.join(&1, ""))
       |> String.reverse()
 
     "$#{dollars_with_commas}.#{cents}"
