@@ -4,7 +4,7 @@ defmodule Vivvo.Repo.Migrations.AddArchivingToProperties do
   def change do
     alter table(:properties) do
       add :archived, :boolean, default: false, null: false
-      add :archived_by_id, references(:users, type: :id, on_delete: :nothing)
+      add :archived_by_id, references(:users, type: :id, on_delete: :nilify_all)
     end
 
     create index(:properties, [:archived])
