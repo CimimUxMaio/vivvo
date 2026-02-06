@@ -14,7 +14,7 @@ defmodule Vivvo.Repo.Migrations.CreateContracts do
       add :user_id, references(:users, type: :id, on_delete: :delete_all), null: false
 
       add :archived, :boolean, default: false, null: false
-      add :archived_by_id, references(:users, type: :id, on_delete: :nothing)
+      add :archived_by_id, references(:users, type: :id, on_delete: :nilify_all)
 
       timestamps(type: :utc_datetime)
     end
