@@ -34,7 +34,7 @@ defmodule VivvoWeb.Components.RoleSelector do
             phx-value-role={role}
             phx-target={@myself}
             class={[
-              "relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-200",
+              "relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-200 cursor-pointer",
               @user.current_role == role && "text-primary",
               @user.current_role != role && "text-base-content/60 hover:text-base-content"
             ]}

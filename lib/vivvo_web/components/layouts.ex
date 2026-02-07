@@ -113,7 +113,7 @@ defmodule VivvoWeb.Layouts do
                 <% end %>
 
                 <div class="relative group">
-                  <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200/50 transition-colors">
+                  <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200/50 transition-colors cursor-pointer">
                     <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <span class="text-sm font-bold text-primary">
                         {String.first(@current_scope.user.first_name || "U")}
@@ -151,14 +151,14 @@ defmodule VivvoWeb.Layouts do
                       <%!-- Menu Items --%>
                       <.link
                         href={~p"/users/settings"}
-                        class="flex items-center gap-2 px-3 py-2 text-sm text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                        class="flex items-center gap-2 px-3 py-2 text-sm text-base-content hover:bg-base-200 rounded-lg transition-colors cursor-pointer"
                       >
                         <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
                       </.link>
                       <.link
                         href={~p"/users/log-out"}
                         method="delete"
-                        class="flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-error/10 rounded-lg transition-colors"
+                        class="flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
                       >
                         <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
                       </.link>
@@ -315,7 +315,7 @@ defmodule VivvoWeb.Layouts do
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
         class={[
-          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer",
           "[[data-theme=system]_&]:bg-base-100 [[data-theme=system]_&]:shadow-sm",
           "hover:bg-base-200/70"
         ]}
@@ -328,7 +328,7 @@ defmodule VivvoWeb.Layouts do
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
         class={[
-          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer",
           "[[data-theme=light]_&]:bg-base-100 [[data-theme=light]_&]:shadow-sm",
           "hover:bg-base-200/70"
         ]}
@@ -341,7 +341,7 @@ defmodule VivvoWeb.Layouts do
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
         class={[
-          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer",
           "[[data-theme=dark]_&]:bg-base-100 [[data-theme=dark]_&]:shadow-sm",
           "hover:bg-base-200/70"
         ]}
