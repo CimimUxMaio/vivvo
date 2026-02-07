@@ -411,4 +411,170 @@ defmodule Vivvo.Contracts do
     due_date = calculate_due_date(contract, payment_num)
     Date.compare(today, due_date) == :gt
   end
+
+  # Dashboard Analytics Functions
+
+  @doc """
+  Get all active contracts with full details for dashboard analytics.
+
+  Preloads property, tenant, and payments for comprehensive data.
+
+  ## Examples
+
+      iex> list_active_contracts_with_details(scope)
+      [%Contract{property: %Property{}, tenant: %User{}, payments: [...]}, ...]
+
+  """
+  def list_active_contracts_with_details(%Scope{} = scope) do
+    today = Date.utc_today()
+
+    Contract
+    |> where([c], c.user_id == ^scope.user.id)
+    |> where([c], c.archived == false)
+    |> where([c], c.start_date <= ^today)
+    |> where([c], c.end_date >= ^today)
+    |> preload([:property, :tenant, :payments])
+    |> order_by([c], asc: c.start_date)
+    |> Repo.all()
+  end
+
+  @doc """
+  Calculate property performance metrics.
+
+  Returns a list of property performance data including:
+  - total_income: Total rent collected
+  - collection_rate: Percentage of rent collected
+  - avg_delay_days: Average payment delay in days
+  - active_tenants: Number of active tenants
+
+  ## Examples
+
+      iex> property_performance_metrics(scope)
+      [%{property: %Property{}, total_income: Decimal.new("..."), ...}, ...]
+
+  """
+  def property_performance_metrics(%Scope{} = scope) do
+    contracts = list_active_contracts_with_details(scope)
+
+    contracts
+    |> Enum.group_by(& &1.property)
+    |> Enum.map(fn {property, property_contracts} ->
+      calculate_property_metrics(property, property_contracts, scope)
+    end)
+    |> Enum.sort_by(& &1.collection_rate)
+  end
+
+  defp calculate_property_metrics(property, contracts, scope) do
+    alias Vivvo.Payments
+
+    # Calculate total expected rent for active contracts
+    total_expected =
+      Enum.reduce(contracts, Decimal.new(0), fn contract, acc ->
+        Decimal.add(acc, contract.rent)
+      end)
+
+    # Calculate received income for current month
+    total_received =
+      Enum.reduce(contracts, Decimal.new(0), fn contract, acc ->
+        current_payment_num = get_current_payment_number(contract)
+
+        received =
+          if current_payment_num > 0 do
+            Payments.total_accepted_for_month(scope, contract.id, current_payment_num)
+          else
+            Decimal.new(0)
+          end
+
+        Decimal.add(acc, received)
+      end)
+
+    # Calculate collection rate
+    collection_rate =
+      if Decimal.compare(total_expected, Decimal.new(0)) == :gt do
+        Decimal.to_float(
+          Decimal.mult(Decimal.div(total_received, total_expected), Decimal.new(100))
+        )
+      else
+        0.0
+      end
+
+    # Calculate average delay across all payments
+    all_payments =
+      Enum.flat_map(contracts, & &1.payments)
+      |> Enum.filter(&(&1.status == :accepted))
+
+    avg_delay_days =
+      if length(all_payments) > 0 do
+        total_delay =
+          Enum.reduce(all_payments, 0, fn payment, acc ->
+            contract = Enum.find(contracts, &(&1.id == payment.contract_id))
+
+            if contract do
+              due_date = calculate_due_date(contract, payment.payment_number)
+              # Use inserted_at as payment date
+              payment_date = DateTime.to_date(payment.inserted_at)
+              delay = Date.diff(payment_date, due_date)
+              acc + max(0, delay)
+            else
+              acc
+            end
+          end)
+
+        Float.round(total_delay / length(all_payments), 1)
+      else
+        0.0
+      end
+
+    %{
+      property: property,
+      total_income: total_received,
+      collection_rate: collection_rate,
+      avg_delay_days: avg_delay_days,
+      active_tenants: length(contracts),
+      total_expected: total_expected
+    }
+  end
+
+  @doc """
+  Get dashboard summary statistics.
+
+  Returns a map with key metrics:
+  - total_properties: Count of properties
+  - total_contracts: Count of active contracts
+  - total_tenants: Count of unique tenants
+  - occupancy_rate: Percentage of properties with active contracts
+
+  ## Examples
+
+      iex> dashboard_summary(scope)
+      %{total_properties: 5, total_contracts: 4, total_tenants: 4, occupancy_rate: 80.0}
+
+  """
+  def dashboard_summary(%Scope{} = scope) do
+    properties = Vivvo.Properties.list_properties(scope)
+    contracts = list_active_contracts_with_details(scope)
+
+    total_properties = length(properties)
+    total_contracts = length(contracts)
+
+    unique_tenants =
+      contracts
+      |> Enum.map(& &1.tenant_id)
+      |> Enum.uniq()
+      |> length()
+
+    occupancy_rate =
+      if total_properties > 0 do
+        Float.round(total_contracts / total_properties * 100, 1)
+      else
+        0.0
+      end
+
+    %{
+      total_properties: total_properties,
+      total_contracts: total_contracts,
+      total_tenants: unique_tenants,
+      occupancy_rate: occupancy_rate
+    }
+  end
 end

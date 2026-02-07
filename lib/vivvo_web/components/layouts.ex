@@ -37,70 +37,228 @@ defmodule VivvoWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-        <%= if @current_scope && Scope.owner?(@current_scope) do %>
-          <.link href={~p"/properties"} class="btn btn-ghost ml-4">Properties</.link>
-        <% end %>
+    <div class="min-h-screen bg-base-200/30 flex flex-col">
+      <%!-- Navigation Header --%>
+      <.navbar current_scope={@current_scope} />
+
+      <%!-- Main Content Area --%>
+      <main class="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div class="mx-auto max-w-7xl">
+          {render_slot(@inner_block)}
+        </div>
+      </main>
+
+      <%!-- Flash Messages --%>
+      <.flash_group flash={@flash} />
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the navigation navbar with Vivvo branding.
+  """
+  attr :current_scope, :map, default: nil
+
+  def navbar(assigns) do
+    ~H"""
+    <header class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="flex h-16 items-center justify-between">
+          <%!-- Logo and Brand --%>
+          <div class="flex items-center gap-4">
+            <.link href={~p"/"} class="flex items-center gap-2 group">
+              <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <.icon name="hero-home" class="w-5 h-5 text-primary-content" />
+              </div>
+              <span class="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                Vivvo
+              </span>
+            </.link>
+
+            <%!-- Desktop Navigation --%>
+            <nav class="hidden md:flex items-center gap-1 ml-6">
+              <%= if @current_scope && Scope.owner?(@current_scope) do %>
+                <.link
+                  href={~p"/properties"}
+                  class="px-3 py-2 text-sm font-medium text-base-content/70 hover:text-primary rounded-lg hover:bg-base-200/50 transition-colors"
+                >
+                  <span class="flex items-center gap-2">
+                    <.icon name="hero-building-office" class="w-4 h-4" /> Properties
+                  </span>
+                </.link>
+              <% end %>
+            </nav>
+          </div>
+
+          <%!-- Right Side Actions --%>
+          <div class="flex items-center gap-2 sm:gap-4">
+            <%!-- Mobile Menu Button --%>
+            <button
+              type="button"
+              class="md:hidden p-2 text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
+              phx-click={JS.toggle(to: "#mobile-menu")}
+            >
+              <.icon name="hero-bars-3" class="w-6 h-6" />
+            </button>
+
+            <%!-- User Menu (Desktop) --%>
+            <div class="hidden md:flex items-center gap-3">
+              <%= if @current_scope do %>
+                <%= if length(@current_scope.user.preferred_roles) > 1 do %>
+                  <.live_component
+                    module={VivvoWeb.Components.RoleSelector}
+                    id="role-selector"
+                    user={@current_scope.user}
+                  />
+                <% end %>
+
+                <div class="relative group">
+                  <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200/50 transition-colors">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span class="text-sm font-bold text-primary">
+                        {String.first(@current_scope.user.first_name || "U")}
+                      </span>
+                    </div>
+                    <span class="hidden lg:block max-w-[120px] truncate">
+                      {@current_scope.user.first_name}
+                    </span>
+                    <.icon name="hero-chevron-down" class="w-4 h-4" />
+                  </button>
+
+                  <%!-- Dropdown Menu --%>
+                  <div class="absolute right-0 mt-2 w-56 bg-base-100 rounded-xl shadow-lg border border-base-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="p-2">
+                      <%!-- User Info --%>
+                      <div class="px-3 py-2 border-b border-base-200 mb-1">
+                        <p class="font-medium text-sm">
+                          {@current_scope.user.first_name} {@current_scope.user.last_name}
+                        </p>
+                        <p class="text-xs text-base-content/60 truncate">
+                          {@current_scope.user.email}
+                        </p>
+                      </div>
+
+                      <%!-- Theme Selector --%>
+                      <div class="px-3 py-2">
+                        <p class="text-xs font-medium text-base-content/60 mb-2 uppercase tracking-wider">
+                          Theme
+                        </p>
+                        <.theme_toggle_compact />
+                      </div>
+
+                      <div class="border-t border-base-200 my-1"></div>
+
+                      <%!-- Menu Items --%>
+                      <.link
+                        href={~p"/users/settings"}
+                        class="flex items-center gap-2 px-3 py-2 text-sm text-base-content hover:bg-base-200 rounded-lg transition-colors"
+                      >
+                        <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
+                      </.link>
+                      <.link
+                        href={~p"/users/log-out"}
+                        method="delete"
+                        class="flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-error/10 rounded-lg transition-colors"
+                      >
+                        <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+                      </.link>
+                    </div>
+                  </div>
+                </div>
+              <% else %>
+                <.link
+                  href={~p"/users/log-in"}
+                  class="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                >
+                  Log in
+                </.link>
+                <.link
+                  href={~p"/users/register"}
+                  class="px-4 py-2 text-sm font-medium bg-primary text-primary-content hover:bg-primary/90 rounded-lg transition-colors"
+                >
+                  Get Started
+                </.link>
+              <% end %>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <%= if @current_scope do %>
-            <%= if length(@current_scope.user.preferred_roles) > 1 do %>
-              <li>
-                <.live_component
-                  module={VivvoWeb.Components.RoleSelector}
-                  id="role-selector"
-                  user={@current_scope.user}
-                />
-              </li>
-            <% end %>
-            <li class="text-sm">
-              {@current_scope.user.email}
-            </li>
-            <li>
-              <.link href={~p"/users/settings"} class="btn btn-ghost">Settings</.link>
-            </li>
-            <li>
-              <.link href={~p"/users/log-out"} method="delete" class="btn btn-ghost">Log out</.link>
-            </li>
-          <% else %>
-            <li>
-              <.link href={~p"/users/register"} class="btn btn-ghost">Register</.link>
-            </li>
-            <li>
-              <.link href={~p"/users/log-in"} class="btn btn-ghost">Log in</.link>
-            </li>
+
+      <%!-- Mobile Menu --%>
+      <div id="mobile-menu" class="hidden md:hidden border-t border-base-200 bg-base-100">
+        <div class="px-4 py-3 space-y-2">
+          <%= if @current_scope && Scope.owner?(@current_scope) do %>
+            <.link
+              href={~p"/properties"}
+              class="flex items-center gap-3 px-3 py-2 text-base font-medium text-base-content hover:bg-base-200 rounded-lg transition-colors"
+            >
+              <.icon name="hero-building-office" class="w-5 h-5" /> Properties
+            </.link>
           <% end %>
-          <li>
-            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
+
+          <%= if @current_scope do %>
+            <div class="border-t border-base-200 pt-2 mt-2">
+              <%!-- User Info --%>
+              <div class="px-3 py-2 mb-2">
+                <p class="font-medium">
+                  {@current_scope.user.first_name} {@current_scope.user.last_name}
+                </p>
+                <p class="text-sm text-base-content/60">{@current_scope.user.email}</p>
+              </div>
+
+              <%!-- Mobile Theme Selector --%>
+              <div class="px-3 py-2">
+                <p class="text-xs font-medium text-base-content/60 mb-2 uppercase tracking-wider">
+                  Theme
+                </p>
+                <.theme_toggle_compact />
+              </div>
+
+              <div class="border-t border-base-200 my-2"></div>
+
+              <.link
+                href={~p"/users/settings"}
+                class="flex items-center gap-3 px-3 py-2 text-base font-medium text-base-content hover:bg-base-200 rounded-lg transition-colors"
+              >
+                <.icon name="hero-cog-6-tooth" class="w-5 h-5" /> Settings
+              </.link>
+              <.link
+                href={~p"/users/log-out"}
+                method="delete"
+                class="flex items-center gap-3 px-3 py-2 text-base font-medium text-error hover:bg-error/10 rounded-lg transition-colors"
+              >
+                <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> Log out
+              </.link>
+            </div>
+          <% else %>
+            <div class="border-t border-base-200 pt-2 mt-2 space-y-2">
+              <%!-- Mobile Theme Selector --%>
+              <div class="px-3 py-2">
+                <p class="text-xs font-medium text-base-content/60 mb-2 uppercase tracking-wider">
+                  Theme
+                </p>
+                <.theme_toggle_compact />
+              </div>
+
+              <div class="border-t border-base-200 my-2"></div>
+
+              <.link
+                href={~p"/users/log-in"}
+                class="flex items-center gap-3 px-3 py-2 text-base font-medium text-base-content hover:bg-base-200 rounded-lg transition-colors"
+              >
+                <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> Log in
+              </.link>
+              <.link
+                href={~p"/users/register"}
+                class="flex items-center gap-3 px-3 py-2 text-base font-medium bg-primary text-primary-content rounded-lg transition-colors"
+              >
+                <.icon name="hero-user-plus" class="w-5 h-5" /> Get Started
+              </.link>
+            </div>
+          <% end %>
+        </div>
       </div>
     </header>
-
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </main>
-
-    <.flash_group flash={@flash} />
     """
   end
 
@@ -116,7 +274,7 @@ defmodule VivvoWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div id={@id} aria-live="polite" class="fixed top-20 right-4 z-50 space-y-2">
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
@@ -148,37 +306,86 @@ defmodule VivvoWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
+  Compact theme toggle for use in dropdown menus.
+  """
+  def theme_toggle_compact(assigns) do
+    ~H"""
+    <div class="grid grid-cols-3 gap-1 bg-base-200/50 rounded-lg p-1">
+      <button
+        phx-click={JS.dispatch("phx:set-theme")}
+        data-phx-theme="system"
+        class={[
+          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+          "[[data-theme=system]_&]:bg-base-100 [[data-theme=system]_&]:shadow-sm",
+          "hover:bg-base-200/70"
+        ]}
+        title="System theme"
+      >
+        <.icon name="hero-computer-desktop" class="w-3.5 h-3.5" />
+      </button>
 
-  See <head> in root.html.heex which applies the theme before page load.
+      <button
+        phx-click={JS.dispatch("phx:set-theme")}
+        data-phx-theme="light"
+        class={[
+          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+          "[[data-theme=light]_&]:bg-base-100 [[data-theme=light]_&]:shadow-sm",
+          "hover:bg-base-200/70"
+        ]}
+        title="Light theme"
+      >
+        <.icon name="hero-sun" class="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        phx-click={JS.dispatch("phx:set-theme")}
+        data-phx-theme="dark"
+        class={[
+          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200",
+          "[[data-theme=dark]_&]:bg-base-100 [[data-theme=dark]_&]:shadow-sm",
+          "hover:bg-base-200/70"
+        ]}
+        title="Dark theme"
+      >
+        <.icon name="hero-moon" class="w-3.5 h-3.5" />
+      </button>
+    </div>
+    """
+  end
+
+  @doc """
+  Full-size theme toggle for standalone use.
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]" />
+    <div class="relative flex flex-row items-center border border-base-300 bg-base-200/50 rounded-full p-1">
+      <div class="absolute w-8 h-8 rounded-full bg-base-100 shadow-sm left-1 [[data-theme=light]_&]:left-[calc(100%-2.25rem)] [[data-theme=dark]_&]:left-[calc(50%-0.25rem)] transition-all duration-200" />
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="relative z-10 flex p-2 cursor-pointer w-8 h-8 items-center justify-center"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
+        title="System theme"
       >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-computer-desktop" class="w-4 h-4 text-base-content/70" />
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="relative z-10 flex p-2 cursor-pointer w-8 h-8 items-center justify-center"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
+        title="Light theme"
       >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-sun" class="w-4 h-4 text-base-content/70" />
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="relative z-10 flex p-2 cursor-pointer w-8 h-8 items-center justify-center"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
+        title="Dark theme"
       >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-moon" class="w-4 h-4 text-base-content/70" />
       </button>
     </div>
     """

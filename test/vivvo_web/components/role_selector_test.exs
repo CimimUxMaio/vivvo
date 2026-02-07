@@ -29,7 +29,7 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> live(~p"/")
 
       assert has_element?(lv, "#role-selector")
-      assert has_element?(lv, "select[name='current_role']")
+      assert has_element?(lv, "#role-selector button")
     end
 
     test "displays capitalized labels for roles", %{conn: conn} do
@@ -41,12 +41,12 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      html = lv |> element("#role-selector select") |> render()
+      html = lv |> element("#role-selector") |> render()
       assert html =~ "Owner"
       assert html =~ "Tenant"
     end
 
-    test "displays current role as selected value", %{conn: conn} do
+    test "displays current role as active button", %{conn: conn} do
       user =
         user_fixture(%{preferred_roles: [:owner, :tenant], current_role: :tenant})
 
@@ -56,7 +56,11 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> live(~p"/")
 
       assert has_element?(lv, "#role-selector")
-      assert lv |> element("#role-selector select") |> render() =~ "tenant"
+      # The tenant button should have the active text color and the slider should be present
+      tenant_button = lv |> element("#role-selector button", "Tenant") |> render()
+      assert tenant_button =~ "text-primary"
+      # Verify the sliding indicator exists
+      assert has_element?(lv, "#role-selector div[class*='absolute'][class*='bg-base-100']")
     end
 
     test "switches role and navigates to home", %{conn: conn} do
@@ -68,10 +72,10 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      # Trigger role change
+      # Trigger role change by clicking the Tenant button
       lv
-      |> element("#role-selector")
-      |> render_change(%{current_role: "tenant"})
+      |> element("#role-selector button", "Tenant")
+      |> render_click()
 
       # Verify navigation to home
       assert_redirect(lv, ~p"/")
@@ -86,10 +90,10 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      # Trigger role change
+      # Trigger role change by clicking the Tenant button
       lv
-      |> element("#role-selector")
-      |> render_change(%{current_role: "tenant"})
+      |> element("#role-selector button", "Tenant")
+      |> render_click()
 
       # Verify navigation
       assert_redirect(lv, ~p"/")
@@ -101,7 +105,7 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
   end
 
   describe "HomeLive with current role display" do
-    test "displays home page for authenticated user", %{conn: conn} do
+    test "displays owner dashboard for authenticated owner user", %{conn: conn} do
       user =
         user_fixture(%{preferred_roles: [:owner, :tenant], current_role: :owner})
 
@@ -110,8 +114,8 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      # User with owner role should see "Home: Owner" message
-      assert html =~ "Home: Owner"
+      # User with owner role should see the owner dashboard
+      assert html =~ "Dashboard"
     end
 
     test "redirects unauthenticated user to login", %{conn: conn} do

@@ -292,4 +292,244 @@ defmodule Vivvo.Payments do
       true -> :unpaid
     end
   end
+
+  # Dashboard Analytics Functions
+
+  alias Vivvo.Contracts.Contract
+
+  @doc """
+  Get expected income for a specific month based on active contracts.
+
+  ## Examples
+
+      iex> expected_income_for_month(scope, ~D[2026-02-01])
+      Decimal.new("2500.00")
+
+  """
+  def expected_income_for_month(%Scope{} = scope, date) do
+    start_of_month = Date.beginning_of_month(date)
+    end_of_month = Date.end_of_month(date)
+
+    Contract
+    |> where([c], c.user_id == ^scope.user.id)
+    |> where([c], c.archived == false)
+    |> where([c], c.start_date <= ^end_of_month)
+    |> where([c], c.end_date >= ^start_of_month)
+    |> select([c], sum(c.rent))
+    |> Repo.one() || @decimal_zero
+  end
+
+  @doc """
+  Get received (accepted) income for a specific month.
+
+  ## Examples
+
+      iex> received_income_for_month(scope, ~D[2026-02-01])
+      Decimal.new("2000.00")
+
+  """
+  def received_income_for_month(%Scope{} = scope, date) do
+    year = date.year
+    month = date.month
+
+    Payment
+    |> join(:inner, [p], c in assoc(p, :contract))
+    |> where([p, c], c.user_id == ^scope.user.id)
+    |> where([p], p.status == :accepted)
+    |> where(
+      [p],
+      fragment(
+        "EXTRACT(YEAR FROM ?) = ? AND EXTRACT(MONTH FROM ?) = ?",
+        p.inserted_at,
+        ^year,
+        p.inserted_at,
+        ^month
+      )
+    )
+    |> select([p], sum(p.amount))
+    |> Repo.one() || @decimal_zero
+  end
+
+  @doc """
+  Get pending payments that need validation.
+
+  ## Examples
+
+      iex> pending_payments_for_validation(scope)
+      [%Payment{}, ...]
+
+  """
+  def pending_payments_for_validation(%Scope{} = scope) do
+    Payment
+    |> join(:inner, [p], c in assoc(p, :contract))
+    |> join(:inner, [p, c], t in assoc(c, :tenant))
+    |> join(:inner, [p, c], prop in assoc(c, :property))
+    |> where([p, c], c.user_id == ^scope.user.id)
+    |> where([p], p.status == :pending)
+    |> order_by([p], desc: p.inserted_at)
+    |> preload([p, c, t, prop], contract: {c, tenant: t, property: prop})
+    |> Repo.all()
+  end
+
+  @doc """
+  Get collection rate (percentage of expected income collected) for a month.
+
+  ## Examples
+
+      iex> collection_rate_for_month(scope, ~D[2026-02-01])
+      85.5
+
+  """
+  def collection_rate_for_month(%Scope{} = scope, date) do
+    expected = expected_income_for_month(scope, date)
+    received = received_income_for_month(scope, date)
+
+    if Decimal.compare(expected, @decimal_zero) == :gt do
+      Decimal.to_float(Decimal.mult(Decimal.div(received, expected), Decimal.new(100)))
+    else
+      0.0
+    end
+  end
+
+  @doc """
+  Get outstanding balance (expected - received) for a month.
+
+  ## Examples
+
+      iex> outstanding_balance_for_month(scope, ~D[2026-02-01])
+      Decimal.new("500.00")
+
+  """
+  def outstanding_balance_for_month(%Scope{} = scope, date) do
+    expected = expected_income_for_month(scope, date)
+    received = received_income_for_month(scope, date)
+    Decimal.sub(expected, received)
+  end
+
+  @doc """
+  Get income trend over the last N months.
+
+  Returns a list of {month_date, expected, received} tuples.
+
+  ## Examples
+
+      iex> income_trend(scope, 6)
+      [{~D[2026-01-01], Decimal.new("2500"), Decimal.new("2400")}, ...]
+
+  """
+  def income_trend(%Scope{} = scope, months_count \\ 6) do
+    today = Date.utc_today()
+
+    for i <- (months_count - 1)..0//-1 do
+      month_date = Date.add(today, -i * 30)
+      month_start = Date.beginning_of_month(month_date)
+      expected = expected_income_for_month(scope, month_date)
+      received = received_income_for_month(scope, month_date)
+      {month_start, expected, received}
+    end
+  end
+
+  @doc """
+  Get outstanding balances grouped by aging buckets.
+
+  Returns a map with:
+  - current: amount not yet due
+  - days_0_7: 0-7 days overdue
+  - days_8_30: 8-30 days overdue
+  - days_31_plus: 31+ days overdue
+
+  ## Examples
+
+      iex> outstanding_aging(scope)
+      %{current: Decimal.new("1000"), days_0_7: Decimal.new("500"), ...}
+
+  """
+  def outstanding_aging(%Scope{} = scope) do
+    today = Date.utc_today()
+
+    active_contracts =
+      Contract
+      |> where([c], c.user_id == ^scope.user.id)
+      |> where([c], c.archived == false)
+      |> where([c], c.start_date <= ^today)
+      |> where([c], c.end_date >= ^today)
+      |> preload([:payments])
+      |> Repo.all()
+
+    Enum.reduce(
+      active_contracts,
+      %{
+        current: @decimal_zero,
+        days_0_7: @decimal_zero,
+        days_8_30: @decimal_zero,
+        days_31_plus: @decimal_zero
+      },
+      fn contract, acc ->
+        current_payment_num = Vivvo.Contracts.get_current_payment_number(contract)
+
+        if current_payment_num > 0 do
+          Enum.reduce(1..current_payment_num, acc, fn payment_num, acc_inner ->
+            rent = contract.rent
+            paid = total_accepted_for_month(scope, contract.id, payment_num)
+            due_date = Vivvo.Contracts.calculate_due_date(contract, payment_num)
+            outstanding = Decimal.sub(rent, paid)
+
+            if Decimal.compare(outstanding, @decimal_zero) == :gt do
+              days_overdue = Date.diff(today, due_date)
+
+              bucket =
+                cond do
+                  days_overdue <= 0 -> :current
+                  days_overdue <= 7 -> :days_0_7
+                  days_overdue <= 30 -> :days_8_30
+                  true -> :days_31_plus
+                end
+
+              Map.update!(acc_inner, bucket, &Decimal.add(&1, outstanding))
+            else
+              acc_inner
+            end
+          end)
+        else
+          acc
+        end
+      end
+    )
+  end
+
+  @doc """
+  Get total outstanding balance across all contracts.
+
+  ## Examples
+
+      iex> total_outstanding(scope)
+      Decimal.new("3000.00")
+
+  """
+  def total_outstanding(%Scope{} = scope) do
+    aging = outstanding_aging(scope)
+
+    Enum.reduce([:current, :days_0_7, :days_8_30, :days_31_plus], @decimal_zero, fn bucket, acc ->
+      Decimal.add(acc, Map.get(aging, bucket))
+    end)
+  end
+
+  @doc """
+  Get payment counts by status for quick stats.
+
+  ## Examples
+
+      iex> payment_counts_by_status(scope)
+      %{pending: 5, accepted: 45, rejected: 2}
+
+  """
+  def payment_counts_by_status(%Scope{} = scope) do
+    Payment
+    |> join(:inner, [p], c in assoc(p, :contract))
+    |> where([p, c], c.user_id == ^scope.user.id)
+    |> group_by([p], p.status)
+    |> select([p], {p.status, count(p.id)})
+    |> Repo.all()
+    |> Enum.into(%{pending: 0, accepted: 0, rejected: 0})
+  end
 end
