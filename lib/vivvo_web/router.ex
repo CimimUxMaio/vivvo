@@ -44,7 +44,7 @@ defmodule VivvoWeb.Router do
   scope "/", VivvoWeb do
     pipe_through [:browser, :require_authenticated_user]
 
-    live_session :require_authenticated_user,
+    live_session :shared,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
         {VivvoWeb.RoleHooks, :handle_role_changes}
@@ -57,11 +57,11 @@ defmodule VivvoWeb.Router do
       live "/contracts/:contract_id/payments/new", PaymentLive.Form, :new
     end
 
-    live_session :require_owner,
+    live_session :owener,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
-        {VivvoWeb.UserAuth, :require_owner_role},
-        {VivvoWeb.RoleHooks, :handle_role_changes}
+        {VivvoWeb.RoleHooks, :handle_role_changes},
+        {VivvoWeb.UserAuth, :require_owner_role}
       ] do
       live "/properties", PropertyLive.Index, :index
       live "/properties/new", PropertyLive.Form, :new
