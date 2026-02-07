@@ -45,7 +45,10 @@ defmodule VivvoWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     live_session :require_authenticated_user,
-      on_mount: [{VivvoWeb.UserAuth, :require_authenticated}] do
+      on_mount: [
+        {VivvoWeb.UserAuth, :require_authenticated},
+        {VivvoWeb.RoleHooks, :handle_role_changes}
+      ] do
       live "/", HomeLive, :index
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
@@ -57,7 +60,8 @@ defmodule VivvoWeb.Router do
     live_session :require_owner,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
-        {VivvoWeb.UserAuth, :require_owner_role}
+        {VivvoWeb.UserAuth, :require_owner_role},
+        {VivvoWeb.RoleHooks, :handle_role_changes}
       ] do
       live "/properties", PropertyLive.Index, :index
       live "/properties/new", PropertyLive.Form, :new
