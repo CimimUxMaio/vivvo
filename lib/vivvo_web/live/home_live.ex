@@ -16,23 +16,10 @@ defmodule VivvoWeb.HomeLive do
       {:ok, socket}
     else
       # Owner view - new dashboard
-      today = Date.utc_today()
-
-      # Load all dashboard data
       socket =
         socket
-        |> assign(:today, today)
-        |> assign(:expected_income, Payments.expected_income_for_month(scope, today))
-        |> assign(:received_income, Payments.received_income_for_month(scope, today))
-        |> assign(:outstanding_balance, Payments.outstanding_balance_for_month(scope, today))
-        |> assign(:collection_rate, Payments.collection_rate_for_month(scope, today))
-        |> assign(:income_trend, Payments.income_trend(scope, 6))
-        |> assign(:outstanding_aging, Payments.outstanding_aging(scope))
-        |> assign(:total_outstanding, Payments.total_outstanding(scope))
-        |> assign(:pending_payments, Payments.pending_payments_for_validation(scope))
-        |> assign(:property_metrics, Contracts.property_performance_metrics(scope))
-        |> assign(:dashboard_summary, Contracts.dashboard_summary(scope))
-        |> assign(:payment_counts, Payments.payment_counts_by_status(scope))
+        |> assign(:today, Date.utc_today())
+        |> refresh_dashboard_data(scope)
 
       {:ok, socket}
     end
@@ -45,18 +32,9 @@ defmodule VivvoWeb.HomeLive do
 
     case Payments.accept_payment(scope, payment) do
       {:ok, _payment} ->
-        # Refresh pending payments
-        pending_payments = Payments.pending_payments_for_validation(scope)
-
-        # Refresh dashboard metrics
-        today = Date.utc_today()
-
         socket =
           socket
-          |> assign(:pending_payments, pending_payments)
-          |> assign(:received_income, Payments.received_income_for_month(scope, today))
-          |> assign(:outstanding_balance, Payments.outstanding_balance_for_month(scope, today))
-          |> assign(:collection_rate, Payments.collection_rate_for_month(scope, today))
+          |> refresh_dashboard_data(scope)
           |> put_flash(:info, "Payment accepted successfully")
 
         {:noreply, socket}
@@ -73,12 +51,9 @@ defmodule VivvoWeb.HomeLive do
 
     case Payments.reject_payment(scope, payment, reason) do
       {:ok, _payment} ->
-        # Refresh pending payments
-        pending_payments = Payments.pending_payments_for_validation(scope)
-
         socket =
           socket
-          |> assign(:pending_payments, pending_payments)
+          |> refresh_dashboard_data(scope)
           |> put_flash(:info, "Payment rejected")
 
         {:noreply, socket}
@@ -86,6 +61,23 @@ defmodule VivvoWeb.HomeLive do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to reject payment")}
     end
+  end
+
+  defp refresh_dashboard_data(socket, scope) do
+    today = Date.utc_today()
+
+    socket
+    |> assign(:expected_income, Payments.expected_income_for_month(scope, today))
+    |> assign(:received_income, Payments.received_income_for_month(scope, today))
+    |> assign(:outstanding_balance, Payments.outstanding_balance_for_month(scope, today))
+    |> assign(:collection_rate, Payments.collection_rate_for_month(scope, today))
+    |> assign(:income_trend, Payments.income_trend(scope, 6))
+    |> assign(:outstanding_aging, Payments.outstanding_aging(scope))
+    |> assign(:total_outstanding, Payments.total_outstanding(scope))
+    |> assign(:pending_payments, Payments.pending_payments_for_validation(scope))
+    |> assign(:property_metrics, Contracts.property_performance_metrics(scope))
+    |> assign(:dashboard_summary, Contracts.dashboard_summary(scope))
+    |> assign(:payment_counts, Payments.payment_counts_by_status(scope))
   end
 
   @impl true

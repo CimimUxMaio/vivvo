@@ -407,6 +407,50 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
+  Get received income grouped by target month.
+
+  Returns a map where keys are month start dates and values are total received amounts.
+  Uses payment_number instead of inserted_at to determine the target month.
+
+  ## Examples
+
+      iex> received_income_by_month(scope)
+      %{~D[2026-01-01] => Decimal.new("2500"), ...}
+
+  """
+  def received_income_by_month(%Scope{} = scope) do
+    payments =
+      from(p in Payment,
+        join: c in assoc(p, :contract),
+        where: c.user_id == ^scope.user.id,
+        where: p.status == :accepted,
+        preload: [:contract]
+      )
+      |> Repo.all()
+
+    payments
+    |> Enum.group_by(fn payment ->
+      payment_target_month(payment.contract, payment.payment_number)
+    end)
+    |> Enum.map(fn {month_date, payments} ->
+      total =
+        Enum.reduce(payments, @decimal_zero, fn p, acc ->
+          Decimal.add(acc, p.amount)
+        end)
+
+      {month_date, total}
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp payment_target_month(contract, payment_number) do
+    month_offset = payment_number - 1
+    year = contract.start_date.year + div(contract.start_date.month + month_offset - 1, 12)
+    month = rem(contract.start_date.month + month_offset - 1, 12) + 1
+    Date.new!(year, month, 1)
+  end
+
+  @doc """
   Get income trend over the last N months.
 
   Returns a list of {month_date, expected, received} tuples.
@@ -419,12 +463,13 @@ defmodule Vivvo.Payments do
   """
   def income_trend(%Scope{} = scope, months_count \\ 6) do
     today = Date.utc_today()
+    received_by_month = received_income_by_month(scope)
 
     for i <- (months_count - 1)..0//-1 do
       month_date = Date.add(today, -i * 30)
       month_start = Date.beginning_of_month(month_date)
       expected = expected_income_for_month(scope, month_date)
-      received = received_income_for_month(scope, month_date)
+      received = Map.get(received_by_month, month_start, @decimal_zero)
       {month_start, expected, received}
     end
   end
