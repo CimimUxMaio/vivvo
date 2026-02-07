@@ -53,12 +53,12 @@ defmodule VivvoWeb.Components.RoleSelector do
     user = socket.assigns.user
 
     # Only update if the role is actually different
-    if user.current_role != String.to_existing_atom(role) do
+    if to_string(user.current_role) != role do
       case Accounts.update_user_current_role(user, %{current_role: role}) do
-        {:ok, _updated_user} ->
+        {:ok, updated_user} ->
           {:noreply,
            socket
-           |> push_navigate(to: ~p"/")}
+           |> assign(:user, updated_user)}
 
         {:error, _changeset} ->
           {:noreply, socket}
@@ -83,7 +83,7 @@ defmodule VivvoWeb.Components.RoleSelector do
     width_percentage = 100 / role_count
     left_position = role_index * width_percentage
 
-    "width: calc(#{width_percentage}% - 0.125rem); left: calc(#{left_position}% + 0.25rem);"
+    "width: calc(#{width_percentage}% - 0.5rem); left: calc(#{left_position}% + 0.25rem);"
   end
 
   defp role_icon(assigns) do

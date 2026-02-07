@@ -63,7 +63,7 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
       assert has_element?(lv, "#role-selector div[class*='absolute'][class*='bg-base-100']")
     end
 
-    test "switches role and navigates to home", %{conn: conn} do
+    test "switches role and updates UI", %{conn: conn} do
       user =
         user_fixture(%{preferred_roles: [:owner, :tenant], current_role: :owner})
 
@@ -72,13 +72,18 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
         |> log_in_user(user)
         |> live(~p"/")
 
-      # Trigger role change by clicking the Tenant button
-      lv
-      |> element("#role-selector button", "Tenant")
-      |> render_click()
+      # Verify Owner is initially active
+      assert has_element?(lv, "#role-selector button[class*='text-primary']", "Owner")
 
-      # Verify navigation to home
-      assert_redirect(lv, ~p"/")
+      # Trigger role change by clicking the Tenant button
+      html =
+        lv
+        |> element("#role-selector button", "Tenant")
+        |> render_click()
+
+      # Verify Tenant is now active (UI updated without navigation)
+      assert html =~ "text-primary"
+      assert has_element?(lv, "#role-selector button[class*='text-primary']", "Tenant")
     end
 
     test "updates role in database when switching", %{conn: conn} do
@@ -94,9 +99,6 @@ defmodule VivvoWeb.Components.RoleSelectorTest do
       lv
       |> element("#role-selector button", "Tenant")
       |> render_click()
-
-      # Verify navigation
-      assert_redirect(lv, ~p"/")
 
       # Verify database update
       updated_user = Accounts.get_user!(user.id)
