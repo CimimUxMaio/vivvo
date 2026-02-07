@@ -37,7 +37,10 @@ defmodule Vivvo.Accounts.Scope do
   Returns true if the user's current_role matches the given role.
   Returns false if the scope has no user or the role doesn't match.
   """
-  def has_role?(%__MODULE__{user: %User{current_role: role}}, role), do: true
+  def has_role?(%__MODULE__{user: %User{current_role: user_role}}, role) do
+    user_role == role
+  end
+
   def has_role?(%__MODULE__{}, _role), do: false
   def has_role?(nil, _role), do: false
 

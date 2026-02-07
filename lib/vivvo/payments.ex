@@ -95,12 +95,24 @@ defmodule Vivvo.Payments do
 
   """
   def create_payment(%Scope{} = scope, attrs) do
-    with {:ok, payment = %Payment{}} <-
+    contract_id = Map.get(attrs, "contract_id") || Map.get(attrs, :contract_id)
+
+    with :ok <- validate_contract_ownership(scope, contract_id),
+         {:ok, payment = %Payment{}} <-
            %Payment{}
            |> Payment.changeset(attrs, scope)
            |> Repo.insert() do
       broadcast_payment(scope, {:created, payment})
       {:ok, payment}
+    end
+  end
+
+  defp validate_contract_ownership(_scope, nil), do: :ok
+
+  defp validate_contract_ownership(scope, contract_id) do
+    case Vivvo.Contracts.get_contract_for_tenant(scope, contract_id) do
+      nil -> {:error, :unauthorized}
+      _contract -> :ok
     end
   end
 

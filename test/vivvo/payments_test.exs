@@ -183,7 +183,8 @@ defmodule Vivvo.PaymentsTest do
           rent: "1000.00"
         })
 
-      payment_fixture(owner_scope, %{
+      # Payments are created by tenants, not owners
+      payment_fixture(tenant_scope, %{
         contract_id: contract.id,
         payment_number: 1,
         amount: "500.00"

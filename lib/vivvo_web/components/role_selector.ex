@@ -51,10 +51,9 @@ defmodule VivvoWeb.Components.RoleSelector do
   @impl true
   def handle_event("switch_role", %{"role" => role}, socket) do
     user = socket.assigns.user
-    new_role = String.to_existing_atom(role)
 
-    # Only update if the role is actually different
-    if user.current_role != new_role do
+    # Only update if the role is valid and different from current
+    if role && to_string(user.current_role) != role do
       case Accounts.update_user_current_role(user, %{current_role: role}) do
         {:ok, updated_user} ->
           # Notify parent LiveView to navigate to home page after role change

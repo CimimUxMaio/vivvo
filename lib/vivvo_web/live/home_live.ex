@@ -28,38 +28,50 @@ defmodule VivvoWeb.HomeLive do
   @impl true
   def handle_event("accept_payment", %{"id" => payment_id}, socket) do
     scope = socket.assigns.current_scope
-    payment = Payments.get_payment(scope, payment_id)
 
-    case Payments.accept_payment(scope, payment) do
-      {:ok, _payment} ->
-        socket =
-          socket
-          |> refresh_dashboard_data(scope)
-          |> put_flash(:info, "Payment accepted successfully")
+    # Only owners can accept payments
+    if Scope.owner?(scope) do
+      payment = Payments.get_payment(scope, payment_id)
 
-        {:noreply, socket}
+      case Payments.accept_payment(scope, payment) do
+        {:ok, _payment} ->
+          socket =
+            socket
+            |> refresh_dashboard_data(scope)
+            |> put_flash(:info, "Payment accepted successfully")
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to accept payment")}
+          {:noreply, socket}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to accept payment")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Unauthorized action")}
     end
   end
 
   @impl true
   def handle_event("reject_payment", %{"id" => payment_id, "reason" => reason}, socket) do
     scope = socket.assigns.current_scope
-    payment = Payments.get_payment(scope, payment_id)
 
-    case Payments.reject_payment(scope, payment, reason) do
-      {:ok, _payment} ->
-        socket =
-          socket
-          |> refresh_dashboard_data(scope)
-          |> put_flash(:info, "Payment rejected")
+    # Only owners can reject payments
+    if Scope.owner?(scope) do
+      payment = Payments.get_payment(scope, payment_id)
 
-        {:noreply, socket}
+      case Payments.reject_payment(scope, payment, reason) do
+        {:ok, _payment} ->
+          socket =
+            socket
+            |> refresh_dashboard_data(scope)
+            |> put_flash(:info, "Payment rejected")
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to reject payment")}
+          {:noreply, socket}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to reject payment")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Unauthorized action")}
     end
   end
 
