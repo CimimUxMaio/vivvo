@@ -57,7 +57,7 @@ defmodule VivvoWeb.Router do
       live "/contracts/:contract_id/payments/new", PaymentLive.Form, :new
     end
 
-    live_session :owener,
+    live_session :owner,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
         {VivvoWeb.RoleHooks, :handle_role_changes},
