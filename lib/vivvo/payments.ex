@@ -580,36 +580,44 @@ defmodule Vivvo.Payments do
       },
       fn contract, acc ->
         current_payment_num = Vivvo.Contracts.get_current_payment_number(contract)
-
-        if current_payment_num > 0 do
-          Enum.reduce(1..current_payment_num, acc, fn payment_num, acc_inner ->
-            rent = contract.rent
-            paid = total_accepted_for_month(scope, contract.id, payment_num)
-            due_date = Vivvo.Contracts.calculate_due_date(contract, payment_num)
-            outstanding = Decimal.sub(rent, paid)
-
-            if Decimal.compare(outstanding, @decimal_zero) == :gt do
-              days_overdue = Date.diff(today, due_date)
-
-              bucket =
-                cond do
-                  days_overdue <= 0 -> :current
-                  days_overdue <= 7 -> :days_0_7
-                  days_overdue <= 30 -> :days_8_30
-                  true -> :days_31_plus
-                end
-
-              Map.update!(acc_inner, bucket, &Decimal.add(&1, outstanding))
-            else
-              acc_inner
-            end
-          end)
-        else
-          acc
-        end
+        process_contract_outstanding(scope, contract, current_payment_num, today, acc)
       end
     )
   end
+
+  defp process_contract_outstanding(_scope, _contract, current_payment_num, _today, acc)
+       when current_payment_num <= 0 do
+    acc
+  end
+
+  defp process_contract_outstanding(scope, contract, current_payment_num, today, acc) do
+    Enum.reduce(1..current_payment_num, acc, fn payment_num, acc_inner ->
+      add_outstanding_to_bucket(scope, contract, payment_num, today, acc_inner)
+    end)
+  end
+
+  defp add_outstanding_to_bucket(scope, contract, payment_num, today, acc) do
+    rent = contract.rent
+    paid = total_accepted_for_month(scope, contract.id, payment_num)
+    due_date = Vivvo.Contracts.calculate_due_date(contract, payment_num)
+    outstanding = Decimal.sub(rent, paid)
+
+    case Decimal.compare(outstanding, @decimal_zero) do
+      :gt -> update_bucket_for_outstanding(acc, outstanding, today, due_date)
+      _ -> acc
+    end
+  end
+
+  defp update_bucket_for_outstanding(acc, outstanding, today, due_date) do
+    days_overdue = Date.diff(today, due_date)
+    bucket = overdue_bucket(days_overdue)
+    Map.update!(acc, bucket, &Decimal.add(&1, outstanding))
+  end
+
+  defp overdue_bucket(days_overdue) when days_overdue <= 0, do: :current
+  defp overdue_bucket(days_overdue) when days_overdue <= 7, do: :days_0_7
+  defp overdue_bucket(days_overdue) when days_overdue <= 30, do: :days_8_30
+  defp overdue_bucket(_days_overdue), do: :days_31_plus
 
   @doc """
   Get total outstanding balance across all contracts.
