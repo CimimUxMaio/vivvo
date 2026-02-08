@@ -500,9 +500,9 @@ defmodule VivvoWeb.HomeLive do
             <tbody class="divide-y divide-base-200">
               <%= for metric <- @property_metrics do %>
                 <tr class="hover:bg-base-200/30 transition-colors">
-                  <td class="px-4 py-3">
-                    <div class="font-medium">{metric.property.name}</div>
-                    <div class="text-xs text-base-content/50 truncate max-w-[150px]">
+                  <td class="px-4 py-3 min-w-[180px]">
+                    <div class="font-medium whitespace-nowrap">{metric.property.name}</div>
+                    <div class="text-xs text-base-content/50 truncate max-w-[200px]">
                       {metric.property.address}
                     </div>
                   </td>

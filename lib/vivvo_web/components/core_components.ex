@@ -678,7 +678,10 @@ defmodule VivvoWeb.CoreComponents do
     assigns = assign(assigns, :label, label)
 
     ~H"""
-    <span class={["px-2 py-1 rounded-full text-xs font-medium", @color]}>
+    <span class={[
+      "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap",
+      @color
+    ]}>
       {@label}
     </span>
     """
