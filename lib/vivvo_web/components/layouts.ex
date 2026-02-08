@@ -310,14 +310,23 @@ defmodule VivvoWeb.Layouts do
   """
   def theme_toggle_compact(assigns) do
     ~H"""
-    <div class="grid grid-cols-3 gap-1 bg-base-200/50 rounded-lg p-1">
+    <div class="relative grid grid-cols-3 gap-1 bg-base-200/50 rounded-lg p-1">
+      <%!-- Sliding background indicator --%>
+      <div class={[
+        "absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-md shadow-sm transition-all duration-300 ease-out top-1",
+        "w-[calc(33.33%-0.25rem)]",
+        "[[data-theme=system]_&]:left-1",
+        "[[data-theme=light]_&]:left-[calc(33.33%+0.125rem)]",
+        "[[data-theme=dark]_&]:left-[calc(66.66%+0.125rem)]"
+      ]} />
+
       <button
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
         class={[
-          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer",
-          "[[data-theme=system]_&]:bg-base-100 [[data-theme=system]_&]:shadow-sm",
-          "hover:bg-base-200/70"
+          "relative z-10 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 cursor-pointer",
+          "[[data-theme=system]_&]:text-primary",
+          "text-base-content/60 hover:text-base-content"
         ]}
         title="System theme"
       >
@@ -328,9 +337,9 @@ defmodule VivvoWeb.Layouts do
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
         class={[
-          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer",
-          "[[data-theme=light]_&]:bg-base-100 [[data-theme=light]_&]:shadow-sm",
-          "hover:bg-base-200/70"
+          "relative z-10 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 cursor-pointer",
+          "[[data-theme=light]_&]:text-primary",
+          "text-base-content/60 hover:text-base-content"
         ]}
         title="Light theme"
       >
@@ -341,9 +350,9 @@ defmodule VivvoWeb.Layouts do
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
         class={[
-          "flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 cursor-pointer",
-          "[[data-theme=dark]_&]:bg-base-100 [[data-theme=dark]_&]:shadow-sm",
-          "hover:bg-base-200/70"
+          "relative z-10 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 cursor-pointer",
+          "[[data-theme=dark]_&]:text-primary",
+          "text-base-content/60 hover:text-base-content"
         ]}
         title="Dark theme"
       >
