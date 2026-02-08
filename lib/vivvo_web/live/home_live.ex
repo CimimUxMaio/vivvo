@@ -1,9 +1,18 @@
 defmodule VivvoWeb.HomeLive do
+  @moduledoc """
+  Main dashboard LiveView for both owners and tenants.
+
+  Owners see analytics, property metrics, and pending payment validations.
+  Tenants see their contract details and payment history.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts
   alias Vivvo.Payments
+
+  # Number of months to show in income trend chart
+  @trend_months 6
 
   @impl true
   def mount(_params, _session, socket) do
@@ -84,7 +93,7 @@ defmodule VivvoWeb.HomeLive do
     |> assign(:received_income, Payments.received_income_for_month(scope, today))
     |> assign(:outstanding_balance, Payments.outstanding_balance_for_month(scope, today))
     |> assign(:collection_rate, Payments.collection_rate_for_month(scope, today))
-    |> assign(:income_trend, Payments.income_trend(scope, 6))
+    |> assign(:income_trend, Payments.income_trend(scope, @trend_months))
     |> assign(:outstanding_aging, Payments.outstanding_aging(scope))
     |> assign(:total_outstanding, Payments.total_outstanding(scope))
     |> assign(:pending_payments_empty?, pending_payments == [])
