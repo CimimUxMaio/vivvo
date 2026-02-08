@@ -61,7 +61,10 @@ defmodule VivvoWeb.Layouts do
 
   def navbar(assigns) do
     ~H"""
-    <header class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm">
+    <header
+      class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm transition-all duration-300 ease-in-out overflow-hidden"
+      id="main-header"
+    >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex h-16 items-center justify-between">
           <%!-- Logo and Brand --%>
@@ -96,7 +99,10 @@ defmodule VivvoWeb.Layouts do
             <button
               type="button"
               class="md:hidden p-2 text-base-content/70 hover:text-base-content hover:bg-base-200 rounded-lg transition-colors"
-              phx-click={JS.toggle(to: "#mobile-menu")}
+              phx-click={
+                JS.toggle_class("max-h-0", to: "#mobile-menu")
+                |> JS.toggle_class("max-h-[500px]", to: "#mobile-menu")
+              }
             >
               <.icon name="hero-bars-3" class="w-6 h-6" />
             </button>
@@ -185,7 +191,10 @@ defmodule VivvoWeb.Layouts do
       </div>
 
       <%!-- Mobile Menu --%>
-      <div id="mobile-menu" class="hidden md:hidden border-t border-base-200 bg-base-100">
+      <div
+        id="mobile-menu"
+        class="md:hidden border-t border-base-200 bg-base-100 overflow-hidden transition-all duration-300 ease-in-out max-h-0"
+      >
         <div class="px-4 py-3 space-y-2">
           <%= if @current_scope && Scope.owner?(@current_scope) do %>
             <.link
