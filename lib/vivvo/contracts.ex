@@ -445,7 +445,7 @@ defmodule Vivvo.Contracts do
   - total_income: Total rent collected
   - collection_rate: Percentage of rent collected
   - avg_delay_days: Average payment delay in days
-  - active_tenants: Number of active tenants (0 or 1 per property)
+  - state: Property occupancy state (:occupied or :vacant)
 
   ## Examples
 
@@ -469,7 +469,7 @@ defmodule Vivvo.Contracts do
       total_income: Decimal.new(0),
       collection_rate: 0.0,
       avg_delay_days: 0,
-      active_tenants: 0,
+      state: :vacant,
       total_expected: Decimal.new(0)
     }
   end
@@ -488,9 +488,9 @@ defmodule Vivvo.Contracts do
 
     collection_rate =
       if Decimal.compare(total_expected, Decimal.new(0)) == :gt do
-        Decimal.to_float(
-          Decimal.mult(Decimal.div(total_received, total_expected), Decimal.new(100))
-        )
+        Decimal.div(total_received, total_expected)
+        |> Decimal.mult(Decimal.new(100))
+        |> Decimal.to_float()
       else
         0.0
       end
@@ -498,25 +498,17 @@ defmodule Vivvo.Contracts do
     avg_delay_days =
       contract.payments
       |> Enum.filter(&(&1.status == :accepted))
-      |> case do
-        [] ->
-          0
-
-        payments ->
-          total_delay =
-            Enum.reduce(payments, 0, fn payment, acc ->
-              acc + calculate_delay(contract, payment)
-            end)
-
-          Float.round(total_delay / length(payments), 1)
-      end
+      |> then(fn payments ->
+        total_delay = Enum.sum_by(payments, &calculate_delay(contract, &1))
+        Float.round(total_delay / length(payments), 1)
+      end)
 
     %{
       property: property,
       total_income: total_received,
       collection_rate: collection_rate,
       avg_delay_days: avg_delay_days,
-      active_tenants: 1,
+      state: :occupied,
       total_expected: total_expected
     }
   end
