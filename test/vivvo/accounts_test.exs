@@ -125,7 +125,7 @@ defmodule Vivvo.AccountsTest do
       {:error, changeset} =
         Accounts.register_user(valid_user_attributes(%{phone_number: "abcdefghijk"}))
 
-      assert %{phone_number: ["must be a valid phone number"]} = errors_on(changeset)
+      assert "must be a valid phone number" in errors_on(changeset).phone_number
     end
 
     test "validates phone_number minimum length" do

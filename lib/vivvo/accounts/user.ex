@@ -76,6 +76,7 @@ defmodule Vivvo.Accounts.User do
     |> validate_format(:phone_number, ~r/^[\d\s\-\(\)\+]+$/,
       message: "must be a valid phone number"
     )
+    |> validate_format(:phone_number, ~r/\d/, message: "must contain at least one digit")
     |> validate_length(:phone_number, min: 10, max: 20)
     |> validate_preferred_roles()
     |> validate_current_role()
