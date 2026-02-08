@@ -73,14 +73,12 @@ defmodule Vivvo.PaymentsTest do
       assert payment.notes == "some updated notes"
     end
 
-    test "update_payment/3 with invalid scope raises" do
+    test "update_payment/3 with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       payment = payment_fixture(scope)
 
-      assert_raise MatchError, fn ->
-        Payments.update_payment(other_scope, payment, %{})
-      end
+      assert {:error, :unauthorized} = Payments.update_payment(other_scope, payment, %{})
     end
 
     test "update_payment/3 with invalid data returns error changeset" do
@@ -97,11 +95,11 @@ defmodule Vivvo.PaymentsTest do
       assert_raise Ecto.NoResultsError, fn -> Payments.get_payment!(scope, payment.id) end
     end
 
-    test "delete_payment/2 with invalid scope raises" do
+    test "delete_payment/2 with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       payment = payment_fixture(scope)
-      assert_raise MatchError, fn -> Payments.delete_payment(other_scope, payment) end
+      assert {:error, :unauthorized} = Payments.delete_payment(other_scope, payment)
     end
 
     test "change_payment/2 returns a payment changeset" do
@@ -134,14 +132,12 @@ defmodule Vivvo.PaymentsTest do
       assert Payments.get_payment!(scope, payment.id).rejection_reason == nil
     end
 
-    test "accept_payment/2 with invalid scope raises" do
+    test "accept_payment/2 with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       payment = payment_fixture(scope, %{status: :pending})
 
-      assert_raise MatchError, fn ->
-        Payments.accept_payment(other_scope, payment)
-      end
+      assert {:error, :unauthorized} = Payments.accept_payment(other_scope, payment)
     end
 
     test "reject_payment/3 requires and sets rejection reason" do
@@ -155,14 +151,12 @@ defmodule Vivvo.PaymentsTest do
       assert Payments.get_payment!(scope, payment.id).rejection_reason == "Invalid amount"
     end
 
-    test "reject_payment/3 with invalid scope raises" do
+    test "reject_payment/3 with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       payment = payment_fixture(scope, %{status: :pending})
 
-      assert_raise MatchError, fn ->
-        Payments.reject_payment(other_scope, payment, "reason")
-      end
+      assert {:error, :unauthorized} = Payments.reject_payment(other_scope, payment, "reason")
     end
   end
 

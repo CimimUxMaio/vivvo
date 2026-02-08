@@ -204,7 +204,7 @@ defmodule VivvoWeb.PropertyLive.Show do
     ~H"""
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 bg-base-200 rounded-lg">
       <div class="flex flex-wrap items-center gap-3">
-        <.payment_badge status={@payment.status} />
+        <.payment_badge status={@payment.status} size={:sm} />
         <span class="font-medium">{format_currency(@payment.amount)}</span>
         <%= if @payment.notes && @payment.notes != "" do %>
           <span class="text-sm text-base-content/60">- {@payment.notes}</span>
@@ -445,32 +445,6 @@ defmodule VivvoWeb.PropertyLive.Show do
     {:noreply, socket}
   end
 
-  # Component Functions
-
-  defp payment_badge(assigns) do
-    colors = %{
-      pending: "badge-warning",
-      accepted: "badge-success",
-      rejected: "badge-error"
-    }
-
-    labels = %{
-      pending: "Pending",
-      accepted: "Accepted",
-      rejected: "Rejected"
-    }
-
-    assigns =
-      assign(assigns,
-        color: Map.get(colors, assigns.status, "badge-ghost"),
-        label: Map.get(labels, assigns.status, "Unknown")
-      )
-
-    ~H"""
-    <span class={["badge badge-sm", @color]}>{@label}</span>
-    """
-  end
-
   # Helper Functions
 
   defp refresh_contract_data(socket) do
@@ -497,10 +471,6 @@ defmodule VivvoWeb.PropertyLive.Show do
   defp month_status_border(:partial), do: "border-warning"
   defp month_status_border(:unpaid), do: "border-base-300"
   defp month_status_border(_), do: "border-base-300"
-
-  defp format_date(date) do
-    Calendar.strftime(date, "%b %d, %Y")
-  end
 
   defp format_changeset_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

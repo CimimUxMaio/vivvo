@@ -129,14 +129,16 @@ defmodule Vivvo.Payments do
 
   """
   def update_payment(%Scope{} = scope, %Payment{} = payment, attrs) do
-    true = payment.user_id == scope.user.id
-
-    with {:ok, payment = %Payment{}} <-
-           payment
-           |> Payment.changeset(attrs, scope)
-           |> Repo.update() do
-      broadcast_payment(scope, {:updated, payment})
-      {:ok, payment}
+    if payment.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, payment = %Payment{}} <-
+             payment
+             |> Payment.changeset(attrs, scope)
+             |> Repo.update() do
+        broadcast_payment(scope, {:updated, payment})
+        {:ok, payment}
+      end
     end
   end
 
@@ -153,12 +155,14 @@ defmodule Vivvo.Payments do
 
   """
   def delete_payment(%Scope{} = scope, %Payment{} = payment) do
-    true = payment.user_id == scope.user.id
-
-    with {:ok, payment = %Payment{}} <-
-           Repo.delete(payment) do
-      broadcast_payment(scope, {:deleted, payment})
-      {:ok, payment}
+    if payment.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, payment = %Payment{}} <-
+             Repo.delete(payment) do
+        broadcast_payment(scope, {:deleted, payment})
+        {:ok, payment}
+      end
     end
   end
 
@@ -220,14 +224,16 @@ defmodule Vivvo.Payments do
 
   """
   def accept_payment(%Scope{} = scope, %Payment{} = payment) do
-    true = payment.user_id == scope.user.id
-
-    with {:ok, payment = %Payment{}} <-
-           payment
-           |> Payment.changeset(%{status: :accepted, rejection_reason: nil}, scope)
-           |> Repo.update() do
-      broadcast_payment(scope, {:updated, payment})
-      {:ok, payment}
+    if payment.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, payment = %Payment{}} <-
+             payment
+             |> Payment.changeset(%{status: :accepted, rejection_reason: nil}, scope)
+             |> Repo.update() do
+        broadcast_payment(scope, {:updated, payment})
+        {:ok, payment}
+      end
     end
   end
 
@@ -241,14 +247,16 @@ defmodule Vivvo.Payments do
 
   """
   def reject_payment(%Scope{} = scope, %Payment{} = payment, reason) do
-    true = payment.user_id == scope.user.id
-
-    with {:ok, payment = %Payment{}} <-
-           payment
-           |> Payment.changeset(%{status: :rejected, rejection_reason: reason}, scope)
-           |> Repo.update() do
-      broadcast_payment(scope, {:updated, payment})
-      {:ok, payment}
+    if payment.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, payment = %Payment{}} <-
+             payment
+             |> Payment.changeset(%{status: :rejected, rejection_reason: reason}, scope)
+             |> Repo.update() do
+        broadcast_payment(scope, {:updated, payment})
+        {:ok, payment}
+      end
     end
   end
 
@@ -363,15 +371,25 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
-  Get pending payments that need validation.
+  Get pending payments that need validation with optional pagination.
+
+  ## Options
+    * `:page` - Page number (default: 1)
+    * `:per_page` - Items per page (default: 20)
 
   ## Examples
 
       iex> pending_payments_for_validation(scope)
       [%Payment{}, ...]
 
+      iex> pending_payments_for_validation(scope, page: 1, per_page: 10)
+      [%Payment{}, ...]
+
   """
-  def pending_payments_for_validation(%Scope{} = scope) do
+  def pending_payments_for_validation(%Scope{} = scope, opts \\ []) do
+    page = Keyword.get(opts, :page, 1)
+    per_page = Keyword.get(opts, :per_page, 20)
+
     Payment
     |> join(:inner, [p], c in assoc(p, :contract))
     |> join(:inner, [p, c], t in assoc(c, :tenant))
@@ -380,7 +398,16 @@ defmodule Vivvo.Payments do
     |> where([p], p.status == :pending)
     |> order_by([p], desc: p.inserted_at)
     |> preload([p, c, t, prop], contract: {c, tenant: t, property: prop})
+    |> paginate(page, per_page)
     |> Repo.all()
+  end
+
+  defp paginate(query, page, per_page) do
+    offset = (page - 1) * per_page
+
+    query
+    |> limit(^per_page)
+    |> offset(^offset)
   end
 
   @doc """

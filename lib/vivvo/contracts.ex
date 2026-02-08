@@ -158,14 +158,16 @@ defmodule Vivvo.Contracts do
 
   """
   def update_contract(%Scope{} = scope, %Contract{} = contract, attrs) do
-    true = contract.user_id == scope.user.id
-
-    with {:ok, contract = %Contract{}} <-
-           contract
-           |> Contract.changeset(attrs, scope)
-           |> Repo.update() do
-      broadcast_contract(scope, {:updated, contract})
-      {:ok, contract}
+    if contract.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, contract = %Contract{}} <-
+             contract
+             |> Contract.changeset(attrs, scope)
+             |> Repo.update() do
+        broadcast_contract(scope, {:updated, contract})
+        {:ok, contract}
+      end
     end
   end
 
@@ -182,14 +184,16 @@ defmodule Vivvo.Contracts do
 
   """
   def delete_contract(%Scope{} = scope, %Contract{} = contract) do
-    true = contract.user_id == scope.user.id
-
-    with {:ok, contract = %Contract{}} <-
-           contract
-           |> Contract.archive_changeset(scope)
-           |> Repo.update() do
-      broadcast_contract(scope, {:deleted, contract})
-      {:ok, contract}
+    if contract.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, contract = %Contract{}} <-
+             contract
+             |> Contract.archive_changeset(scope)
+             |> Repo.update() do
+        broadcast_contract(scope, {:deleted, contract})
+        {:ok, contract}
+      end
     end
   end
 
@@ -504,25 +508,27 @@ defmodule Vivvo.Contracts do
       |> Enum.filter(&(&1.status == :accepted))
 
     avg_delay_days =
-      if length(all_payments) > 0 do
-        total_delay =
-          Enum.reduce(all_payments, 0, fn payment, acc ->
-            contract = Enum.find(contracts, &(&1.id == payment.contract_id))
+      case all_payments do
+        [] ->
+          0
 
-            if contract do
-              due_date = calculate_due_date(contract, payment.payment_number)
-              # Use inserted_at as payment date
-              payment_date = DateTime.to_date(payment.inserted_at)
-              delay = Date.diff(payment_date, due_date)
-              acc + max(0, delay)
-            else
-              acc
-            end
-          end)
+        payments ->
+          total_delay =
+            Enum.reduce(payments, 0, fn payment, acc ->
+              contract = Enum.find(contracts, &(&1.id == payment.contract_id))
 
-        Float.round(total_delay / length(all_payments), 1)
-      else
-        0.0
+              if contract do
+                due_date = calculate_due_date(contract, payment.payment_number)
+                # Use inserted_at as payment date
+                payment_date = DateTime.to_date(payment.inserted_at)
+                delay = Date.diff(payment_date, due_date)
+                acc + max(0, delay)
+              else
+                acc
+              end
+            end)
+
+          Float.round(total_delay / length(payments), 1)
       end
 
     %{

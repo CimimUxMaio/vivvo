@@ -15,7 +15,7 @@ defmodule VivvoWeb.HomeLive do
       socket = assign(socket, :contracts, contracts)
       {:ok, socket}
     else
-      # Owner view - new dashboard
+      # Owner view - new dashboard with streams for large collections
       socket =
         socket
         |> assign(:today, Date.utc_today())
@@ -77,6 +77,7 @@ defmodule VivvoWeb.HomeLive do
 
   defp refresh_dashboard_data(socket, scope) do
     today = Date.utc_today()
+    pending_payments = Payments.pending_payments_for_validation(scope)
 
     socket
     |> assign(:expected_income, Payments.expected_income_for_month(scope, today))
@@ -86,7 +87,8 @@ defmodule VivvoWeb.HomeLive do
     |> assign(:income_trend, Payments.income_trend(scope, 6))
     |> assign(:outstanding_aging, Payments.outstanding_aging(scope))
     |> assign(:total_outstanding, Payments.total_outstanding(scope))
-    |> assign(:pending_payments, Payments.pending_payments_for_validation(scope))
+    |> assign(:pending_payments_empty?, pending_payments == [])
+    |> stream(:pending_payments, pending_payments, reset: true)
     |> assign(:property_metrics, Contracts.property_performance_metrics(scope))
     |> assign(:dashboard_summary, Contracts.dashboard_summary(scope))
     |> assign(:payment_counts, Payments.payment_counts_by_status(scope))
@@ -108,7 +110,7 @@ defmodule VivvoWeb.HomeLive do
           income_trend={@income_trend}
           outstanding_aging={@outstanding_aging}
           total_outstanding={@total_outstanding}
-          pending_payments={@pending_payments}
+          pending_payments_empty?={@pending_payments_empty?}
           property_metrics={@property_metrics}
           dashboard_summary={@dashboard_summary}
           payment_counts={@payment_counts}
@@ -163,7 +165,7 @@ defmodule VivvoWeb.HomeLive do
       <.property_performance_table property_metrics={@property_metrics} />
 
       <%!-- Payment Validation Queue (Bottom) --%>
-      <.payment_validation_queue pending_payments={@pending_payments} />
+      <.payment_validation_queue pending_payments_empty?={@pending_payments_empty?} />
     </div>
     """
   end
@@ -555,25 +557,6 @@ defmodule VivvoWeb.HomeLive do
     """
   end
 
-  defp property_status_badge(assigns) do
-    {color, label} =
-      cond do
-        assigns.collection_rate >= 95 -> {"bg-success/10 text-success", "Excellent"}
-        assigns.collection_rate >= 80 -> {"bg-info/10 text-info", "Good"}
-        assigns.collection_rate >= 60 -> {"bg-warning/10 text-warning", "Fair"}
-        true -> {"bg-error/10 text-error", "At Risk"}
-      end
-
-    assigns = assign(assigns, :color, color)
-    assigns = assign(assigns, :label, label)
-
-    ~H"""
-    <span class={["px-2 py-1 rounded-full text-xs font-medium", @color]}>
-      {@label}
-    </span>
-    """
-  end
-
   # Payment Validation Queue Component
   defp payment_validation_queue(assigns) do
     ~H"""
@@ -584,27 +567,27 @@ defmodule VivvoWeb.HomeLive do
             <.icon name="hero-clipboard-document-check" class="w-5 h-5 text-primary" />
             <h2 class="text-lg font-semibold">Payment Validation Queue</h2>
           </div>
-          <%= if length(@pending_payments) > 0 do %>
+          <%= if not @pending_payments_empty? do %>
             <span class="px-3 py-1 bg-warning/10 text-warning rounded-full text-sm font-medium">
-              {length(@pending_payments)} pending
+              pending
             </span>
           <% end %>
         </div>
       </div>
 
-      <%= if @pending_payments != [] do %>
-        <div class="divide-y divide-base-200">
-          <%= for payment <- @pending_payments do %>
-            <.pending_payment_row payment={payment} />
-          <% end %>
-        </div>
-      <% else %>
+      <%= if @pending_payments_empty? do %>
         <div class="p-8 text-center">
           <.icon name="hero-check-circle" class="w-12 h-12 mx-auto text-success mb-3" />
           <p class="text-base-content/60">No pending payments to validate</p>
           <p class="text-sm text-base-content/50 mt-1">
             All caught up! New payments will appear here.
           </p>
+        </div>
+      <% else %>
+        <div id="pending-payments" phx-update="stream" class="divide-y divide-base-200">
+          <div :for={{dom_id, payment} <- @streams.pending_payments} id={dom_id}>
+            <.pending_payment_row payment={payment} />
+          </div>
         </div>
       <% end %>
     </div>
@@ -975,101 +958,5 @@ defmodule VivvoWeb.HomeLive do
       <p class="text-base-content/60">You don't have an active rental contract.</p>
     </div>
     """
-  end
-
-  # Badges (existing)
-  defp payment_status_badge(%{status: nil} = assigns) do
-    ~H"""
-    <span class="px-2 py-1 bg-base-200 rounded-full text-xs font-medium">No Contract</span>
-    """
-  end
-
-  defp payment_status_badge(assigns) do
-    colors = %{
-      paid: "bg-success/10 text-success",
-      on_time: "bg-info/10 text-info",
-      overdue: "bg-error/10 text-error",
-      upcoming: "bg-base-200 text-base-content"
-    }
-
-    labels = %{
-      paid: "Paid Up",
-      on_time: "On Time",
-      overdue: "Overdue",
-      upcoming: "Upcoming"
-    }
-
-    assigns =
-      assign(assigns,
-        color: Map.get(colors, assigns.status, "bg-base-200"),
-        label: Map.get(labels, assigns.status, "Unknown")
-      )
-
-    ~H"""
-    <span class={["px-3 py-1 rounded-full text-xs font-medium", @color]}>
-      {@label}
-    </span>
-    """
-  end
-
-  defp month_status_badge(assigns) do
-    colors = %{
-      paid: "bg-success/10 text-success",
-      partial: "bg-warning/10 text-warning",
-      unpaid: "bg-base-200 text-base-content"
-    }
-
-    labels = %{
-      paid: "Paid",
-      partial: "Partial",
-      unpaid: "Unpaid"
-    }
-
-    assigns =
-      assign(assigns,
-        color: Map.get(colors, assigns.status, "bg-base-200"),
-        label: Map.get(labels, assigns.status, "Unknown")
-      )
-
-    ~H"""
-    <span class={["px-2 py-0.5 rounded text-xs font-medium", @color]}>
-      {@label}
-    </span>
-    """
-  end
-
-  defp payment_badge(assigns) do
-    colors = %{
-      pending: "bg-warning/10 text-warning",
-      accepted: "bg-success/10 text-success",
-      rejected: "bg-error/10 text-error"
-    }
-
-    labels = %{
-      pending: "Pending",
-      accepted: "Accepted",
-      rejected: "Rejected"
-    }
-
-    assigns =
-      assign(assigns,
-        color: Map.get(colors, assigns.status, "bg-base-200"),
-        label: Map.get(labels, assigns.status, "Unknown")
-      )
-
-    ~H"""
-    <span class={["px-2 py-0.5 rounded text-xs font-medium", @color]}>
-      {@label}
-    </span>
-    """
-  end
-
-  # Helper Functions
-  defp format_date(date) do
-    Calendar.strftime(date, "%b %d, %Y")
-  end
-
-  defp format_datetime(datetime) do
-    Calendar.strftime(datetime, "%b %d, %Y %I:%M %p")
   end
 end
