@@ -209,7 +209,10 @@ defmodule Vivvo.Contracts do
 
   """
   def change_contract(%Scope{} = scope, %Contract{} = contract, attrs \\ %{}) do
-    if contract.user_id, do: true = contract.user_id == scope.user.id
+    # Only check authorization if the contract already has an owner
+    if contract.user_id && contract.user_id != scope.user.id do
+      raise "Unauthorized"
+    end
 
     Contract.changeset(contract, attrs, scope)
   end
