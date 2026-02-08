@@ -360,14 +360,22 @@ defmodule VivvoWeb.HomeLive do
         <% end %>
       </div>
 
-      <div class="mt-4 pt-4 border-t border-base-200 flex items-center gap-4 text-xs">
+      <div class="mt-4 pt-4 border-t border-base-200 flex items-center justify-center gap-4 text-xs">
         <div class="flex items-center gap-1.5">
           <div class="w-3 h-3 rounded bg-success"></div>
-          <span class="text-base-content/60">Collected</span>
+          <span class="text-base-content/60">{"100% Collected"}</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded bg-warning"></div>
+          <span class="text-base-content/60">{">= 50% Collected"}</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded bg-error"></div>
+          <span class="text-base-content/60">{"< 50% Collected"}</span>
         </div>
         <div class="flex items-center gap-1.5">
           <div class="w-3 h-3 rounded bg-base-300/50"></div>
-          <span class="text-base-content/60">Expected</span>
+          <span class="text-base-content/60">{"Expected"}</span>
         </div>
       </div>
     </div>
