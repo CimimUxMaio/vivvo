@@ -543,7 +543,7 @@ defmodule VivvoWeb.HomeLive do
                                 "bg-warning",
                               metric.collection_rate < 70 && "bg-error"
                             ]}
-                            style={"width: #{metric.collection_rate}%"}
+                            style={"width: #{min(metric.collection_rate, 100)}%"}
                           >
                           </div>
                         </div>
