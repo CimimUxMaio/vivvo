@@ -8,6 +8,8 @@ defmodule Vivvo.Contracts do
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Payments
+  alias Vivvo.Properties.Property
 
   @doc """
   Subscribes to scoped notifications about any contract changes.
@@ -371,8 +373,6 @@ defmodule Vivvo.Contracts do
 
   """
   def contract_payment_status(%Scope{} = scope, %Contract{} = contract) do
-    alias Vivvo.Payments
-
     current_payment_num = get_current_payment_number(contract)
 
     # Contract hasn't started yet
@@ -384,8 +384,6 @@ defmodule Vivvo.Contracts do
   end
 
   defp determine_active_contract_status(scope, contract, current_payment_num) do
-    alias Vivvo.Payments
-
     today = Date.utc_today()
     current_paid = Payments.month_fully_paid?(scope, contract, current_payment_num)
 
@@ -402,8 +400,6 @@ defmodule Vivvo.Contracts do
   defp has_past_unpaid_overdue_months?(_scope, _contract, 1, _today), do: false
 
   defp has_past_unpaid_overdue_months?(scope, contract, current_payment_num, today) do
-    alias Vivvo.Payments
-
     1..(current_payment_num - 1)
     |> Enum.any?(fn num ->
       not Payments.month_fully_paid?(scope, contract, num) and
@@ -449,7 +445,7 @@ defmodule Vivvo.Contracts do
   - total_income: Total rent collected
   - collection_rate: Percentage of rent collected
   - avg_delay_days: Average payment delay in days
-  - active_tenants: Number of active tenants
+  - active_tenants: Number of active tenants (0 or 1 per property)
 
   ## Examples
 
@@ -458,41 +454,38 @@ defmodule Vivvo.Contracts do
 
   """
   def property_performance_metrics(%Scope{} = scope) do
-    contracts = list_active_contracts_with_details(scope)
-
-    contracts
-    |> Enum.group_by(& &1.property)
-    |> Enum.map(fn {property, property_contracts} ->
-      calculate_property_metrics(property, property_contracts, scope)
-    end)
+    Property
+    |> where([p], p.user_id == ^scope.user.id)
+    |> where([p], p.archived == false)
+    |> preload(contract: [:tenant, :payments])
+    |> Repo.all()
+    |> Enum.map(&calculate_property_metrics(&1, &1.contract, scope))
     |> Enum.sort_by(& &1.collection_rate)
   end
 
-  defp calculate_property_metrics(property, contracts, scope) do
-    alias Vivvo.Payments
+  defp calculate_property_metrics(property, nil = _contract, _scope) do
+    %{
+      property: property,
+      total_income: Decimal.new(0),
+      collection_rate: 0.0,
+      avg_delay_days: 0,
+      active_tenants: 0,
+      total_expected: Decimal.new(0)
+    }
+  end
 
-    # Calculate total expected rent for active contracts
-    total_expected =
-      Enum.reduce(contracts, Decimal.new(0), fn contract, acc ->
-        Decimal.add(acc, contract.rent)
-      end)
+  defp calculate_property_metrics(property, %Contract{} = contract, scope) do
+    total_expected = contract.rent
 
-    # Calculate received income for current month
     total_received =
-      Enum.reduce(contracts, Decimal.new(0), fn contract, acc ->
-        current_payment_num = get_current_payment_number(contract)
+      case get_current_payment_number(contract) do
+        current when current > 0 ->
+          Payments.total_accepted_for_month(scope, contract.id, current)
 
-        received =
-          if current_payment_num > 0 do
-            Payments.total_accepted_for_month(scope, contract.id, current_payment_num)
-          else
-            Decimal.new(0)
-          end
+        _ ->
+          Decimal.new(0)
+      end
 
-        Decimal.add(acc, received)
-      end)
-
-    # Calculate collection rate
     collection_rate =
       if Decimal.compare(total_expected, Decimal.new(0)) == :gt do
         Decimal.to_float(
@@ -502,20 +495,17 @@ defmodule Vivvo.Contracts do
         0.0
       end
 
-    # Calculate average delay across all payments
-    all_payments =
-      Enum.flat_map(contracts, & &1.payments)
-      |> Enum.filter(&(&1.status == :accepted))
-
     avg_delay_days =
-      case all_payments do
+      contract.payments
+      |> Enum.filter(&(&1.status == :accepted))
+      |> case do
         [] ->
           0
 
         payments ->
           total_delay =
             Enum.reduce(payments, 0, fn payment, acc ->
-              acc + payment_delay(payment, contracts)
+              acc + calculate_delay(contract, payment)
             end)
 
           Float.round(total_delay / length(payments), 1)
@@ -526,21 +516,12 @@ defmodule Vivvo.Contracts do
       total_income: total_received,
       collection_rate: collection_rate,
       avg_delay_days: avg_delay_days,
-      active_tenants: length(contracts),
+      active_tenants: 1,
       total_expected: total_expected
     }
   end
 
-  defp payment_delay(payment, contracts) do
-    contract = Enum.find(contracts, &(&1.id == payment.contract_id))
-
-    case contract do
-      nil -> 0
-      _ -> calculate_delay(contract, payment)
-    end
-  end
-
-  defp calculate_delay(contract, payment) do
+  defp calculate_delay(%Contract{} = contract, payment) do
     due_date = calculate_due_date(contract, payment.payment_number)
     payment_date = DateTime.to_date(payment.inserted_at)
     delay = Date.diff(payment_date, due_date)
