@@ -114,6 +114,7 @@ defmodule VivvoWeb.HomeLive do
           property_metrics={@property_metrics}
           dashboard_summary={@dashboard_summary}
           payment_counts={@payment_counts}
+          streams={@streams}
         />
       <% end %>
     </Layouts.app>
@@ -165,7 +166,10 @@ defmodule VivvoWeb.HomeLive do
       <.property_performance_table property_metrics={@property_metrics} />
 
       <%!-- Payment Validation Queue (Bottom) --%>
-      <.payment_validation_queue pending_payments_empty?={@pending_payments_empty?} />
+      <.payment_validation_queue
+        pending_payments_empty?={@pending_payments_empty?}
+        streams={@streams}
+      />
     </div>
     """
   end
