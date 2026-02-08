@@ -515,17 +515,7 @@ defmodule Vivvo.Contracts do
         payments ->
           total_delay =
             Enum.reduce(payments, 0, fn payment, acc ->
-              contract = Enum.find(contracts, &(&1.id == payment.contract_id))
-
-              if contract do
-                due_date = calculate_due_date(contract, payment.payment_number)
-                # Use inserted_at as payment date
-                payment_date = DateTime.to_date(payment.inserted_at)
-                delay = Date.diff(payment_date, due_date)
-                acc + max(0, delay)
-              else
-                acc
-              end
+              acc + payment_delay(payment, contracts)
             end)
 
           Float.round(total_delay / length(payments), 1)
@@ -539,6 +529,22 @@ defmodule Vivvo.Contracts do
       active_tenants: length(contracts),
       total_expected: total_expected
     }
+  end
+
+  defp payment_delay(payment, contracts) do
+    contract = Enum.find(contracts, &(&1.id == payment.contract_id))
+
+    case contract do
+      nil -> 0
+      _ -> calculate_delay(contract, payment)
+    end
+  end
+
+  defp calculate_delay(contract, payment) do
+    due_date = calculate_due_date(contract, payment.payment_number)
+    payment_date = DateTime.to_date(payment.inserted_at)
+    delay = Date.diff(payment_date, due_date)
+    max(0, delay)
   end
 
   @doc """
