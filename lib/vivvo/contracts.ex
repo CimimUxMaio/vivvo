@@ -457,10 +457,10 @@ defmodule Vivvo.Contracts do
     Property
     |> where([p], p.user_id == ^scope.user.id)
     |> where([p], p.archived == false)
+    |> order_by([p], asc: p.name)
     |> preload(contract: [:tenant, :payments])
     |> Repo.all()
     |> Enum.map(&calculate_property_metrics(&1, &1.contract, scope))
-    |> Enum.sort_by(& &1.collection_rate)
   end
 
   defp calculate_property_metrics(property, nil = _contract, _scope) do
