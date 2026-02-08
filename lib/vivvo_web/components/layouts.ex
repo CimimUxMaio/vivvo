@@ -62,7 +62,7 @@ defmodule VivvoWeb.Layouts do
   def navbar(assigns) do
     ~H"""
     <header
-      class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm transition-all duration-300 ease-in-out overflow-hidden"
+      class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm transition-all duration-300 ease-in-out"
       id="main-header"
     >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
