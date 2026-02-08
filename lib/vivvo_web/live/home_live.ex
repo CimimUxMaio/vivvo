@@ -489,11 +489,11 @@ defmodule VivvoWeb.HomeLive do
             <thead class="bg-base-200/50">
               <tr>
                 <th class="px-4 py-3 text-left font-medium text-base-content/70">Property</th>
+                <th class="px-4 py-3 text-center font-medium text-base-content/70">State</th>
                 <th class="px-4 py-3 text-right font-medium text-base-content/70">Income</th>
                 <th class="px-4 py-3 text-right font-medium text-base-content/70">Expected</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">Collection</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">Avg Delay</th>
-                <th class="px-4 py-3 text-center font-medium text-base-content/70">Tenants</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">Status</th>
               </tr>
             </thead>
@@ -506,46 +506,62 @@ defmodule VivvoWeb.HomeLive do
                       {metric.property.address}
                     </div>
                   </td>
+                  <td class="px-4 py-3 text-center">
+                    <%= if metric.state == :occupied do %>
+                      <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-success/10 text-success rounded-full text-xs font-medium">
+                        Occupied
+                      </div>
+                    <% else %>
+                      <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-base-300/30 text-base-content/60 rounded-full text-xs font-medium">
+                        Vacant
+                      </div>
+                    <% end %>
+                  </td>
                   <td class="px-4 py-3 text-right font-medium">
-                    {format_currency(metric.total_income)}
+                    <%= if metric.state == :occupied do %>
+                      {format_currency(metric.total_income)}
+                    <% end %>
                   </td>
                   <td class="px-4 py-3 text-right text-base-content/70">
-                    {format_currency(metric.total_expected)}
+                    <%= if metric.state == :occupied do %>
+                      {format_currency(metric.total_expected)}
+                    <% end %>
                   </td>
                   <td class="px-4 py-3">
-                    <div class="flex items-center justify-center gap-2">
-                      <div class="w-16 bg-base-200 rounded-full h-1.5">
-                        <div
-                          class={[
-                            "h-1.5 rounded-full",
-                            metric.collection_rate >= 90 && "bg-success",
-                            metric.collection_rate >= 70 && metric.collection_rate < 90 &&
-                              "bg-warning",
-                            metric.collection_rate < 70 && "bg-error"
-                          ]}
-                          style={"width: #{metric.collection_rate}%"}
-                        >
+                    <%= if metric.state == :occupied do %>
+                      <div class="flex items-center justify-center gap-2">
+                        <div class="w-16 bg-base-200 rounded-full h-1.5">
+                          <div
+                            class={[
+                              "h-1.5 rounded-full",
+                              metric.collection_rate >= 90 && "bg-success",
+                              metric.collection_rate >= 70 && metric.collection_rate < 90 &&
+                                "bg-warning",
+                              metric.collection_rate < 70 && "bg-error"
+                            ]}
+                            style={"width: #{metric.collection_rate}%"}
+                          >
+                          </div>
                         </div>
+                        <span class="text-xs font-medium w-10 text-right">
+                          {Float.round(metric.collection_rate, 0)}%
+                        </span>
                       </div>
-                      <span class="text-xs font-medium w-10 text-right">
-                        {Float.round(metric.collection_rate, 0)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td class="px-4 py-3 text-center">
-                    <%= if metric.avg_delay_days > 0 do %>
-                      <span class="text-error">{metric.avg_delay_days}d</span>
-                    <% else %>
-                      <span class="text-success">On time</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-base-200 text-sm font-medium">
-                      {metric.active_tenants}
-                    </span>
+                    <%= if metric.state == :occupied do %>
+                      <%= if metric.avg_delay_days > 0 do %>
+                        <span class="text-error">{metric.avg_delay_days}d</span>
+                      <% else %>
+                        <span class="text-success">On time</span>
+                      <% end %>
+                    <% end %>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <.property_status_badge collection_rate={metric.collection_rate} />
+                    <%= if metric.state == :occupied do %>
+                      <.property_status_badge collection_rate={metric.collection_rate} />
+                    <% end %>
                   </td>
                 </tr>
               <% end %>
