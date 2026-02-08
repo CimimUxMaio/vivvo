@@ -1,6 +1,27 @@
 defmodule Vivvo.Payments do
   @moduledoc """
   The Payments context.
+
+  ## Payment Period vs Submission Time
+
+  An important distinction in this module is between when a payment is submitted
+  (`inserted_at`) and which period the payment is for (payment period).
+
+  The payment period is calculated from:
+  - `payment_number`: Which installment of the contract (1, 2, 3, etc.)
+  - Contract's `start_date`: When the rental period began
+
+  For example, if a contract starts on January 15th:
+  - payment_number 1 is for January (contract month 1)
+  - payment_number 2 is for February (contract month 2)
+  - etc.
+
+  This means a late payment (e.g., February rent submitted in March) should still
+  be counted as February income, not March income. Most analytics functions in this
+  module use the payment period, not the submission time, to ensure accurate
+  financial reporting.
+
+  Use `payment_target_month/2` to calculate the target month for any payment.
   """
 
   import Ecto.Query, warn: false
@@ -342,6 +363,11 @@ defmodule Vivvo.Payments do
   @doc """
   Get received (accepted) income for a specific month.
 
+  Note: This function calculates income based on the payment's target period
+  (determined by payment_number and contract start_date), not when the payment
+  was submitted (inserted_at). This ensures late payments are counted in the
+  correct period (e.g., February rent paid in March counts as February income).
+
   ## Examples
 
       iex> received_income_for_month(scope, ~D[2026-02-01])
@@ -349,25 +375,11 @@ defmodule Vivvo.Payments do
 
   """
   def received_income_for_month(%Scope{} = scope, date) do
-    year = date.year
-    month = date.month
+    month_start = Date.beginning_of_month(date)
 
-    Payment
-    |> join(:inner, [p], c in assoc(p, :contract))
-    |> where([p, c], c.user_id == ^scope.user.id)
-    |> where([p], p.status == :accepted)
-    |> where(
-      [p],
-      fragment(
-        "EXTRACT(YEAR FROM ?) = ? AND EXTRACT(MONTH FROM ?) = ?",
-        p.inserted_at,
-        ^year,
-        p.inserted_at,
-        ^month
-      )
-    )
-    |> select([p], sum(p.amount))
-    |> Repo.one() || @decimal_zero
+    scope
+    |> received_income_by_month()
+    |> Map.get(month_start, @decimal_zero)
   end
 
   @doc """
@@ -482,7 +494,25 @@ defmodule Vivvo.Payments do
     |> Enum.into(%{})
   end
 
-  defp payment_target_month(contract, payment_number) do
+  @doc """
+  Calculate the target month for a payment based on payment_number and contract start_date.
+
+  This function is used to determine which month a payment belongs to, regardless of
+  when the payment was actually submitted. For example, payment_number 1 is for the
+  first month of the contract, payment_number 2 is for the second month, etc.
+
+  ## Examples
+
+      iex> contract = %Contract{start_date: ~D[2026-01-15]}
+      iex> payment_target_month(contract, 1)
+      ~D[2026-01-01]
+
+      iex> contract = %Contract{start_date: ~D[2026-01-15]}
+      iex> payment_target_month(contract, 2)
+      ~D[2026-02-01]
+
+  """
+  def payment_target_month(contract, payment_number) do
     month_offset = payment_number - 1
     year = contract.start_date.year + div(contract.start_date.month + month_offset - 1, 12)
     month = rem(contract.start_date.month + month_offset - 1, 12) + 1

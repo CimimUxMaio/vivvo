@@ -330,4 +330,224 @@ defmodule Vivvo.PaymentsTest do
       assert Payments.get_month_status(scope, contract, 1) == :unpaid
     end
   end
+
+  describe "payment period calculations" do
+    import Vivvo.AccountsFixtures, only: [user_scope_fixture: 0]
+    import Vivvo.ContractsFixtures, only: [contract_fixture: 2]
+    import Vivvo.PaymentsFixtures
+
+    test "payment_target_month/2 calculates correct month for payment_number 1" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-01-15],
+          end_date: ~D[2026-12-15]
+        })
+
+      assert Payments.payment_target_month(contract, 1) == ~D[2026-01-01]
+    end
+
+    test "payment_target_month/2 calculates correct month for payment_number 2" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-01-15],
+          end_date: ~D[2026-12-15]
+        })
+
+      assert Payments.payment_target_month(contract, 2) == ~D[2026-02-01]
+    end
+
+    test "payment_target_month/2 handles year boundary correctly" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2025-11-01],
+          end_date: ~D[2026-12-31]
+        })
+
+      # Payment 1 = November 2025
+      assert Payments.payment_target_month(contract, 1) == ~D[2025-11-01]
+      # Payment 2 = December 2025
+      assert Payments.payment_target_month(contract, 2) == ~D[2025-12-01]
+      # Payment 3 = January 2026
+      assert Payments.payment_target_month(contract, 3) == ~D[2026-01-01]
+    end
+
+    test "received_income_for_month/2 counts payment based on period, not submission time" do
+      scope = user_scope_fixture()
+
+      # Contract starting in January 2026
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-01-15],
+          end_date: ~D[2026-12-15],
+          rent: "1000.00",
+          tenant_id: scope.user.id
+        })
+
+      # Payment for February (payment_number 2) but submitted in March
+      # This simulates a late payment
+      {:ok, payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: "1000.00",
+          status: :pending,
+          notes: "Late payment for February"
+        })
+
+      # Accept the payment (would be done in March in real scenario)
+      {:ok, _} = Payments.accept_payment(scope, payment)
+
+      # Payment should be counted in February, not March
+      february_income = Payments.received_income_for_month(scope, ~D[2026-02-01])
+      march_income = Payments.received_income_for_month(scope, ~D[2026-03-01])
+
+      assert Decimal.equal?(february_income, Decimal.new("1000.00"))
+      assert Decimal.equal?(march_income, Decimal.new("0"))
+    end
+
+    test "received_income_for_month/2 handles multiple late payments correctly" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-01-01],
+          end_date: ~D[2026-12-31],
+          rent: "1000.00",
+          tenant_id: scope.user.id
+        })
+
+      # January payment (on time)
+      {:ok, _jan_payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "1000.00",
+          status: :accepted
+        })
+
+      # February payment (late, submitted in March)
+      {:ok, _feb_payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: "800.00",
+          status: :accepted
+        })
+
+      # Another partial payment for February
+      {:ok, _feb_payment2} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: "200.00",
+          status: :accepted
+        })
+
+      # Check that January has correct income
+      january_income = Payments.received_income_for_month(scope, ~D[2026-01-01])
+      assert Decimal.equal?(january_income, Decimal.new("1000.00"))
+
+      # Check that February has both payments summed
+      february_income = Payments.received_income_for_month(scope, ~D[2026-02-01])
+      assert Decimal.equal?(february_income, Decimal.new("1000.00"))
+    end
+
+    test "collection_rate_for_month/2 calculates correctly with late payments" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-02-01],
+          end_date: ~D[2026-12-31],
+          rent: "1000.00",
+          tenant_id: scope.user.id
+        })
+
+      # Partial payment for February (payment_number 1)
+      {:ok, _payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "700.00",
+          status: :accepted
+        })
+
+      # Expected: 1000, Received: 700, Rate: 70%
+      rate = Payments.collection_rate_for_month(scope, ~D[2026-02-01])
+      assert_in_delta rate, 70.0, 0.01
+    end
+
+    test "outstanding_balance_for_month/2 calculates correctly with late payments" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-02-01],
+          end_date: ~D[2026-12-31],
+          rent: "1000.00",
+          tenant_id: scope.user.id
+        })
+
+      # Partial payment for February
+      {:ok, _payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "400.00",
+          status: :accepted
+        })
+
+      # Outstanding should be 1000 - 400 = 600
+      outstanding = Payments.outstanding_balance_for_month(scope, ~D[2026-02-01])
+      assert Decimal.equal?(outstanding, Decimal.new("600.00"))
+    end
+
+    test "received_income_by_month/1 groups payments by target month" do
+      scope = user_scope_fixture()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: ~D[2026-01-01],
+          end_date: ~D[2026-12-31],
+          rent: "1000.00",
+          tenant_id: scope.user.id
+        })
+
+      # Create payments for different months
+      {:ok, _} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "1000.00",
+          status: :accepted
+        })
+
+      {:ok, _} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: "500.00",
+          status: :accepted
+        })
+
+      {:ok, _} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: "500.00",
+          status: :accepted
+        })
+
+      income_by_month = Payments.received_income_by_month(scope)
+
+      assert Decimal.equal?(income_by_month[~D[2026-01-01]], Decimal.new("1000.00"))
+      assert Decimal.equal?(income_by_month[~D[2026-02-01]], Decimal.new("1000.00"))
+    end
+  end
 end
