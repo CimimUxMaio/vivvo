@@ -31,6 +31,7 @@ defmodule VivvoWeb.CoreComponents do
 
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
+  import VivvoWeb.FormatHelpers, only: [format_currency: 1]
 
   @doc """
   Renders flash notices.
@@ -495,8 +496,20 @@ defmodule VivvoWeb.CoreComponents do
     )
   end
 
+  @contract_status_config %{
+    upcoming: {"hero-clock", "bg-info/10 text-info border-info/20", "Upcoming"},
+    active: {"hero-check-circle", "bg-success/10 text-success border-success/20", "Active"},
+    expired: {"hero-x-circle", "bg-error/10 text-error border-error/20", "Expired"}
+  }
+
+  @size_config %{
+    sm: %{classes: "px-2 py-0.5 text-xs gap-1", icon: "w-3 h-3"},
+    md: %{classes: "px-2.5 py-1 text-xs sm:text-sm gap-1.5", icon: "w-3.5 h-3.5 sm:w-4 sm:h-4"},
+    lg: %{classes: "px-3 py-1.5 text-sm gap-2", icon: "w-4 h-4 sm:w-5 sm:h-5"}
+  }
+
   @doc """
-  Renders a status badge for contract status.
+  Renders a badge for contract status.
 
   ## Examples
 
@@ -505,26 +518,33 @@ defmodule VivvoWeb.CoreComponents do
       <.contract_status_badge status={:expired} />
   """
   attr :status, :atom, required: true, values: [:upcoming, :active, :expired]
+  attr :size, :atom, default: :md, values: [:sm, :md, :lg]
 
   def contract_status_badge(assigns) do
+    {icon_name, color_class, label} = Map.get(@contract_status_config, assigns.status)
+    size_config = Map.get(@size_config, assigns.size)
+
+    assigns =
+      assign(assigns,
+        icon_name: icon_name,
+        color_class: color_class,
+        label: label,
+        size_classes: size_config.classes,
+        icon_size: size_config.icon
+      )
+
     ~H"""
     <span class={[
-      "inline-flex items-center gap-x-1.5 rounded-md px-2 py-1 text-xs font-medium",
-      @status == :upcoming && "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
-      @status == :active && "bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20",
-      @status == :expired && "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20"
+      "inline-flex items-center rounded-full font-medium border transition-all duration-200",
+      "hover:shadow-sm hover:scale-[1.02]",
+      @color_class,
+      @size_classes
     ]}>
-      <svg class="h-1.5 w-1.5 fill-current" viewBox="0 0 6 6" aria-hidden="true">
-        <circle cx="3" cy="3" r="3" />
-      </svg>
-      {status_text(@status)}
+      <.icon name={@icon_name} class={[@icon_size, "flex-shrink-0"]} />
+      <span class="whitespace-nowrap">{@label}</span>
     </span>
     """
   end
-
-  defp status_text(:upcoming), do: "Upcoming"
-  defp status_text(:active), do: "Active"
-  defp status_text(:expired), do: "Expired"
 
   @doc """
   Renders a badge for payment status in tenant dashboard context.
@@ -688,41 +708,248 @@ defmodule VivvoWeb.CoreComponents do
   end
 
   @doc """
-  Formats a monetary amount as USD currency.
+  Renders a modal for rejecting an item with a reason.
 
   ## Examples
 
-      iex> format_currency(Decimal.new("1234.56"))
-      "$1,234.56"
-
-      iex> format_currency(100)
-      "$100.00"
-
-      iex> format_currency(1234.56)
-      "$1,234.56"
+      <.reject_modal
+        id="reject-payment-modal"
+        title="Reject Payment"
+        description="Please provide a reason for rejecting this payment."
+        submit_event="reject_payment"
+        close_event="close_reject_modal"
+        reason_label="Rejection Reason"
+        reason_placeholder="Enter rejection reason..."
+        submit_text="Reject Payment"
+      />
   """
-  def format_currency(amount) when is_struct(amount, Decimal) do
-    amount
-    |> Decimal.to_float()
-    |> format_currency()
+  attr :id, :string, required: true, doc: "the DOM id for the modal"
+  attr :title, :string, required: true, doc: "the modal title"
+  attr :description, :string, required: true, doc: "description text explaining the action"
+  attr :submit_event, :string, required: true, doc: "the phx-submit event name"
+  attr :close_event, :string, required: true, doc: "the phx-click event name to close modal"
+  attr :reason_label, :string, default: "Reason", doc: "label for the reason textarea"
+
+  attr :reason_placeholder, :string,
+    default: "Enter reason...",
+    doc: "placeholder for the textarea"
+
+  attr :submit_text, :string, default: "Reject", doc: "text for the submit button"
+  attr :cancel_text, :string, default: "Cancel", doc: "text for the cancel button"
+
+  def reject_modal(assigns) do
+    ~H"""
+    <div id={@id} class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card bg-base-100 w-full max-w-md shadow-2xl">
+        <div class="card-body">
+          <h3 class="card-title text-lg">{@title}</h3>
+          <p class="text-base-content/70 mb-4">
+            {@description}
+          </p>
+
+          <form phx-submit={@submit_event} id={"#{@id}-form"}>
+            <.input
+              type="textarea"
+              name="rejection-reason"
+              rows="3"
+              placeholder={@reason_placeholder}
+              required
+              label={@reason_label}
+            />
+
+            <div class="card-actions justify-end gap-3 mt-4">
+              <button
+                type="button"
+                phx-click={@close_event}
+                class="btn btn-ghost"
+              >
+                {@cancel_text}
+              </button>
+              <button
+                type="submit"
+                class="btn btn-error"
+                phx-disable-with="Rejecting..."
+              >
+                {@submit_text}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    """
   end
 
-  def format_currency(amount) when is_float(amount) or is_integer(amount) do
-    # Convert to float and format with 2 decimal places
-    formatted = :erlang.float_to_binary(amount * 1.0, decimals: 2)
+  @doc """
+  Renders a modal for submitting a payment.
 
-    # Add thousands separator
-    [dollars, cents] = String.split(formatted, ".")
+  ## Examples
 
-    dollars_with_commas =
-      dollars
-      |> String.graphemes()
-      |> Enum.reverse()
-      |> Enum.chunk_every(3)
-      |> Enum.map_join(",", &Enum.join(&1, ""))
-      |> String.reverse()
+      <.submit_payment_modal
+        id="submit-payment-modal"
+        contract={@contract}
+        month={@month}
+        form={@payment_form}
+        submit_event="submit_payment"
+        close_event="close_payment_modal"
+        rent={@rent}
+        accepted_total={@accepted_total}
+        pending_total={@pending_total}
+        remaining={@remaining}
+      />
+  """
+  attr :id, :string, required: true
+  attr :contract, :any, required: true
+  attr :month, :integer, required: true
+  attr :form, :any, required: true
+  attr :submit_event, :string, required: true
+  attr :close_event, :string, required: true
+  attr :rent, :any, required: true
+  attr :accepted_total, :any, required: true
+  attr :pending_total, :any, required: true
+  attr :remaining, :any, required: true
 
-    "$#{dollars_with_commas}.#{cents}"
+  def submit_payment_modal(assigns) do
+    # Calculate progress percentages
+    accepted_pct = calculate_progress_percentage(assigns.accepted_total, assigns.rent)
+    pending_pct = calculate_progress_percentage(assigns.pending_total, assigns.rent)
+    total_pct = min(accepted_pct + pending_pct, 100.0)
+
+    assigns =
+      assign(assigns,
+        accepted_pct: accepted_pct,
+        pending_pct: pending_pct,
+        total_pct: total_pct
+      )
+
+    ~H"""
+    <div id={@id} class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card bg-base-100 w-full max-w-lg shadow-2xl">
+        <div class="card-body">
+          <h3 class="card-title text-xl mb-2">Submit Payment</h3>
+          <p class="text-base-content/70 mb-6">
+            Month {@month} - Due: {format_due_date(@contract, @month)}
+          </p>
+
+          <%!-- Payment Progress Bar --%>
+          <div class="mb-6 p-4 bg-base-200/50 rounded-lg">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-sm font-medium">Monthly Rent</span>
+              <span class="text-lg font-bold">{format_currency(@rent)}</span>
+            </div>
+
+            <%!-- Progress bar with stacked segments --%>
+            <div class="h-4 bg-base-300 rounded-full overflow-hidden flex">
+              <div
+                class="h-full bg-success transition-all duration-300"
+                style={"width: #{@accepted_pct}%"}
+                title={"Accepted: #{format_currency(@accepted_total)}"}
+              >
+              </div>
+              <div
+                class="h-full bg-warning transition-all duration-300"
+                style={"width: #{@pending_pct}%"}
+                title={"Pending: #{format_currency(@pending_total)}"}
+              >
+              </div>
+            </div>
+
+            <div class="flex justify-between text-xs mt-2 text-base-content/70">
+              <span>{Float.round(@total_pct, 2)}% covered</span>
+              <span class={[
+                Decimal.lte?(@remaining, Decimal.new(0)) && "text-error font-medium"
+              ]}>
+                Remaining: {format_currency(@remaining)}
+              </span>
+            </div>
+
+            <%!-- Legend --%>
+            <div class="flex gap-4 mt-3 text-xs">
+              <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded bg-success"></div>
+                <span>Paid: {format_currency(@accepted_total)}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded bg-warning"></div>
+                <span>Pending: {format_currency(@pending_total)}</span>
+              </div>
+            </div>
+          </div>
+
+          <.form
+            for={@form}
+            id={"#{@id}-form"}
+            phx-submit={@submit_event}
+            phx-change="validate_payment"
+          >
+            <div class="space-y-4">
+              <.input
+                field={@form[:amount]}
+                type="number"
+                label="Amount ($)"
+                step="0.01"
+                min="0.01"
+                placeholder="Enter payment amount"
+                required
+              />
+
+              <.input
+                field={@form[:notes]}
+                type="textarea"
+                label="Notes (Optional)"
+                rows="3"
+                placeholder="Add any notes about this payment..."
+              />
+
+              <.input field={@form[:contract_id]} type="hidden" value={@contract.id} />
+              <.input field={@form[:payment_number]} type="hidden" value={@month} />
+
+              <% is_over_limit = over_limit?(@remaining, @form) %>
+
+              <div class="card-actions justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  phx-click={@close_event}
+                  class="btn btn-ghost"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  class={[
+                    "btn btn-primary",
+                    is_over_limit && "btn-disabled opacity-50 cursor-not-allowed"
+                  ]}
+                  disabled={is_over_limit}
+                  phx-disable-with="Submitting..."
+                >
+                  Submit Payment
+                </button>
+              </div>
+            </div>
+          </.form>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp format_due_date(contract, month) do
+    due_date = Vivvo.Contracts.calculate_due_date(contract, month)
+    Calendar.strftime(due_date, "%b %d, %Y")
+  end
+
+  defp calculate_progress_percentage(amount, total) do
+    if Decimal.gt?(total, Decimal.new(0)) do
+      amount
+      |> Decimal.div(total)
+      |> Decimal.mult(Decimal.new(100))
+      |> Decimal.to_float()
+      |> Float.round(2)
+      |> min(100.0)
+    else
+      0.0
+    end
   end
 
   @doc """
@@ -752,4 +979,14 @@ defmodule VivvoWeb.CoreComponents do
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
+
+  # Checks if payment amount is over the remaining allowance limit.
+  # Used to disable the submit button in the payment modal.
+  defp over_limit?(remaining, form) do
+    Decimal.lt?(remaining, Decimal.new(0)) ||
+      (form[:amount].errors != [] &&
+         Enum.any?(form[:amount].errors, &error_contains?(&1, "exceeds remaining allowance")))
+  end
+
+  defp error_contains?({msg, _}, substring), do: String.contains?(msg, substring)
 end
