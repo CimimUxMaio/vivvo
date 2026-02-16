@@ -1,4 +1,10 @@
 defmodule VivvoWeb.PropertyLive.Show do
+  @moduledoc """
+  LiveView for displaying property details with contract and payment information.
+
+  Shows property information, active contract details if present,
+  and allows owners to accept or reject pending payments.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Contracts
@@ -92,7 +98,16 @@ defmodule VivvoWeb.PropertyLive.Show do
 
       <%!-- REJECT MODAL --%>
       <%= if @rejecting_payment do %>
-        <.reject_modal payment={@rejecting_payment} />
+        <.reject_modal
+          id="reject-payment-modal"
+          title="Reject Payment"
+          description="Please provide a reason for rejecting this payment."
+          submit_event="reject_payment"
+          close_event="close_reject_modal"
+          reason_label="Rejection Reason"
+          reason_placeholder="Enter rejection reason..."
+          submit_text="Reject Payment"
+        />
       <% end %>
     </Layouts.app>
     """
@@ -133,7 +148,7 @@ defmodule VivvoWeb.PropertyLive.Show do
     rent_decimal = Decimal.new(to_string(contract.rent))
 
     progress_pct =
-      if Decimal.compare(rent_decimal, Decimal.new(0)) == :gt do
+      if Decimal.gt?(rent_decimal, Decimal.new(0)) do
         total_paid
         |> Decimal.div(rent_decimal)
         |> Decimal.mult(100)
@@ -214,14 +229,14 @@ defmodule VivvoWeb.PropertyLive.Show do
       <%= if @payment.status == :pending do %>
         <div class="flex gap-2">
           <button
-            phx-click="accept-payment"
+            phx-click="accept_payment"
             phx-value-payment-id={@payment.id}
             class="btn btn-success btn-sm"
           >
             <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept
           </button>
           <button
-            phx-click="show-reject-modal"
+            phx-click="show_reject_modal"
             phx-value-payment-id={@payment.id}
             class="btn btn-error btn-sm"
           >
@@ -229,50 +244,6 @@ defmodule VivvoWeb.PropertyLive.Show do
           </button>
         </div>
       <% end %>
-    </div>
-    """
-  end
-
-  # Reject Modal Component
-  defp reject_modal(assigns) do
-    ~H"""
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="card bg-base-100 w-full max-w-md shadow-2xl">
-        <div class="card-body">
-          <h3 class="card-title text-lg">Reject Payment</h3>
-          <p class="text-base-content/70 mb-4">
-            Please provide a reason for rejecting this payment.
-          </p>
-
-          <form phx-submit="reject-payment" id="reject-form">
-            <.input
-              type="textarea"
-              name="rejection-reason"
-              rows="3"
-              placeholder="Enter rejection reason..."
-              required
-              label="Rejection Reason"
-            />
-
-            <div class="card-actions justify-end gap-3 mt-4">
-              <button
-                type="button"
-                phx-click="close-reject-modal"
-                class="btn btn-ghost"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                class="btn btn-error"
-                phx-disable-with="Rejecting..."
-              >
-                Reject Payment
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
     </div>
     """
   end
@@ -307,7 +278,7 @@ defmodule VivvoWeb.PropertyLive.Show do
   end
 
   @impl true
-  def handle_event("accept-payment", %{"payment-id" => payment_id}, socket) do
+  def handle_event("accept_payment", %{"payment-id" => payment_id}, socket) do
     scope = socket.assigns.current_scope
 
     case Payments.get_payment(scope, payment_id) do
@@ -329,7 +300,7 @@ defmodule VivvoWeb.PropertyLive.Show do
   end
 
   @impl true
-  def handle_event("show-reject-modal", %{"payment-id" => payment_id}, socket) do
+  def handle_event("show_reject_modal", %{"payment-id" => payment_id}, socket) do
     scope = socket.assigns.current_scope
 
     case Payments.get_payment(scope, payment_id) do
@@ -342,7 +313,7 @@ defmodule VivvoWeb.PropertyLive.Show do
   end
 
   @impl true
-  def handle_event("reject-payment", %{"rejection-reason" => reason}, socket) do
+  def handle_event("reject_payment", %{"rejection-reason" => reason}, socket) do
     scope = socket.assigns.current_scope
     payment = socket.assigns.rejecting_payment
 
@@ -361,7 +332,7 @@ defmodule VivvoWeb.PropertyLive.Show do
   end
 
   @impl true
-  def handle_event("close-reject-modal", _params, socket) do
+  def handle_event("close_reject_modal", _params, socket) do
     {:noreply, assign(socket, :rejecting_payment, nil)}
   end
 

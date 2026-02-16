@@ -52,9 +52,6 @@ defmodule VivvoWeb.Router do
       live "/", HomeLive, :index
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
-
-      # Tenant payment submission route
-      live "/contracts/:contract_id/payments/new", PaymentLive.Form, :new
     end
 
     live_session :owner,

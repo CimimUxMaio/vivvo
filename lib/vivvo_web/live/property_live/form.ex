@@ -1,4 +1,10 @@
 defmodule VivvoWeb.PropertyLive.Form do
+  @moduledoc """
+  LiveView for creating and editing properties.
+
+  Handles both new property creation and existing property updates
+  with form validation and navigation.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Properties
