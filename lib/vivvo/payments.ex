@@ -106,22 +106,26 @@ defmodule Vivvo.Payments do
   @doc """
   Creates a payment.
 
+  ## Options
+
+    * `:remaining_allowance` - The maximum remaining amount allowed for this payment period
+
   ## Examples
 
       iex> create_payment(scope, %{field: value})
       {:ok, %Payment{}}
 
-      iex> create_payment(scope, %{field: bad_value})
+      iex> create_payment(scope, %{field: bad_value}, remaining_allowance: Decimal.new("100"))
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_payment(%Scope{} = scope, attrs) do
+  def create_payment(%Scope{} = scope, attrs, opts \\ []) do
     contract_id = Map.get(attrs, "contract_id") || Map.get(attrs, :contract_id)
 
     with :ok <- validate_contract_ownership(scope, contract_id),
          {:ok, payment = %Payment{}} <-
            %Payment{}
-           |> Payment.changeset(attrs, scope)
+           |> Payment.changeset(attrs, scope, opts)
            |> Repo.insert() do
       broadcast_payment(scope, {:created, payment})
       {:ok, payment}
@@ -149,13 +153,13 @@ defmodule Vivvo.Payments do
       {:error, %Ecto.Changeset{}}
 
   """
-  def update_payment(%Scope{} = scope, %Payment{} = payment, attrs) do
+  def update_payment(%Scope{} = scope, %Payment{} = payment, attrs, opts \\ []) do
     if payment.user_id != scope.user.id do
       {:error, :unauthorized}
     else
       with {:ok, payment = %Payment{}} <-
              payment
-             |> Payment.changeset(attrs, scope)
+             |> Payment.changeset(attrs, scope, opts)
              |> Repo.update() do
         broadcast_payment(scope, {:updated, payment})
         {:ok, payment}
@@ -190,14 +194,18 @@ defmodule Vivvo.Payments do
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking payment changes.
 
+  ## Options
+
+    * `:remaining_allowance` - The maximum remaining amount allowed for this payment period
+
   ## Examples
 
       iex> change_payment(scope, payment)
       %Ecto.Changeset{data: %Payment{}}
 
   """
-  def change_payment(%Scope{} = scope, %Payment{} = payment, attrs \\ %{}) do
-    Payment.changeset(payment, attrs, scope)
+  def change_payment(%Scope{} = scope, %Payment{} = payment, attrs \\ %{}, opts \\ []) do
+    Payment.changeset(payment, attrs, scope, opts)
   end
 
   @doc """
@@ -296,6 +304,25 @@ defmodule Vivvo.Payments do
     |> where([p], p.user_id == ^scope.user.id)
     |> where([p], p.payment_number == ^payment_number)
     |> where([p], p.status == :accepted)
+    |> select([p], sum(p.amount))
+    |> Repo.one() || @decimal_zero
+  end
+
+  @doc """
+  Calculate total pending payments for a specific month.
+
+  ## Examples
+
+      iex> total_pending_for_month(scope, contract_id, payment_number)
+      Decimal.new("100.00")
+
+  """
+  def total_pending_for_month(%Scope{} = scope, contract_id, payment_number) do
+    Payment
+    |> where([p], p.contract_id == ^contract_id)
+    |> where([p], p.user_id == ^scope.user.id)
+    |> where([p], p.payment_number == ^payment_number)
+    |> where([p], p.status == :pending)
     |> select([p], sum(p.amount))
     |> Repo.one() || @decimal_zero
   end

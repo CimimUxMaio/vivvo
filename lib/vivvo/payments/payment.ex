@@ -22,7 +22,9 @@ defmodule Vivvo.Payments.Payment do
   end
 
   @doc false
-  def changeset(payment, attrs, user_scope) do
+  def changeset(payment, attrs, user_scope, opts \\ []) do
+    remaining_allowance = Keyword.get(opts, :remaining_allowance)
+
     payment
     |> cast(attrs, [
       :payment_number,
@@ -36,7 +38,28 @@ defmodule Vivvo.Payments.Payment do
     |> validate_number(:amount, greater_than: 0)
     |> validate_number(:payment_number, greater_than: 0)
     |> validate_rejection_reason()
+    |> validate_amount_within_allowance(remaining_allowance)
     |> put_change(:user_id, user_scope.user.id)
+  end
+
+  defp validate_amount_within_allowance(changeset, nil), do: changeset
+
+  defp validate_amount_within_allowance(changeset, remaining_allowance) do
+    amount = get_field(changeset, :amount)
+
+    if amount && Decimal.compare(amount, remaining_allowance) == :gt do
+      add_error(
+        changeset,
+        :amount,
+        "exceeds remaining allowance of #{format_currency(remaining_allowance)} for this month"
+      )
+    else
+      changeset
+    end
+  end
+
+  defp format_currency(amount) do
+    "$#{Decimal.round(amount, 2) |> Decimal.to_string()}"
   end
 
   defp validate_rejection_reason(changeset) do
