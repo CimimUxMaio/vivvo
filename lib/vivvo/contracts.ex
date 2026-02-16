@@ -11,6 +11,9 @@ defmodule Vivvo.Contracts do
   alias Vivvo.Payments
   alias Vivvo.Properties.Property
 
+  # Threshold (in days) for considering a contract as "ending soon"
+  @ending_soon_threshold_days 60
+
   @doc """
   Subscribes to scoped notifications about any contract changes.
 
@@ -393,9 +396,12 @@ defmodule Vivvo.Contracts do
     past_unpaid_overdue =
       has_past_unpaid_overdue_months?(scope, contract, current_payment_num, today)
 
+    current_overdue = month_overdue?(contract, current_payment_num, today)
+
     cond do
       current_paid -> :paid
       past_unpaid_overdue -> :overdue
+      current_overdue -> :overdue
       true -> :on_time
     end
   end
@@ -501,10 +507,14 @@ defmodule Vivvo.Contracts do
     avg_delay_days =
       contract.payments
       |> Enum.filter(&(&1.status == :accepted))
-      |> then(fn payments ->
-        total_delay = Enum.sum_by(payments, &calculate_delay(contract, &1))
-        Float.round(total_delay / length(payments), 1)
-      end)
+      |> case do
+        [] ->
+          0.0
+
+        payments ->
+          total_delay = Enum.sum_by(payments, &calculate_delay(contract, &1))
+          Float.round(total_delay / length(payments), 1)
+      end
 
     %{
       property: property,
@@ -564,5 +574,231 @@ defmodule Vivvo.Contracts do
       total_tenants: unique_tenants,
       occupancy_rate: occupancy_rate
     }
+  end
+
+  @doc """
+  Calculate days until contract ends.
+
+  Returns nil if contract has already ended, 0 if it ends today.
+
+  ## Examples
+
+      iex> days_until_end(%Contract{end_date: ~D[2026-12-31]})
+      300
+
+      iex> days_until_end(%Contract{end_date: ~D[2020-01-01]})
+      nil
+
+  """
+  def days_until_end(%Contract{end_date: end_date}) do
+    today = Date.utc_today()
+
+    case Date.compare(end_date, today) do
+      :gt -> Date.diff(end_date, today)
+      :eq -> 0
+      :lt -> nil
+    end
+  end
+
+  @doc """
+  Check if contract is ending soon (within #{@ending_soon_threshold_days} days).
+
+  ## Examples
+
+      iex> ending_soon?(%Contract{end_date: ~D[2026-03-01]})
+      true  # if today is within #{@ending_soon_threshold_days} days of end_date
+
+  """
+  def ending_soon?(%Contract{} = contract) do
+    case days_until_end(contract) do
+      nil -> false
+      days -> days > 0 and days <= @ending_soon_threshold_days
+    end
+  end
+
+  @doc """
+  Get a human-readable label for contract status with context.
+
+  ## Examples
+
+      iex> contract_status_label(contract)
+      "Ending Soon"
+
+  """
+  def contract_status_label(%Contract{} = contract) do
+    status = contract_status(contract)
+
+    cond do
+      status == :expired -> "Expired"
+      ending_soon?(contract) -> "Ending Soon"
+      status == :upcoming -> "Upcoming"
+      true -> "Active"
+    end
+  end
+
+  @doc """
+  Calculate the total amount due for all unpaid months up to current.
+
+  Returns the sum of outstanding balances across all unpaid months.
+
+  ## Examples
+
+      iex> total_amount_due(scope, contract)
+      Decimal.new("1500.00")
+
+  """
+  def total_amount_due(%Scope{} = scope, %Contract{} = contract) do
+    current_payment_num = get_current_payment_number(contract)
+    do_total_amount_due(scope, contract, current_payment_num)
+  end
+
+  defp do_total_amount_due(_scope, _contract, 0), do: Decimal.new(0)
+
+  defp do_total_amount_due(scope, contract, current_payment_num) do
+    today = Date.utc_today()
+
+    Enum.reduce(1..current_payment_num, Decimal.new(0), fn payment_num, acc ->
+      add_outstanding_if_due(scope, contract, payment_num, today, acc)
+    end)
+  end
+
+  defp add_outstanding_if_due(scope, contract, payment_num, today, acc) do
+    due_date = calculate_due_date(contract, payment_num)
+
+    case Date.compare(today, due_date) do
+      :lt -> acc
+      _ -> calculate_and_add_outstanding(scope, contract, payment_num, acc)
+    end
+  end
+
+  # Calculates outstanding amount for a month. Returns negative value
+  # when total payments exceed rent (overpayment credit).
+  defp calculate_and_add_outstanding(scope, contract, payment_num, acc) do
+    rent = contract.rent
+    paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
+    outstanding = Decimal.sub(rent, paid)
+    Decimal.add(acc, outstanding)
+  end
+
+  @doc """
+  Get the earliest due date among all unpaid months.
+
+  Returns nil if nothing is due.
+
+  ## Examples
+
+      iex> earliest_due_date(scope, contract)
+      ~D[2026-02-10]
+
+  """
+  def earliest_due_date(%Scope{} = scope, %Contract{} = contract) do
+    current_payment_num = get_current_payment_number(contract)
+
+    if current_payment_num == 0 do
+      nil
+    else
+      do_earliest_due_date(scope, contract, current_payment_num)
+    end
+  end
+
+  defp do_earliest_due_date(scope, contract, current_payment_num) do
+    today = Date.utc_today()
+
+    # Get all unpaid months first (single pass), then find earliest due date
+    unpaid_months =
+      Enum.filter(1..current_payment_num, fn payment_num ->
+        not Payments.month_fully_paid?(scope, contract, payment_num)
+      end)
+
+    unpaid_months
+    |> Enum.map(&calculate_due_date(contract, &1))
+    |> Enum.filter(fn due_date -> Date.compare(today, due_date) != :lt end)
+    |> case do
+      [] -> nil
+      dates -> Enum.min(dates)
+    end
+  end
+
+  @doc """
+  Get all payment statuses for a contract up to current month.
+
+  Returns a list of maps with payment info for each month.
+
+  ## Examples
+
+      iex> get_payment_statuses(scope, contract)
+      [
+        %{
+          payment_number: 1,
+          due_date: ~D[2026-01-10],
+          rent: Decimal.new("500.00"),
+          total_paid: Decimal.new("500.00"),
+          status: :paid,
+          payments: [%Payment{}]
+        }
+      ]
+
+  """
+  def get_payment_statuses(%Scope{} = scope, %Contract{} = contract) do
+    current_payment_num = get_current_payment_number(contract)
+    today = Date.utc_today()
+
+    if current_payment_num == 0 do
+      []
+    else
+      Enum.map(1..current_payment_num, fn payment_num ->
+        due_date = calculate_due_date(contract, payment_num)
+        total_paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
+        month_status = Payments.get_month_status(scope, contract, payment_num)
+
+        # Get payments for this month
+        month_payments =
+          Enum.filter(contract.payments, &(&1.payment_number == payment_num))
+          |> Enum.sort_by(& &1.inserted_at, :desc)
+
+        %{
+          payment_number: payment_num,
+          due_date: due_date,
+          rent: contract.rent,
+          total_paid: total_paid,
+          status: month_status,
+          is_overdue: month_overdue?(contract, payment_num, today) and month_status != :paid,
+          days_until_due: Date.diff(due_date, today),
+          payments: month_payments
+        }
+      end)
+    end
+  end
+
+  @doc """
+  Get upcoming payments (future months within contract period).
+
+  Returns a list of maps with upcoming payment info.
+
+  ## Examples
+
+      iex> get_upcoming_payments(contract)
+      [%{payment_number: 6, due_date: ~D[2026-06-10], rent: Decimal.new("500.00")}]
+
+  """
+  def get_upcoming_payments(%Contract{} = contract) do
+    current_payment_num = get_current_payment_number(contract)
+    total_months = contract_duration_months(contract)
+
+    if current_payment_num >= total_months do
+      []
+    else
+      Enum.map((current_payment_num + 1)..total_months, fn payment_num ->
+        %{
+          payment_number: payment_num,
+          due_date: calculate_due_date(contract, payment_num),
+          rent: contract.rent
+        }
+      end)
+    end
+  end
+
+  defp contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
+    (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
   end
 end

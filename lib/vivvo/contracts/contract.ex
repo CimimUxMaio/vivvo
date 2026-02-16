@@ -9,6 +9,10 @@ defmodule Vivvo.Contracts.Contract do
   alias Vivvo.Payments.Payment
   alias Vivvo.Properties.Property
 
+  # Payment due day constraints
+  @min_expiration_day 1
+  @max_expiration_day 20
+
   schema "contracts" do
     field :rent, :decimal
     field :start_date, :date
@@ -48,7 +52,10 @@ defmodule Vivvo.Contracts.Contract do
       :property_id,
       :tenant_id
     ])
-    |> validate_number(:expiration_day, greater_than_or_equal_to: 1, less_than_or_equal_to: 20)
+    |> validate_number(:expiration_day,
+      greater_than_or_equal_to: @min_expiration_day,
+      less_than_or_equal_to: @max_expiration_day
+    )
     |> validate_number(:rent, greater_than: 0)
     |> validate_end_date_after_start_date()
     |> put_change(:user_id, user_scope.user.id)
