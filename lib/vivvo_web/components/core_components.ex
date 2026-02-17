@@ -527,6 +527,167 @@ defmodule VivvoWeb.CoreComponents do
   defp status_text(:expired), do: "Expired"
 
   @doc """
+  Renders a badge for payment status in tenant dashboard context.
+
+  ## Examples
+
+      <.payment_status_badge status={:paid} />
+      <.payment_status_badge status={:on_time} />
+      <.payment_status_badge status={:overdue} />
+      <.payment_status_badge status={:upcoming} />
+      <.payment_status_badge status={nil} />
+  """
+  attr :status, :atom, required: false, values: [:paid, :on_time, :overdue, :upcoming, nil]
+
+  def payment_status_badge(%{status: nil} = assigns) do
+    ~H"""
+    <span class="px-2 py-1 bg-base-200 rounded-full text-xs font-medium">No Contract</span>
+    """
+  end
+
+  def payment_status_badge(assigns) do
+    colors = %{
+      paid: "bg-success/10 text-success",
+      on_time: "bg-info/10 text-info",
+      overdue: "bg-error/10 text-error",
+      upcoming: "bg-base-200 text-base-content"
+    }
+
+    labels = %{
+      paid: "Paid Up",
+      on_time: "On Time",
+      overdue: "Overdue",
+      upcoming: "Upcoming"
+    }
+
+    assigns =
+      assign(assigns,
+        color: Map.get(colors, assigns.status, "bg-base-200"),
+        label: Map.get(labels, assigns.status, "Unknown")
+      )
+
+    ~H"""
+    <span class={["px-3 py-1 rounded-full text-xs font-medium", @color]}>
+      {@label}
+    </span>
+    """
+  end
+
+  @doc """
+  Renders a badge for month payment status.
+
+  ## Examples
+
+      <.month_status_badge status={:paid} />
+      <.month_status_badge status={:partial} />
+      <.month_status_badge status={:unpaid} />
+  """
+  attr :status, :atom, required: true, values: [:paid, :partial, :unpaid]
+
+  def month_status_badge(assigns) do
+    colors = %{
+      paid: "bg-success/10 text-success",
+      partial: "bg-warning/10 text-warning",
+      unpaid: "bg-base-200 text-base-content"
+    }
+
+    labels = %{
+      paid: "Paid",
+      partial: "Partial",
+      unpaid: "Unpaid"
+    }
+
+    assigns =
+      assign(assigns,
+        color: Map.get(colors, assigns.status, "bg-base-200"),
+        label: Map.get(labels, assigns.status, "Unknown")
+      )
+
+    ~H"""
+    <span class={["px-2 py-0.5 rounded text-xs font-medium", @color]}>
+      {@label}
+    </span>
+    """
+  end
+
+  @doc """
+  Renders a badge for payment submission status.
+
+  ## Examples
+
+      <.payment_badge status={:pending} />
+      <.payment_badge status={:accepted} />
+      <.payment_badge status={:rejected} />
+  """
+  attr :status, :atom, required: true, values: [:pending, :accepted, :rejected]
+  attr :size, :atom, default: :md, values: [:sm, :md]
+
+  def payment_badge(assigns) do
+    colors = %{
+      pending: "bg-warning/10 text-warning",
+      accepted: "bg-success/10 text-success",
+      rejected: "bg-error/10 text-error"
+    }
+
+    labels = %{
+      pending: "Pending",
+      accepted: "Accepted",
+      rejected: "Rejected"
+    }
+
+    size_classes = %{
+      sm: "px-2 py-0.5 text-xs",
+      md: "px-3 py-1 text-xs"
+    }
+
+    assigns =
+      assign(assigns,
+        color: Map.get(colors, assigns.status, "bg-base-200"),
+        label: Map.get(labels, assigns.status, "Unknown"),
+        size_class: Map.get(size_classes, assigns.size, "px-2 py-0.5 text-xs")
+      )
+
+    ~H"""
+    <span class={["rounded font-medium", @color, @size_class]}>
+      {@label}
+    </span>
+    """
+  end
+
+  @doc """
+  Renders a badge for property collection performance status.
+
+  ## Examples
+
+      <.property_status_badge collection_rate={95.0} />
+      <.property_status_badge collection_rate={75.0} />
+      <.property_status_badge collection_rate={45.0} />
+  """
+  attr :collection_rate, :float, required: true
+
+  def property_status_badge(assigns) do
+    {color, label} =
+      cond do
+        assigns.collection_rate >= 95 -> {"bg-success/10 text-success", "Excellent"}
+        assigns.collection_rate >= 80 -> {"bg-info/10 text-info", "Good"}
+        assigns.collection_rate >= 60 -> {"bg-warning/10 text-warning", "Fair"}
+        true -> {"bg-error/10 text-error", "At Risk"}
+      end
+
+    assigns = assign(assigns, :color, color)
+    assigns = assign(assigns, :label, label)
+
+    ~H"""
+    <span class={[
+      "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap",
+      @color
+    ]}>
+      {@label}
+    </span>
+    """
+  end
+
+  @doc """
   Formats a monetary amount as USD currency.
 
   ## Examples

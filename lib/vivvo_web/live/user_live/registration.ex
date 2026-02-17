@@ -1,4 +1,10 @@
 defmodule VivvoWeb.UserLive.Registration do
+  @moduledoc """
+  LiveView for user registration.
+
+  Handles new user account creation with validation for
+  email, personal information, and role selection.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Accounts

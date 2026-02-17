@@ -8,6 +8,8 @@ defmodule Vivvo.Contracts do
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Payments
+  alias Vivvo.Properties.Property
 
   @doc """
   Subscribes to scoped notifications about any contract changes.
@@ -158,14 +160,16 @@ defmodule Vivvo.Contracts do
 
   """
   def update_contract(%Scope{} = scope, %Contract{} = contract, attrs) do
-    true = contract.user_id == scope.user.id
-
-    with {:ok, contract = %Contract{}} <-
-           contract
-           |> Contract.changeset(attrs, scope)
-           |> Repo.update() do
-      broadcast_contract(scope, {:updated, contract})
-      {:ok, contract}
+    if contract.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, contract = %Contract{}} <-
+             contract
+             |> Contract.changeset(attrs, scope)
+             |> Repo.update() do
+        broadcast_contract(scope, {:updated, contract})
+        {:ok, contract}
+      end
     end
   end
 
@@ -182,14 +186,16 @@ defmodule Vivvo.Contracts do
 
   """
   def delete_contract(%Scope{} = scope, %Contract{} = contract) do
-    true = contract.user_id == scope.user.id
-
-    with {:ok, contract = %Contract{}} <-
-           contract
-           |> Contract.archive_changeset(scope)
-           |> Repo.update() do
-      broadcast_contract(scope, {:deleted, contract})
-      {:ok, contract}
+    if contract.user_id != scope.user.id do
+      {:error, :unauthorized}
+    else
+      with {:ok, contract = %Contract{}} <-
+             contract
+             |> Contract.archive_changeset(scope)
+             |> Repo.update() do
+        broadcast_contract(scope, {:deleted, contract})
+        {:ok, contract}
+      end
     end
   end
 
@@ -203,7 +209,10 @@ defmodule Vivvo.Contracts do
 
   """
   def change_contract(%Scope{} = scope, %Contract{} = contract, attrs \\ %{}) do
-    if contract.user_id, do: true = contract.user_id == scope.user.id
+    # Only check authorization if the contract already has an owner
+    if contract.user_id && contract.user_id != scope.user.id do
+      raise "Unauthorized"
+    end
 
     Contract.changeset(contract, attrs, scope)
   end
@@ -367,8 +376,6 @@ defmodule Vivvo.Contracts do
 
   """
   def contract_payment_status(%Scope{} = scope, %Contract{} = contract) do
-    alias Vivvo.Payments
-
     current_payment_num = get_current_payment_number(contract)
 
     # Contract hasn't started yet
@@ -380,8 +387,6 @@ defmodule Vivvo.Contracts do
   end
 
   defp determine_active_contract_status(scope, contract, current_payment_num) do
-    alias Vivvo.Payments
-
     today = Date.utc_today()
     current_paid = Payments.month_fully_paid?(scope, contract, current_payment_num)
 
@@ -398,8 +403,6 @@ defmodule Vivvo.Contracts do
   defp has_past_unpaid_overdue_months?(_scope, _contract, 1, _today), do: false
 
   defp has_past_unpaid_overdue_months?(scope, contract, current_payment_num, today) do
-    alias Vivvo.Payments
-
     1..(current_payment_num - 1)
     |> Enum.any?(fn num ->
       not Payments.month_fully_paid?(scope, contract, num) and
@@ -410,5 +413,156 @@ defmodule Vivvo.Contracts do
   defp month_overdue?(%Contract{} = contract, payment_num, today) do
     due_date = calculate_due_date(contract, payment_num)
     Date.compare(today, due_date) == :gt
+  end
+
+  # Dashboard Analytics Functions
+
+  @doc """
+  Get all active contracts with full details for dashboard analytics.
+
+  Preloads property, tenant, and payments for comprehensive data.
+
+  ## Examples
+
+      iex> list_active_contracts_with_details(scope)
+      [%Contract{property: %Property{}, tenant: %User{}, payments: [...]}, ...]
+
+  """
+  def list_active_contracts_with_details(%Scope{} = scope) do
+    today = Date.utc_today()
+
+    Contract
+    |> where([c], c.user_id == ^scope.user.id)
+    |> where([c], c.archived == false)
+    |> where([c], c.start_date <= ^today)
+    |> where([c], c.end_date >= ^today)
+    |> preload([:property, :tenant, :payments])
+    |> order_by([c], asc: c.start_date)
+    |> Repo.all()
+  end
+
+  @doc """
+  Calculate property performance metrics.
+
+  Returns a list of property performance data including:
+  - total_income: Total rent collected
+  - collection_rate: Percentage of rent collected
+  - avg_delay_days: Average payment delay in days
+  - state: Property occupancy state (:occupied or :vacant)
+
+  ## Examples
+
+      iex> property_performance_metrics(scope)
+      [%{property: %Property{}, total_income: Decimal.new("..."), ...}, ...]
+
+  """
+  def property_performance_metrics(%Scope{} = scope) do
+    Property
+    |> where([p], p.user_id == ^scope.user.id)
+    |> where([p], p.archived == false)
+    |> order_by([p], asc: p.name)
+    |> preload(contract: [:tenant, :payments])
+    |> Repo.all()
+    |> Enum.map(&calculate_property_metrics(&1, &1.contract, scope))
+  end
+
+  defp calculate_property_metrics(property, nil = _contract, _scope) do
+    %{
+      property: property,
+      total_income: Decimal.new(0),
+      collection_rate: 0.0,
+      avg_delay_days: 0,
+      state: :vacant,
+      total_expected: Decimal.new(0)
+    }
+  end
+
+  defp calculate_property_metrics(property, %Contract{} = contract, scope) do
+    total_expected = contract.rent
+
+    total_received =
+      case get_current_payment_number(contract) do
+        current when current > 0 ->
+          Payments.total_accepted_for_month(scope, contract.id, current)
+
+        _ ->
+          Decimal.new(0)
+      end
+
+    collection_rate =
+      if Decimal.compare(total_expected, Decimal.new(0)) == :gt do
+        Decimal.div(total_received, total_expected)
+        |> Decimal.mult(Decimal.new(100))
+        |> Decimal.to_float()
+      else
+        0.0
+      end
+
+    avg_delay_days =
+      contract.payments
+      |> Enum.filter(&(&1.status == :accepted))
+      |> then(fn payments ->
+        total_delay = Enum.sum_by(payments, &calculate_delay(contract, &1))
+        Float.round(total_delay / length(payments), 1)
+      end)
+
+    %{
+      property: property,
+      total_income: total_received,
+      collection_rate: collection_rate,
+      avg_delay_days: avg_delay_days,
+      state: :occupied,
+      total_expected: total_expected
+    }
+  end
+
+  defp calculate_delay(%Contract{} = contract, payment) do
+    due_date = calculate_due_date(contract, payment.payment_number)
+    payment_date = DateTime.to_date(payment.inserted_at)
+    delay = Date.diff(payment_date, due_date)
+    max(0, delay)
+  end
+
+  @doc """
+  Get dashboard summary statistics.
+
+  Returns a map with key metrics:
+  - total_properties: Count of properties
+  - total_contracts: Count of active contracts
+  - total_tenants: Count of unique tenants
+  - occupancy_rate: Percentage of properties with active contracts
+
+  ## Examples
+
+      iex> dashboard_summary(scope)
+      %{total_properties: 5, total_contracts: 4, total_tenants: 4, occupancy_rate: 80.0}
+
+  """
+  def dashboard_summary(%Scope{} = scope) do
+    properties = Vivvo.Properties.list_properties(scope)
+    contracts = list_active_contracts_with_details(scope)
+
+    total_properties = length(properties)
+    total_contracts = length(contracts)
+
+    unique_tenants =
+      contracts
+      |> Enum.map(& &1.tenant_id)
+      |> Enum.uniq()
+      |> length()
+
+    occupancy_rate =
+      if total_properties > 0 do
+        Float.round(total_contracts / total_properties * 100, 1)
+      else
+        0.0
+      end
+
+    %{
+      total_properties: total_properties,
+      total_contracts: total_contracts,
+      total_tenants: unique_tenants,
+      occupancy_rate: occupancy_rate
+    }
   end
 end

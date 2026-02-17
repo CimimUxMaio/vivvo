@@ -266,14 +266,12 @@ defmodule Vivvo.ContractsTest do
       assert contract.rent == Decimal.new("456.7")
     end
 
-    test "with invalid scope raises" do
+    test "with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       contract = contract_fixture(scope)
 
-      assert_raise MatchError, fn ->
-        Contracts.update_contract(other_scope, contract, %{})
-      end
+      assert {:error, :unauthorized} = Contracts.update_contract(other_scope, contract, %{})
     end
 
     test "with invalid data returns error changeset" do
@@ -325,11 +323,11 @@ defmodule Vivvo.ContractsTest do
       assert archived.archived_by_id == scope.user.id
     end
 
-    test "with invalid scope raises" do
+    test "with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       contract = contract_fixture(scope)
-      assert_raise MatchError, fn -> Contracts.delete_contract(other_scope, contract) end
+      assert {:error, :unauthorized} = Contracts.delete_contract(other_scope, contract)
     end
   end
 

@@ -2,8 +2,8 @@ defmodule VivvoWeb.Components.RoleSelector do
   @moduledoc """
   LiveComponent for switching between user roles.
 
-  Renders a dropdown select that allows authenticated users to switch
-  between their preferred roles. Only visible when the user has multiple
+  Renders a styled button group with sliding animation that allows authenticated users
+  to switch between their preferred roles. Only visible when the user has multiple
   preferred roles.
   """
 
@@ -13,45 +13,95 @@ defmodule VivvoWeb.Components.RoleSelector do
 
   @impl true
   def render(assigns) do
-    options = format_options(assigns.user.preferred_roles)
-    assigns = assign(assigns, :options, options)
+    assigns = assign(assigns, :role_count, length(assigns.user.preferred_roles))
 
     ~H"""
-    <form id={@id} phx-change="switch_role" phx-target={@myself}>
-      <.input
-        type="select"
-        name="current_role"
-        value={@user.current_role}
-        options={@options}
-        class="w-32 select-sm"
-      />
-    </form>
+    <div id={@id} class="relative">
+      <div class="relative flex items-center bg-base-200/50 rounded-lg p-1 gap-0.5">
+        <%!-- Sliding background indicator --%>
+        <div
+          class={[
+            "absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-md shadow-sm transition-all duration-300 ease-out",
+            "top-1"
+          ]}
+          style={slider_position_style(@user.current_role, @user.preferred_roles)}
+        />
+
+        <%= for role <- @user.preferred_roles do %>
+          <button
+            type="button"
+            phx-click="switch_role"
+            phx-value-role={role}
+            phx-target={@myself}
+            class={[
+              "relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-200 cursor-pointer",
+              @user.current_role == role && "text-primary",
+              @user.current_role != role && "text-base-content/60 hover:text-base-content"
+            ]}
+          >
+            <.role_icon role={role} />
+            <span>{format_role_name(role)}</span>
+          </button>
+        <% end %>
+      </div>
+    </div>
     """
   end
 
-  defp format_options(roles) do
-    Enum.map(roles, fn role ->
-      label =
-        role
-        |> Atom.to_string()
-        |> String.capitalize()
-
-      {label, role}
-    end)
-  end
-
   @impl true
-  def handle_event("switch_role", %{"current_role" => role}, socket) do
+  def handle_event("switch_role", %{"role" => role}, socket) do
     user = socket.assigns.user
 
-    case Accounts.update_user_current_role(user, %{current_role: role}) do
-      {:ok, _updated_user} ->
-        {:noreply,
-         socket
-         |> push_navigate(to: ~p"/")}
+    # Only update if the role is valid and different from current
+    if role && to_string(user.current_role) != role do
+      case Accounts.update_user_current_role(user, %{current_role: role}) do
+        {:ok, updated_user} ->
+          # Notify parent LiveView to navigate to home page after role change
+          send(self(), {:role_changed, updated_user})
 
-      {:error, _changeset} ->
-        {:noreply, socket}
+          {:noreply,
+           socket
+           |> assign(:user, updated_user)}
+
+        {:error, _changeset} ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
     end
+  end
+
+  defp format_role_name(role) do
+    role
+    |> Atom.to_string()
+    |> String.capitalize()
+  end
+
+  defp slider_position_style(current_role, preferred_roles) do
+    # Calculate the position of the active role
+    role_index = Enum.find_index(preferred_roles, &(&1 == current_role)) || 0
+    role_count = length(preferred_roles)
+
+    # Each role takes equal width
+    width_percentage = 100 / role_count
+    left_position = role_index * width_percentage
+
+    "width: calc(#{width_percentage}% - 0.5rem); left: calc(#{left_position}% + 0.25rem);"
+  end
+
+  defp role_icon(assigns) do
+    icon_name =
+      case assigns.role do
+        :owner -> "hero-building-office"
+        :tenant -> "hero-user"
+        :manager -> "hero-briefcase"
+        _ -> "hero-user"
+      end
+
+    assigns = assign(assigns, :icon_name, icon_name)
+
+    ~H"""
+    <.icon name={@icon_name} class="w-4 h-4" />
+    """
   end
 end

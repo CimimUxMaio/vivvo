@@ -1,4 +1,10 @@
 defmodule VivvoWeb.UserLive.Settings do
+  @moduledoc """
+  LiveView for user account settings.
+
+  Allows users to manage their email address and password.
+  Requires sudo mode (recent authentication) for security.
+  """
   use VivvoWeb, :live_view
 
   on_mount {VivvoWeb.UserAuth, :require_sudo_mode}

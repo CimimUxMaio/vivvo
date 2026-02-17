@@ -87,6 +87,9 @@ defmodule VivvoWeb do
       # Core UI components
       import VivvoWeb.CoreComponents
 
+      # Format helpers for dates and times
+      import VivvoWeb.FormatHelpers
+
       # Common modules used in templates
       alias Phoenix.LiveView.JS
       alias VivvoWeb.Layouts
