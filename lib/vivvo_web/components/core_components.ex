@@ -193,6 +193,14 @@ defmodule VivvoWeb.CoreComponents do
     |> input()
   end
 
+  # When no field is provided, ensure value has a default and mark field as processed
+  def input(assigns) when not is_map_key(assigns, :field) do
+    assigns
+    |> assign(:field, nil)
+    |> assign_new(:value, fn -> nil end)
+    |> input()
+  end
+
   def input(%{type: "hidden"} = assigns) do
     ~H"""
     <input type="hidden" id={@id} name={@name} value={@value} {@rest} />
