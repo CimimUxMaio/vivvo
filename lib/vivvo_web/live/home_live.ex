@@ -1173,44 +1173,15 @@ defmodule VivvoWeb.HomeLive do
         </span>
       </div>
 
-      <%!-- Mobile: Horizontal Scrollable Pills --%>
-      <div class="flex sm:hidden -mx-4 px-4 overflow-x-auto scrollbar-hide gap-2 pb-1">
+      <%!-- Horizontal Scrollable Property Cards --%>
+      <div class="flex -mx-4 px-4 overflow-x-auto scrollbar-hide gap-3 pb-1">
         <%= for contract <- @contracts do %>
           <% is_selected = @selected_contract && @selected_contract.id == contract.id %>
           <button
             phx-click="select_contract"
             phx-value-id={contract.id}
             class={[
-              "flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap",
-              is_selected &&
-                [
-                  "bg-primary text-primary-content shadow-md shadow-primary/25",
-                  "ring-2 ring-primary/20"
-                ],
-              !is_selected &&
-                [
-                  "bg-base-200 text-base-content/80 hover:bg-base-300"
-                ]
-            ]}
-          >
-            <.icon name="hero-building-office" class="w-4 h-4" />
-            <span class="truncate max-w-[120px]">{contract.property.name}</span>
-            <%= if is_selected do %>
-              <.icon name="hero-check" class="w-3.5 h-3.5 ml-0.5" />
-            <% end %>
-          </button>
-        <% end %>
-      </div>
-
-      <%!-- Desktop: Card Grid --%>
-      <div class="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <%= for contract <- @contracts do %>
-          <% is_selected = @selected_contract && @selected_contract.id == contract.id %>
-          <button
-            phx-click="select_contract"
-            phx-value-id={contract.id}
-            class={[
-              "group relative flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200",
+              "group relative flex-shrink-0 flex items-center gap-3 p-3 min-w-[220px] max-w-[280px] rounded-xl text-left transition-all duration-200",
               "border-2 hover:shadow-md hover:-translate-y-0.5",
               is_selected &&
                 [
