@@ -37,9 +37,19 @@ defmodule Vivvo.Payments.Payment do
     |> validate_required([:payment_number, :amount, :contract_id])
     |> validate_number(:amount, greater_than: 0)
     |> validate_number(:payment_number, greater_than: 0)
-    |> validate_rejection_reason()
     |> validate_amount_within_allowance(remaining_allowance)
     |> put_change(:user_id, user_scope.user.id)
+  end
+
+  @doc false
+  def validation_changeset(payment, attrs) do
+    payment
+    |> cast(attrs, [
+      :status,
+      :rejection_reason
+    ])
+    |> validate_inclusion(:status, [:accepted, :rejected])
+    |> validate_rejection_reason()
   end
 
   defp validate_amount_within_allowance(changeset, nil), do: changeset

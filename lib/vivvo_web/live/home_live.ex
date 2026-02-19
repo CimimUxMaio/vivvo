@@ -1182,7 +1182,7 @@ defmodule VivvoWeb.HomeLive do
             phx-value-id={contract.id}
             class={[
               "group relative flex-shrink-0 flex items-center gap-3 p-3 min-w-[220px] max-w-[280px] rounded-xl text-left transition-all duration-200",
-              "border-2 hover:shadow-md hover:-translate-y-0.5",
+              "border-2 hover:shadow-md hover:-translate-y-0.5 hover:cursor-pointer",
               is_selected &&
                 [
                   "bg-primary/5 border-primary shadow-sm",
@@ -1246,7 +1246,7 @@ defmodule VivvoWeb.HomeLive do
       case assigns.payment_status do
         :paid -> "Nothing Due"
         :overdue -> "Overdue Payment"
-        :on_time -> "Nothing Due"
+        _ -> "Nothing Due"
       end
 
     days_until_next =
@@ -1292,7 +1292,7 @@ defmodule VivvoWeb.HomeLive do
               <p class="text-sm text-base-content/60">Total Amount Due</p>
               <span class={[
                 "inline-flex px-2 py-1 rounded-full text-xs font-medium",
-                @payment_status in [:paid, :on_time] && "bg-success/10 text-success",
+                @payment_status in [:paid, :on_time, :upcoming] && "bg-success/10 text-success",
                 @payment_status == :overdue && "bg-error/10 text-error"
               ]}>
                 {@status_label}
