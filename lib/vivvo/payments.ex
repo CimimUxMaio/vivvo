@@ -114,7 +114,7 @@ defmodule Vivvo.Payments do
           (p.user_id == ^scope.user.id or (not is_nil(c) and c.user_id == ^scope.user.id)),
       preload: [contract: c]
     )
-    |> Repo.one()
+    |> Repo.one!()
   end
 
   @doc """
