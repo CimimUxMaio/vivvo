@@ -688,9 +688,9 @@ defmodule VivvoWeb.CoreComponents do
   def property_status_badge(assigns) do
     {color, label} =
       cond do
-        assigns.collection_rate >= 95 -> {"bg-success/10 text-success", "Excellent"}
-        assigns.collection_rate >= 80 -> {"bg-info/10 text-info", "Good"}
-        assigns.collection_rate >= 60 -> {"bg-warning/10 text-warning", "Fair"}
+        assigns.collection_rate >= 100 -> {"bg-success/10 text-success", "Excellent"}
+        assigns.collection_rate >= 90 -> {"bg-info/10 text-info", "Good"}
+        assigns.collection_rate >= 80 -> {"bg-warning/10 text-warning", "Fair"}
         true -> {"bg-error/10 text-error", "At Risk"}
       end
 
