@@ -365,21 +365,16 @@ defmodule Vivvo.Contracts do
 
   """
   def get_past_payment_numbers(%Contract{} = contract, today) do
-    case get_current_payment_number(contract) do
-      0 ->
-        # Empty range - no payments due yet
-        1..0//-1
+    current = get_current_payment_number(contract)
+    current_due_date = calculate_due_date(contract, current)
 
-      current ->
-        # Only need to check current month - all prior months are guaranteed past
-        current_due_date = calculate_due_date(contract, current)
+    last =
+      if Date.compare(current_due_date, today) == :lt,
+        do: current,
+        else: current - 1
 
-        if Date.compare(current_due_date, today) == :lt do
-          1..current
-        else
-          1..(current - 1)
-        end
-    end
+    Range.new(1, last, 1)
+    |> Enum.to_list()
   end
 
   @doc """
@@ -522,14 +517,7 @@ defmodule Vivvo.Contracts do
     past_payment_numbers = get_past_payment_numbers(contract, today)
 
     # Expected = rent × number of past payment periods
-    # Handle empty range case: when first > last, the range is empty
-    periods_count =
-      if past_payment_numbers.first > past_payment_numbers.last do
-        0
-      else
-        Range.size(past_payment_numbers)
-      end
-
+    periods_count = Enum.count(past_payment_numbers)
     total_expected = Decimal.mult(contract.rent, Decimal.new(periods_count))
 
     # Received = sum of all accepted payments for past periods (single query)
@@ -545,18 +533,11 @@ defmodule Vivvo.Contracts do
         0.0
       end
 
-    # Average delay days - calculated across ALL accepted payments (historical behavior)
-    avg_delay_days =
-      contract.payments
-      |> Enum.filter(&(&1.status == :accepted))
-      |> case do
-        [] ->
-          0.0
+    # Single query to fetch all payments grouped by month
+    payments_by_month = Payments.get_contract_payments_by_month(scope, contract.id)
 
-        payments ->
-          total_delay = Enum.sum_by(payments, &calculate_delay(contract, &1))
-          Float.round(total_delay / length(payments), 1)
-      end
+    # Average delay days - calculated based on when each month was fully paid
+    avg_delay_days = calculate_avg_delay_days(contract, payments_by_month, today)
 
     %{
       property: property,
@@ -568,11 +549,101 @@ defmodule Vivvo.Contracts do
     }
   end
 
-  defp calculate_delay(%Contract{} = contract, payment) do
-    due_date = calculate_due_date(contract, payment.payment_number)
-    payment_date = DateTime.to_date(payment.inserted_at)
-    delay = Date.diff(payment_date, due_date)
-    max(0, delay)
+  @doc """
+  Calculate the average delay days for a contract.
+
+  For each month (payment_number):
+  - If fully paid: uses the delay of the payment that completed the rent
+  - If partially paid: uses the delay from due date to today
+
+  Early payments are counted as 0 delay (not negative).
+
+  ## Parameters
+  - `contract`: The contract struct with rent and due dates info
+  - `payments_by_month`: Map of %{payment_number => [payments]} from `Payments.get_contract_payments_by_month/2`
+  - `today`: The current date to use for partially paid months
+
+  ## Returns
+  Average delay as a float rounded to 1 decimal place, or 0.0 if no months
+
+  ## Examples
+
+      iex> calculate_avg_delay_days(contract, payments_by_month, ~D[2026-02-19])
+      3.5
+
+  """
+  def calculate_avg_delay_days(%Contract{} = contract, payments_by_month, %Date{} = today) do
+    past_payment_numbers = get_past_payment_numbers(contract, today)
+
+    # Handle empty range case
+    delays =
+      Enum.map(past_payment_numbers, fn payment_number ->
+        calculate_month_delay(contract, payments_by_month, payment_number, today)
+      end)
+
+    case delays do
+      [] -> 0.0
+      _ -> Float.round(Enum.sum(delays) / length(delays), 1)
+    end
+  end
+
+  defp calculate_month_delay(contract, payments_by_month, payment_number, today) do
+    due_date = calculate_due_date(contract, payment_number)
+    month_payments = Map.get(payments_by_month, payment_number)
+
+    cond do
+      is_nil(month_payments) ->
+        # No payments at all for this month
+        max(0, Date.diff(today, due_date))
+
+      month_fully_paid?(month_payments, contract.rent) ->
+        # Fully paid - find completion payment and calculate delay
+        calculate_completion_delay(month_payments, contract.rent, due_date)
+
+      true ->
+        # Partially paid - use today as completion date
+        max(0, Date.diff(today, due_date))
+    end
+  end
+
+  defp month_fully_paid?(month_payments, rent) do
+    total_paid =
+      month_payments
+      |> Enum.map(& &1.amount)
+      |> Enum.reduce(Decimal.new(0), &Decimal.add/2)
+
+    Decimal.compare(total_paid, rent) != :lt
+  end
+
+  defp calculate_completion_delay(month_payments, rent, due_date) do
+    case find_completion_payment(month_payments, rent) do
+      nil ->
+        0
+
+      completion_payment ->
+        payment_date = DateTime.to_date(completion_payment.inserted_at)
+        max(0, Date.diff(payment_date, due_date))
+    end
+  end
+
+  # Private helper to find the completion payment from a list of payments
+  # Uses tail recursion to track cumulative sum until rent is reached
+  defp find_completion_payment(payments, rent) do
+    do_find_completion_payment(payments, rent, Decimal.new(0))
+  end
+
+  defp do_find_completion_payment([], _rent, _cumulative), do: nil
+
+  defp do_find_completion_payment([payment | rest], rent, cumulative) do
+    new_cumulative = Decimal.add(cumulative, payment.amount)
+
+    if Decimal.compare(new_cumulative, rent) != :lt do
+      # This payment completed the rent
+      payment
+    else
+      # Continue to next payment
+      do_find_completion_payment(rest, rent, new_cumulative)
+    end
   end
 
   @doc """
