@@ -1395,7 +1395,7 @@ defmodule VivvoWeb.HomeLive do
           </div>
         <% else %>
           <div class="mt-6 pt-6 border-t border-base-200">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <%!-- Success Message --%>
               <div class="flex items-center gap-2 text-success">
                 <.icon name="hero-check-circle" class="w-5 h-5" />
