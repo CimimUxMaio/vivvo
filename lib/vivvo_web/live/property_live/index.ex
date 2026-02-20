@@ -1,4 +1,10 @@
 defmodule VivvoWeb.PropertyLive.Index do
+  @moduledoc """
+  LiveView for listing and managing properties.
+
+  Displays a table of all properties with options to view, edit, and delete.
+  Uses LiveView streams for efficient rendering of property lists.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Properties

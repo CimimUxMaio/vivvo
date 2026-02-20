@@ -44,16 +44,20 @@ defmodule VivvoWeb.Router do
   scope "/", VivvoWeb do
     pipe_through [:browser, :require_authenticated_user]
 
-    live_session :require_authenticated_user,
-      on_mount: [{VivvoWeb.UserAuth, :require_authenticated}] do
+    live_session :shared,
+      on_mount: [
+        {VivvoWeb.UserAuth, :require_authenticated},
+        {VivvoWeb.RoleHooks, :handle_role_changes}
+      ] do
       live "/", HomeLive, :index
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
 
-    live_session :require_owner,
+    live_session :owner,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
+        {VivvoWeb.RoleHooks, :handle_role_changes},
         {VivvoWeb.UserAuth, :require_owner_role}
       ] do
       live "/properties", PropertyLive.Index, :index

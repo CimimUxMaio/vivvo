@@ -1,4 +1,10 @@
 defmodule VivvoWeb.ContractLive.Form do
+  @moduledoc """
+  LiveView for creating and editing rental contracts.
+
+  Handles contract creation with tenant selection, date ranges, rent amount,
+  and payment due dates. Warns when replacing existing contracts.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Accounts

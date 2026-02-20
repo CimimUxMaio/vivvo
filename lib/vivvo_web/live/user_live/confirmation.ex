@@ -1,4 +1,10 @@
 defmodule VivvoWeb.UserLive.Confirmation do
+  @moduledoc """
+  LiveView for account confirmation via magic link.
+
+  Handles the confirmation flow when users click magic link tokens
+  sent to their email for login or account verification.
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Accounts

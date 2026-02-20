@@ -1,4 +1,10 @@
 defmodule VivvoWeb.UserLive.Login do
+  @moduledoc """
+  LiveView for user login.
+
+  Handles both regular login via magic link and reauthentication
+  for sensitive actions (sudo mode).
+  """
   use VivvoWeb, :live_view
 
   alias Vivvo.Accounts

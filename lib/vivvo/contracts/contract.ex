@@ -6,7 +6,12 @@ defmodule Vivvo.Contracts.Contract do
   import Ecto.Changeset
 
   alias Vivvo.Accounts.User
+  alias Vivvo.Payments.Payment
   alias Vivvo.Properties.Property
+
+  # Payment due day constraints
+  @min_expiration_day 1
+  @max_expiration_day 20
 
   schema "contracts" do
     field :rent, :decimal
@@ -21,6 +26,8 @@ defmodule Vivvo.Contracts.Contract do
 
     field :archived, :boolean, default: false
     belongs_to :archived_by, User
+
+    has_many :payments, Payment
 
     timestamps(type: :utc_datetime)
   end
@@ -45,7 +52,10 @@ defmodule Vivvo.Contracts.Contract do
       :property_id,
       :tenant_id
     ])
-    |> validate_number(:expiration_day, greater_than_or_equal_to: 1, less_than_or_equal_to: 20)
+    |> validate_number(:expiration_day,
+      greater_than_or_equal_to: @min_expiration_day,
+      less_than_or_equal_to: @max_expiration_day
+    )
     |> validate_number(:rent, greater_than: 0)
     |> validate_end_date_after_start_date()
     |> put_change(:user_id, user_scope.user.id)
