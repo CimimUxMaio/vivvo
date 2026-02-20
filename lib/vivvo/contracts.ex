@@ -513,17 +513,46 @@ defmodule Vivvo.Contracts do
   end
 
   defp calculate_property_metrics(property, %Contract{} = contract, scope) do
+    status = contract_status(contract)
+
+    case status do
+      :upcoming ->
+        %{
+          property: property,
+          total_income: Decimal.new(0),
+          collection_rate: 0.0,
+          avg_delay_days: 0.0,
+          state: :upcoming,
+          total_expected: Decimal.new(0),
+          contract: contract,
+          days_until_start: days_until_start(contract),
+          days_until_end: nil
+        }
+
+      :expired ->
+        %{
+          property: property,
+          total_income: Decimal.new(0),
+          collection_rate: 0.0,
+          avg_delay_days: 0,
+          state: :vacant,
+          total_expected: Decimal.new(0)
+        }
+
+      :active ->
+        calculate_active_property_metrics(property, contract, scope)
+    end
+  end
+
+  defp calculate_active_property_metrics(property, %Contract{} = contract, scope) do
     today = Date.utc_today()
     past_payment_numbers = get_past_payment_numbers(contract, today)
 
-    # Expected = rent × number of past payment periods
     periods_count = Enum.count(past_payment_numbers)
     total_expected = Decimal.mult(contract.rent, Decimal.new(periods_count))
 
-    # Received = sum of all accepted payments for past periods (single query)
     total_received = Payments.total_rent_collected(scope, contract, today)
 
-    # Collection rate calculation
     collection_rate =
       if periods_count > 0 do
         Decimal.div(total_received, total_expected)
@@ -533,10 +562,8 @@ defmodule Vivvo.Contracts do
         0.0
       end
 
-    # Single query to fetch all payments grouped by month
     payments_by_month = Payments.get_contract_payments_by_month(scope, contract.id)
 
-    # Average delay days - calculated based on when each month was fully paid
     avg_delay_days = calculate_avg_delay_days(contract, payments_by_month, today)
 
     %{
@@ -545,7 +572,10 @@ defmodule Vivvo.Contracts do
       collection_rate: collection_rate,
       avg_delay_days: avg_delay_days,
       state: :occupied,
-      total_expected: total_expected
+      total_expected: total_expected,
+      contract: contract,
+      days_until_start: nil,
+      days_until_end: days_until_end(contract)
     }
   end
 
@@ -708,6 +738,30 @@ defmodule Vivvo.Contracts do
 
     case Date.compare(end_date, today) do
       :gt -> Date.diff(end_date, today)
+      :eq -> 0
+      :lt -> nil
+    end
+  end
+
+  @doc """
+  Calculate days until contract starts.
+
+  Returns nil if contract has already started, 0 if it starts today.
+
+  ## Examples
+
+      iex> days_until_start(%Contract{start_date: ~D[2026-03-01]})
+      10
+
+      iex> days_until_start(%Contract{start_date: ~D[2020-01-01]})
+      nil
+
+  """
+  def days_until_start(%Contract{start_date: start_date}) do
+    today = Date.utc_today()
+
+    case Date.compare(start_date, today) do
+      :gt -> Date.diff(start_date, today)
       :eq -> 0
       :lt -> nil
     end
