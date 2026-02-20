@@ -443,7 +443,7 @@ defmodule Vivvo.ContractsTest do
       today = Date.utc_today()
       result = Contracts.get_past_payment_numbers(contract, today)
 
-      assert result.first > result.last
+      assert result == []
     end
 
     test "includes current payment number when its due date has passed" do
@@ -462,8 +462,8 @@ defmodule Vivvo.ContractsTest do
       result = Contracts.get_past_payment_numbers(contract, today)
 
       # Due date is day 1, today is after that, so both months should be past
-      assert Range.size(result) >= 2
-      assert result.first == 1
+      assert Enum.count(result) >= 2
+      assert List.first(result) == 1
     end
 
     test "excludes current payment number when its due date hasn't passed" do
@@ -485,7 +485,7 @@ defmodule Vivvo.ContractsTest do
 
       # Current month due date hasn't passed yet
       current = Contracts.get_current_payment_number(contract)
-      assert result.last == current - 1
+      assert List.last(result) == current - 1
     end
   end
 
@@ -652,6 +652,340 @@ defmodule Vivvo.ContractsTest do
       assert Decimal.eq?(metrics.total_income, Decimal.new("0"))
       assert metrics.collection_rate == 0.0
       assert metrics.avg_delay_days == 0
+    end
+  end
+
+  describe "calculate_avg_delay_days/3" do
+    setup do
+      owner_scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+      %{scope: owner_scope, tenant_scope: tenant_scope}
+    end
+
+    # Helper to create a contract with exactly one past due payment period
+    defp create_single_period_contract(scope, tenant_scope, today) do
+      # Start date in the current month, with expiration_day = 1 (already passed)
+      start_date = Date.beginning_of_month(today)
+
+      contract_fixture(scope, %{
+        rent: Decimal.new("1000.00"),
+        start_date: start_date,
+        end_date: Date.add(start_date, 365),
+        expiration_day: 1,
+        tenant_id: tenant_scope.user.id
+      })
+    end
+
+    test "multiple partial payments - uses completion payment delay only", %{
+      scope: scope,
+      tenant_scope: tenant_scope
+    } do
+      today = Date.utc_today()
+      contract = create_single_period_contract(scope, tenant_scope, today)
+
+      # Get due date for month 1
+      due_date = Contracts.calculate_due_date(contract, 1)
+
+      # Verify we have exactly 1 past period
+      past_periods = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_periods) == 1
+
+      # Payment 1: $600 on day -5 (5 days early)
+      early_payment_date = Date.add(due_date, -5)
+
+      payment1 =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: Decimal.new("600.00"),
+          status: :pending
+        })
+
+      # Update inserted_at to simulate early payment
+      Ecto.Changeset.change(payment1, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(early_payment_date, ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment1)
+
+      # Payment 2: $400 on day +3 (3 days late) - this completes the rent
+      late_payment_date = Date.add(due_date, 3)
+
+      payment2 =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: Decimal.new("400.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment2, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(late_payment_date, ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment2)
+
+      # Get payments grouped by month
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+
+      # Calculate avg delay - should be 3 days (completion payment delay only, not average of -5 and 3)
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      # Expected: 3 days (the delay of the completion payment)
+      assert avg_delay == 3.0
+    end
+
+    test "single full payment (regression test)", %{scope: scope, tenant_scope: tenant_scope} do
+      today = Date.utc_today()
+      contract = create_single_period_contract(scope, tenant_scope, today)
+      due_date = Contracts.calculate_due_date(contract, 1)
+
+      # Verify we have exactly 1 past period
+      past_periods = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_periods) == 1
+
+      # Single payment of $1000 on day +5 (5 days late)
+      payment_date = Date.add(due_date, 5)
+
+      payment =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: Decimal.new("1000.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(payment_date, ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
+
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      assert avg_delay == 5.0
+    end
+
+    test "mix of fully paid and partially paid months", %{
+      scope: scope,
+      tenant_scope: tenant_scope
+    } do
+      today = Date.utc_today()
+      # Contract started 3 months ago
+      start_date = Date.add(today, -90)
+
+      contract =
+        contract_fixture(scope, %{
+          rent: Decimal.new("1000.00"),
+          start_date: start_date,
+          end_date: Date.add(start_date, 365),
+          expiration_day: 1,
+          tenant_id: tenant_scope.user.id
+        })
+
+      # Month 1: Single payment of $1000 on day +2
+      due_date_1 = Contracts.calculate_due_date(contract, 1)
+
+      payment_1 =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: Decimal.new("1000.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment_1, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(Date.add(due_date_1, 2), ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment_1)
+
+      # Month 2: Two payments ($500 day -3, $500 day +5) - completion on day +5
+      due_date_2 = Contracts.calculate_due_date(contract, 2)
+
+      payment_2a =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: Decimal.new("500.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment_2a, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(Date.add(due_date_2, -3), ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment_2a)
+
+      payment_2b =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 2,
+          amount: Decimal.new("500.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment_2b, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(Date.add(due_date_2, 5), ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment_2b)
+
+      # Month 3: Partially paid ($600) - uses today for delay
+      due_date_3 = Contracts.calculate_due_date(contract, 3)
+
+      payment_3 =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 3,
+          amount: Decimal.new("600.00"),
+          status: :pending
+        })
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment_3)
+
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+
+      # Calculate expected delay for month 3 (partially paid - uses today)
+      delay_month_3 = max(0, Date.diff(today, due_date_3))
+
+      # Expected average: (2 + 5 + delay_month_3) / 3
+      expected_avg = Float.round((2 + 5 + delay_month_3) / 3, 1)
+
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      assert avg_delay == expected_avg
+    end
+
+    test "early completion payments show 0 delay", %{scope: scope, tenant_scope: tenant_scope} do
+      today = Date.utc_today()
+      contract = create_single_period_contract(scope, tenant_scope, today)
+      due_date = Contracts.calculate_due_date(contract, 1)
+
+      # Verify we have exactly 1 past period
+      past_periods = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_periods) == 1
+
+      # Payment 10 days early
+      early_date = Date.add(due_date, -10)
+
+      payment =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: Decimal.new("1000.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(early_date, ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
+
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      # Early payment = 0 delay (not negative)
+      assert avg_delay == 0.0
+    end
+
+    test "no payments at all uses today as completion date", %{
+      scope: scope,
+      tenant_scope: tenant_scope
+    } do
+      today = Date.utc_today()
+      contract = create_single_period_contract(scope, tenant_scope, today)
+      due_date = Contracts.calculate_due_date(contract, 1)
+
+      # Verify we have exactly 1 past period
+      past_periods = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_periods) == 1
+
+      expected_delay = max(0, Date.diff(today, due_date))
+
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      # Should be delay from due date to today
+      assert avg_delay == Float.round(expected_delay / 1.0, 1)
+    end
+
+    test "overpayment treated as normal completion", %{scope: scope, tenant_scope: tenant_scope} do
+      today = Date.utc_today()
+      contract = create_single_period_contract(scope, tenant_scope, today)
+      due_date = Contracts.calculate_due_date(contract, 1)
+
+      # Verify we have exactly 1 past period
+      past_periods = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_periods) == 1
+
+      # Overpayment of $1500 on day +3
+      payment_date = Date.add(due_date, 3)
+
+      payment =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: Decimal.new("1500.00"),
+          status: :pending
+        })
+
+      Ecto.Changeset.change(payment, %{})
+      |> Ecto.Changeset.force_change(
+        :inserted_at,
+        DateTime.new!(payment_date, ~T[12:00:00], "Etc/UTC")
+      )
+      |> Repo.update!()
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
+
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      assert avg_delay == 3.0
+    end
+
+    test "contract with no past due dates returns 0.0", %{scope: scope} do
+      today = Date.utc_today()
+      # Future contract
+      future_start = Date.add(today, 30)
+
+      contract =
+        contract_fixture(scope, %{
+          rent: Decimal.new("1000.00"),
+          start_date: future_start,
+          end_date: Date.add(future_start, 365),
+          expiration_day: 10
+        })
+
+      payments_by_month = Vivvo.Payments.get_contract_payments_by_month(scope, contract.id)
+      avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
+
+      assert avg_delay == 0.0
     end
   end
 end
