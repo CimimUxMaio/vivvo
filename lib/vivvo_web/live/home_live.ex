@@ -1240,7 +1240,7 @@ defmodule VivvoWeb.HomeLive do
       </div>
 
       <%!-- Horizontal Scrollable Property Cards --%>
-      <div class="flex -mx-4 px-4 overflow-x-auto scrollbar-hide gap-3 pb-1">
+      <div class="flex -mx-4 px-4 pt-1 overflow-x-auto scrollbar-hide gap-3 pb-1">
         <%= for contract <- @contracts do %>
           <% is_selected = @selected_contract && @selected_contract.id == contract.id %>
           <button
