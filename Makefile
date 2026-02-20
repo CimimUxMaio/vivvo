@@ -47,6 +47,12 @@ db.up:
 db.setup:
 	mix ecto.setup
 
+
+.PHONY: db.reset
+## Reset the database by dropping it, creating it again, running migrations, and seeding data
+db.reset:
+	mix ecto.reset
+
 .PHONY: db.down
 ## Stop and remove the Docker container for the database
 db.down:
@@ -95,6 +101,7 @@ help:
 	@echo "$(CYAN)$(BOLD)Database Commands:$(RESET)"
 	@echo "  $(YELLOW)db.up$(RESET)         Start the PostgreSQL Docker container"
 	@echo "  $(YELLOW)db.setup$(RESET)      Create database, run migrations, and seed data"
+	@echo "  $(YELLOW)db.reset$(RESET)      Reset the database by dropping, creating, migrating, and seeding"
 	@echo "  $(YELLOW)db.down$(RESET)       Stop and remove the database container"
 	@echo "  $(YELLOW)db.shell$(RESET)      Open a psql shell in the database container"
 	@echo ""
