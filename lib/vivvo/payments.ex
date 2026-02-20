@@ -259,6 +259,30 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
+  Get all accepted payments for a contract, grouped by payment_number (month).
+
+  Returns a map of %{payment_number => [payments]} ordered by payment date.
+  This is used for efficient batch processing to avoid N+1 queries.
+
+  ## Examples
+
+      iex> get_contract_payments_by_month(scope, contract_id)
+      %{1 => [%Payment{amount: Decimal.new("600.00"), ...}, %Payment{amount: Decimal.new("400.00"), ...}],
+        2 => [%Payment{...}]}
+
+  """
+  def get_contract_payments_by_month(%Scope{} = scope, contract_id) do
+    Payment
+    |> join(:inner, [p], c in assoc(p, :contract))
+    |> where([p], p.contract_id == ^contract_id)
+    |> where([p, c], c.user_id == ^scope.user.id)
+    |> where([p], p.status == :accepted)
+    |> order_by([p], asc: p.payment_number, asc: p.inserted_at)
+    |> Repo.all()
+    |> Enum.group_by(& &1.payment_number)
+  end
+
+  @doc """
   Accept a payment (owner action).
 
   ## Examples
