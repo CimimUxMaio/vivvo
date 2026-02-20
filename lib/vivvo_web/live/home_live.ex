@@ -769,6 +769,10 @@ defmodule VivvoWeb.HomeLive do
               <tr>
                 <th class="px-4 py-3 text-left font-medium text-base-content/70">Property</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">State</th>
+                <th class="px-4 py-3 text-center font-medium text-base-content/70 min-w-[100px] whitespace-nowrap">
+                  Days
+                </th>
+                <th class="px-4 py-3 text-right font-medium text-base-content/70">Rent</th>
                 <th class="px-4 py-3 text-right font-medium text-base-content/70">Income</th>
                 <th class="px-4 py-3 text-right font-medium text-base-content/70">Expected</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">Collection</th>
@@ -786,24 +790,50 @@ defmodule VivvoWeb.HomeLive do
                     </div>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <%= if metric.state == :occupied do %>
-                      <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-success/10 text-success rounded-full text-xs font-medium">
-                        Occupied
-                      </div>
+                    <%= cond do %>
+                      <% metric.state == :occupied -> %>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-success/10 text-success rounded-full text-xs font-medium">
+                          Occupied
+                        </div>
+                      <% metric.state == :upcoming -> %>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-info/10 text-info rounded-full text-xs font-medium">
+                          Upcoming
+                        </div>
+                      <% true -> %>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-base-300/30 text-base-content/60 rounded-full text-xs font-medium">
+                          Vacant
+                        </div>
+                    <% end %>
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <%= cond do %>
+                      <% metric.state == :occupied -> %>
+                        <.days_until_end_display days={metric.days_until_end} />
+                      <% metric.state == :upcoming -> %>
+                        <span class="text-info">Starts in {metric.days_until_start}d</span>
+                      <% true -> %>
+                        <span class="text-base-content/30">-</span>
+                    <% end %>
+                  </td>
+                  <td class="px-4 py-3 text-right font-medium">
+                    <%= if metric.state in [:occupied, :upcoming] do %>
+                      {format_currency(metric.contract.rent)}
                     <% else %>
-                      <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-base-300/30 text-base-content/60 rounded-full text-xs font-medium">
-                        Vacant
-                      </div>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-right font-medium">
                     <%= if metric.state == :occupied do %>
                       {format_currency(metric.total_income)}
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-right text-base-content/70">
                     <%= if metric.state == :occupied do %>
                       {format_currency(metric.total_expected)}
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3">
@@ -826,6 +856,10 @@ defmodule VivvoWeb.HomeLive do
                           {Float.round(metric.collection_rate, 0)}%
                         </span>
                       </div>
+                    <% else %>
+                      <div class="text-center">
+                        <span class="text-base-content/30">-</span>
+                      </div>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-center">
@@ -835,11 +869,15 @@ defmodule VivvoWeb.HomeLive do
                       <% else %>
                         <span class="text-success">On time</span>
                       <% end %>
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-center">
                     <%= if metric.state == :occupied do %>
                       <.property_status_badge collection_rate={metric.collection_rate} />
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                 </tr>
@@ -857,6 +895,34 @@ defmodule VivvoWeb.HomeLive do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  defp days_until_end_display(assigns) do
+    days = assigns.days
+
+    {color_class, text} =
+      cond do
+        is_nil(days) ->
+          {"text-base-content/30", "-"}
+
+        days == 0 ->
+          {"text-error", "Ending today"}
+
+        days > 30 ->
+          {"text-success", "#{days}d left"}
+
+        days >= 7 ->
+          {"text-warning", "#{days}d left"}
+
+        true ->
+          {"text-error", "#{days}d left"}
+      end
+
+    assigns = assign(assigns, color_class: color_class, text: text)
+
+    ~H"""
+    <span class={@color_class}>{@text}</span>
     """
   end
 
