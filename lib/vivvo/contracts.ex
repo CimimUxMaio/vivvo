@@ -349,6 +349,40 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
+  Get range of payment numbers with due dates in the past.
+
+  Returns an Elixir range (e.g., 1..3) representing payment periods whose
+  due dates have already passed. Uses O(1) optimization by only checking
+  the current payment number's due date - all prior periods are guaranteed past.
+
+  ## Examples
+
+      iex> get_past_payment_numbers(contract, ~D[2026-02-15])
+      1..2  # if payment periods 1 and 2 have passed
+
+      iex> get_past_payment_numbers(contract, ~D[2026-01-01])
+      1..0  # empty range - no due dates in the past yet
+
+  """
+  def get_past_payment_numbers(%Contract{} = contract, today) do
+    case get_current_payment_number(contract) do
+      0 ->
+        # Empty range - no payments due yet
+        1..0//-1
+
+      current ->
+        # Only need to check current month - all prior months are guaranteed past
+        current_due_date = calculate_due_date(contract, current)
+
+        if Date.compare(current_due_date, today) == :lt do
+          1..current
+        else
+          1..(current - 1)
+        end
+    end
+  end
+
+  @doc """
   Calculate the due date for a specific payment number.
 
   ## Examples
@@ -484,19 +518,26 @@ defmodule Vivvo.Contracts do
   end
 
   defp calculate_property_metrics(property, %Contract{} = contract, scope) do
-    total_expected = contract.rent
+    today = Date.utc_today()
+    past_payment_numbers = get_past_payment_numbers(contract, today)
 
-    total_received =
-      case get_current_payment_number(contract) do
-        current when current > 0 ->
-          Payments.total_accepted_for_month(scope, contract.id, current)
-
-        _ ->
-          Decimal.new(0)
+    # Expected = rent × number of past payment periods
+    # Handle empty range case: when first > last, the range is empty
+    periods_count =
+      if past_payment_numbers.first > past_payment_numbers.last do
+        0
+      else
+        Range.size(past_payment_numbers)
       end
 
+    total_expected = Decimal.mult(contract.rent, Decimal.new(periods_count))
+
+    # Received = sum of all accepted payments for past periods (single query)
+    total_received = Payments.total_rent_collected(scope, contract, today)
+
+    # Collection rate calculation
     collection_rate =
-      if Decimal.compare(total_expected, Decimal.new(0)) == :gt do
+      if periods_count > 0 do
         Decimal.div(total_received, total_expected)
         |> Decimal.mult(Decimal.new(100))
         |> Decimal.to_float()
@@ -504,6 +545,7 @@ defmodule Vivvo.Contracts do
         0.0
       end
 
+    # Average delay days - calculated across ALL accepted payments (historical behavior)
     avg_delay_days =
       contract.payments
       |> Enum.filter(&(&1.status == :accepted))
