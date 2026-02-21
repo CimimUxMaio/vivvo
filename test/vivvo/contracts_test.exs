@@ -393,38 +393,40 @@ defmodule Vivvo.ContractsTest do
 
   describe "payment_overdue?/1" do
     test "returns true when current day > expiration_day" do
-      today = Date.utc_today()
-      expiration_day = max(today.day - 1, 1)
+      # Use a fixed date where day > expiration_day
+      today = ~D[2026-02-15]
+      expiration_day = 10
 
       contract = %Contract{
         expiration_day: expiration_day
       }
 
-      assert Contracts.payment_overdue?(contract) == true
+      assert Contracts.payment_overdue?(contract, today) == true
     end
 
     test "returns false when current day < expiration_day" do
-      today = Date.utc_today()
-
-      # Make sure we have a valid expiration_day
-      expiration_day = min(today.day + 1, 20)
+      # Use a fixed date where we control the relationship
+      # Feb 15 has day=15, so expiration_day=20 will always be greater
+      today = ~D[2026-02-15]
+      expiration_day = 20
 
       contract = %Contract{
         expiration_day: expiration_day
       }
 
-      assert Contracts.payment_overdue?(contract) == false
+      assert Contracts.payment_overdue?(contract, today) == false
     end
 
     test "returns false when current day = expiration_day" do
-      today = Date.utc_today()
-      expiration_day = min(today.day, 20)
+      # Use a fixed date where day equals expiration_day
+      today = ~D[2026-02-15]
+      expiration_day = 15
 
       contract = %Contract{
         expiration_day: expiration_day
       }
 
-      assert Contracts.payment_overdue?(contract) == false
+      assert Contracts.payment_overdue?(contract, today) == false
     end
   end
 
@@ -468,11 +470,12 @@ defmodule Vivvo.ContractsTest do
 
     test "excludes current payment number when its due date hasn't passed" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      # Contract started 2 months ago, with expiration day later in month
-      start_date = Date.add(today, -60)
-      # Use expiration day later than current day
-      expiration_day = min(today.day + 5, 20)
+      # Use a fixed date (Feb 15) with expiration_day=20 so due date hasn't passed
+      today = ~D[2026-02-15]
+      # Contract started 2 months ago (Dec 15)
+      start_date = ~D[2025-12-15]
+      # expiration_day=20 > today.day=15, so due date hasn't passed
+      expiration_day = 20
 
       contract =
         contract_fixture(scope, %{
@@ -483,7 +486,7 @@ defmodule Vivvo.ContractsTest do
 
       result = Contracts.get_past_payment_numbers(contract, today)
 
-      # Current month due date hasn't passed yet
+      # Current month (month 3, due Feb 20) hasn't passed yet
       current = Contracts.get_current_payment_number(contract)
       assert List.last(result) == current - 1
     end
@@ -782,8 +785,9 @@ defmodule Vivvo.ContractsTest do
       tenant_scope: tenant_scope
     } do
       today = Date.utc_today()
-      # Contract started 3 months ago
-      start_date = Date.add(today, -90)
+      # Contract started ~2 months ago to ensure exactly 3 payment periods
+      # Using 55 days ensures we span 3 months but don't create a 4th period
+      start_date = Date.add(today, -55)
 
       contract =
         contract_fixture(scope, %{
@@ -793,6 +797,10 @@ defmodule Vivvo.ContractsTest do
           expiration_day: 1,
           tenant_id: tenant_scope.user.id
         })
+
+      # Verify we have exactly 3 past payment periods
+      past_periods = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_periods) == 3
 
       # Month 1: Single payment of $1000 on day +2
       due_date_1 = Contracts.calculate_due_date(contract, 1)
