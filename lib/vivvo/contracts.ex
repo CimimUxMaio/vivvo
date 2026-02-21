@@ -964,7 +964,16 @@ defmodule Vivvo.Contracts do
     end
   end
 
-  defp contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
+  @doc """
+  Calculate the total number of months in a contract period.
+
+  ## Examples
+
+      iex> contract_duration_months(%Contract{start_date: ~D[2026-01-01], end_date: ~D[2026-12-31]})
+      12
+  """
+  @spec contract_duration_months(Contract.t()) :: integer()
+  def contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
     (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
   end
 end
