@@ -25,7 +25,7 @@ defmodule Vivvo.PaymentsTest do
       scope = user_scope_fixture()
       payment = payment_fixture(scope)
       other_scope = user_scope_fixture()
-      assert Payments.get_payment!(scope, payment.id) == payment
+      assert Payments.get_payment!(scope, payment.id).id == payment.id
       assert_raise Ecto.NoResultsError, fn -> Payments.get_payment!(other_scope, payment.id) end
     end
 
@@ -85,7 +85,7 @@ defmodule Vivvo.PaymentsTest do
       scope = user_scope_fixture()
       payment = payment_fixture(scope)
       assert {:error, %Ecto.Changeset{}} = Payments.update_payment(scope, payment, @invalid_attrs)
-      assert payment == Payments.get_payment!(scope, payment.id)
+      assert payment.id == Payments.get_payment!(scope, payment.id).id
     end
 
     test "delete_payment/2 deletes the payment" do

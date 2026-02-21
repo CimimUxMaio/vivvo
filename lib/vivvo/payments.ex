@@ -82,7 +82,14 @@ defmodule Vivvo.Payments do
 
   """
   def get_payment(%Scope{} = scope, id) do
-    Repo.get_by(Payment, id: id, user_id: scope.user.id)
+    from(p in Payment,
+      left_join: c in assoc(p, :contract),
+      where:
+        p.id == ^id and
+          (p.user_id == ^scope.user.id or (not is_nil(c) and c.user_id == ^scope.user.id)),
+      preload: [contract: c]
+    )
+    |> Repo.one()
   end
 
   @doc """
@@ -100,7 +107,14 @@ defmodule Vivvo.Payments do
 
   """
   def get_payment!(%Scope{} = scope, id) do
-    Repo.get_by!(Payment, id: id, user_id: scope.user.id)
+    from(p in Payment,
+      left_join: c in assoc(p, :contract),
+      where:
+        p.id == ^id and
+          (p.user_id == ^scope.user.id or (not is_nil(c) and c.user_id == ^scope.user.id)),
+      preload: [contract: c]
+    )
+    |> Repo.one!()
   end
 
   @doc """
@@ -253,17 +267,7 @@ defmodule Vivvo.Payments do
 
   """
   def accept_payment(%Scope{} = scope, %Payment{} = payment) do
-    if payment.user_id != scope.user.id do
-      {:error, :unauthorized}
-    else
-      with {:ok, payment = %Payment{}} <-
-             payment
-             |> Payment.changeset(%{status: :accepted, rejection_reason: nil}, scope)
-             |> Repo.update() do
-        broadcast_payment(scope, {:updated, payment})
-        {:ok, payment}
-      end
-    end
+    validate_payment(payment, scope, :accepted)
   end
 
   @doc """
@@ -276,17 +280,27 @@ defmodule Vivvo.Payments do
 
   """
   def reject_payment(%Scope{} = scope, %Payment{} = payment, reason) do
-    if payment.user_id != scope.user.id do
-      {:error, :unauthorized}
-    else
+    validate_payment(payment, scope, :rejected, reason)
+  end
+
+  # Helper function to validate and update payment status with optional rejection reason.
+  defp validate_payment(payment, scope, status, reason \\ nil) do
+    if receiver?(payment, scope.user) do
       with {:ok, payment = %Payment{}} <-
              payment
-             |> Payment.changeset(%{status: :rejected, rejection_reason: reason}, scope)
+             |> Payment.validation_changeset(%{status: status, rejection_reason: reason})
              |> Repo.update() do
         broadcast_payment(scope, {:updated, payment})
         {:ok, payment}
       end
+    else
+      {:error, :unauthorized}
     end
+  end
+
+  # Check if the user is the receiver (owner of the contract) of the payment.
+  defp receiver?(payment, user) do
+    Repo.preload(payment, :contract).contract.user_id == user.id
   end
 
   @doc """
