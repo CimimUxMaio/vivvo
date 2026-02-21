@@ -1379,31 +1379,16 @@ defmodule VivvoWeb.HomeLive do
           </div>
         </div>
 
-        <%!-- Progress Bar for Payment --%>
-        <%= if Decimal.gt?(@total_due, Decimal.new(0)) do %>
-          <div class="mt-6 pt-6 border-t border-base-200">
-            <div class="flex items-center justify-between text-sm mb-2">
-              <span class="text-base-content/60">Payment Progress</span>
-              <span class="font-medium text-error">Outstanding: {format_currency(@total_due)}</span>
-            </div>
-            <div class="w-full bg-base-200 rounded-full h-2.5">
-              <div class="bg-error h-2.5 rounded-full" style="width: 0%"></div>
-            </div>
-            <p class="text-xs text-base-content/50 mt-2">
-              Submit payment to bring your account up to date
-            </p>
-          </div>
-        <% else %>
+        <%!-- Success Message with Next Payment Date (when paid up) --%>
+        <%= if Decimal.lte?(@total_due, Decimal.new(0)) do %>
           <div class="mt-6 pt-6 border-t border-base-200">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <%!-- Success Message --%>
               <div class="flex items-center gap-2 text-success">
                 <.icon name="hero-check-circle" class="w-5 h-5" />
                 <span class="font-medium">All payments are up to date!</span>
               </div>
 
               <%= if @next_payment do %>
-                <%!-- Compact Next Payment Info --%>
                 <div
                   id="upcoming-payments"
                   class="flex items-center gap-2 text-sm text-base-content/70 sm:ml-4"
@@ -1700,12 +1685,77 @@ defmodule VivvoWeb.HomeLive do
     """
   end
 
+  # Contract Timeline Component
+  defp contract_timeline(assigns) do
+    contract = assigns.contract
+
+    current_month = Contracts.get_current_payment_number(contract)
+    total_months = Contracts.contract_duration_months(contract)
+    days_remaining = Contracts.days_until_end(contract)
+
+    days_until_start =
+      case Date.compare(contract.start_date, Date.utc_today()) do
+        :gt -> Date.diff(contract.start_date, Date.utc_today())
+        _ -> 0
+      end
+
+    progress_pct =
+      if total_months > 0 do
+        max(0, current_month - 1) / total_months * 100
+      else
+        0.0
+      end
+
+    progress_color =
+      cond do
+        progress_pct <= 50 -> "bg-success"
+        progress_pct < 90 -> "bg-warning"
+        true -> "bg-error"
+      end
+
+    assigns =
+      assign(assigns,
+        current_month: current_month,
+        total_months: total_months,
+        progress_pct: progress_pct,
+        days_remaining: days_remaining,
+        days_until_start: days_until_start,
+        progress_color: progress_color
+      )
+
+    ~H"""
+    <div class="space-y-2">
+      <div class="flex items-center justify-between text-sm">
+        <span class="text-base-content/70">
+          <%= if @current_month == 0 do %>
+            Not started
+          <% else %>
+            <span class="sm:hidden">{@current_month}/{@total_months}</span>
+            <span class="hidden sm:inline">Month {@current_month} of {@total_months}</span>
+          <% end %>
+        </span>
+        <%= cond do %>
+          <% @days_until_start > 0 -> %>
+            <span class="text-base-content/50">Starts in {@days_until_start} days</span>
+          <% @days_remaining && @days_remaining > 0 -> %>
+            <span class="text-base-content/50">{@days_remaining} days remaining</span>
+          <% true -> %>
+            <span class="text-error">Lease ended</span>
+        <% end %>
+      </div>
+      <div class="w-full bg-base-200 rounded-full h-2 overflow-hidden">
+        <div
+          class={["h-full rounded-full transition-all duration-500", @progress_color]}
+          style={"width: #{@progress_pct}%"}
+        >
+        </div>
+      </div>
+    </div>
+    """
+  end
+
   # Contract Quick Access Component
   defp contract_quick_access(assigns) do
-    days_remaining = Contracts.days_until_end(assigns.contract)
-
-    assigns = assign(assigns, days_remaining: days_remaining)
-
     ~H"""
     <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
       <div class="flex items-center gap-2 mb-4">
@@ -1720,15 +1770,6 @@ defmodule VivvoWeb.HomeLive do
           <p class="font-medium">
             {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
           </p>
-          <%= if @days_remaining > 0 do %>
-            <p class="text-xs text-base-content/50 mt-1">
-              <%= if Contracts.ending_soon?(@contract) do %>
-                <span class="text-warning">Ends in {@days_remaining} days</span>
-              <% else %>
-                {@days_remaining} days remaining
-              <% end %>
-            </p>
-          <% end %>
         </div>
 
         <%!-- Monthly Rent --%>
@@ -1749,6 +1790,11 @@ defmodule VivvoWeb.HomeLive do
           <p class="font-medium">{@contract.property.name}</p>
           <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
         </div>
+      </div>
+
+      <%!-- Contract Timeline --%>
+      <div class="mt-6 pt-6 border-t border-base-200">
+        <.contract_timeline contract={@contract} />
       </div>
 
       <%= if @contract.notes && @contract.notes != "" do %>
