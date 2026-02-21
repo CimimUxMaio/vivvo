@@ -580,25 +580,13 @@ defmodule VivvoWeb.HomeLive do
 
   # Income Trend Card Component
   defp income_trend_card(assigns) do
-    max_expected =
-      assigns.income_trend
-      |> Enum.map(&elem(&1, 1))
-      |> Enum.max_by(&Decimal.to_float/1, fn -> Decimal.new(0) end)
-      |> Decimal.to_float()
-
-    max_expected = max(max_expected, 1.0)
-
     # Pre-compute all trend bar data
     trend_bars =
       Enum.map(assigns.income_trend, fn {month_date, expected, received} ->
-        calculate_trend_bar_data(month_date, expected, received, max_expected)
+        calculate_trend_bar_data(month_date, expected, received)
       end)
 
-    assigns =
-      assign(assigns,
-        max_expected: max_expected,
-        trend_bars: trend_bars
-      )
+    assigns = assign(assigns, :trend_bars, trend_bars)
 
     ~H"""
     <div class="bg-base-100 rounded-2xl p-6 shadow-sm border border-base-200">
@@ -617,21 +605,15 @@ defmodule VivvoWeb.HomeLive do
               </span>
             </div>
             <div class="relative h-8 bg-base-200 rounded-lg overflow-hidden">
-              <%!-- Expected amount bar (background) --%>
-              <div
-                class="absolute top-0 left-0 h-full bg-base-300/50 rounded-l-lg"
-                style={"width: #{bar.expected_pct}%"}
-              >
-              </div>
-              <%!-- Received amount bar --%>
+              <%!-- Collection progress bar --%>
               <div
                 class={[
                   "absolute top-0 left-0 h-full rounded-l-lg transition-all duration-500",
-                  bar.received_pct >= 100 && "bg-success",
-                  bar.received_pct >= 50 && bar.received_pct < 100 && "bg-warning",
-                  bar.received_pct < 50 && "bg-error"
+                  bar.collection_pct >= 100 && "bg-success",
+                  bar.collection_pct >= 50 && bar.collection_pct < 100 && "bg-warning",
+                  bar.collection_pct < 50 && "bg-error"
                 ]}
-                style={"width: #{bar.received_pct}%"}
+                style={"width: #{bar.collection_pct}%"}
               >
               </div>
             </div>
@@ -651,10 +633,6 @@ defmodule VivvoWeb.HomeLive do
         <div class="flex items-center gap-1.5">
           <div class="w-3 h-3 rounded bg-error"></div>
           <span class="text-base-content/60">{"< 50% Collected"}</span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <div class="w-3 h-3 rounded bg-base-300/50"></div>
-          <span class="text-base-content/60">{"Expected"}</span>
         </div>
       </div>
     </div>
@@ -1869,27 +1847,23 @@ defmodule VivvoWeb.HomeLive do
 
   # Calculates all display values for a trend bar item.
   # Returns a map with pre-computed values to simplify template logic.
-  defp calculate_trend_bar_data(month_date, expected, received, max_expected) do
+  defp calculate_trend_bar_data(month_date, expected, received) do
     month_label = Calendar.strftime(month_date, "%b %Y")
     expected_float = Decimal.to_float(expected)
     received_float = Decimal.to_float(received)
-    expected_pct = min(expected_float / max_expected * 100, 100)
 
-    received_pct =
+    collection_pct =
       if expected_float > 0 do
-        received_float / expected_float * 100
+        min(received_float / expected_float * 100, 100)
       else
         0
       end
-
-    received_pct = min(received_pct, 100)
 
     %{
       month_label: month_label,
       expected: expected,
       received: received,
-      expected_pct: expected_pct,
-      received_pct: received_pct
+      collection_pct: collection_pct
     }
   end
 end
