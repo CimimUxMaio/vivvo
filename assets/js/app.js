@@ -25,11 +25,125 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/vivvo"
 import topbar from "../vendor/topbar"
 
+/**
+ * Flash message hook with auto-dismiss and hover pause functionality.
+ * - Auto-dismisses after configured duration
+ * - Pauses timer on mouse enter
+ * - Resumes timer on mouse leave
+ * - Closes immediately on click
+ */
+const Flash = {
+  mounted() {
+    this.duration = parseInt(this.el.dataset.duration, 10) || 5000
+    this.remainingTime = this.duration
+    this.startTime = null
+    this.timerId = null
+    this.isPaused = false
+    this.isClosing = false
+
+    // Get progress bar element
+    this.progressBar = this.el.querySelector('.flash-progress')
+
+    // Start the dismissal timer
+    this.startTimer()
+
+    // Add hover event listeners
+    this.el.addEventListener('mouseenter', () => this.pauseTimer())
+    this.el.addEventListener('mouseleave', () => this.resumeTimer())
+
+    // Listen for close event from server
+    this.handleFlashClose = (e) => {
+      if (e.detail.id === this.el.id) {
+        this.close()
+      }
+    }
+    window.addEventListener('phx:flash:close', this.handleFlashClose)
+  },
+
+  destroyed() {
+    this.clearTimer()
+    window.removeEventListener('phx:flash:close', this.handleFlashClose)
+  },
+
+  startTimer() {
+    if (this.isClosing) return
+
+    this.startTime = Date.now()
+    this.isPaused = false
+
+    // Animate progress bar
+    if (this.progressBar) {
+      this.progressBar.style.animation = `flash-progress ${this.remainingTime}ms linear forwards`
+    }
+
+    this.timerId = setTimeout(() => {
+      this.close()
+    }, this.remainingTime)
+  },
+
+  pauseTimer() {
+    if (this.isClosing || this.isPaused) return
+
+    this.isPaused = true
+    const elapsed = Date.now() - this.startTime
+    this.remainingTime = Math.max(0, this.remainingTime - elapsed)
+
+    this.clearTimer()
+
+    // Pause progress bar animation
+    if (this.progressBar) {
+      this.progressBar.style.animationPlayState = 'paused'
+    }
+  },
+
+  resumeTimer() {
+    if (this.isClosing || !this.isPaused) return
+
+    this.isPaused = false
+    this.startTime = Date.now()
+
+    // Resume progress bar animation
+    if (this.progressBar) {
+      this.progressBar.style.animationPlayState = 'running'
+    }
+
+    this.timerId = setTimeout(() => {
+      this.close()
+    }, this.remainingTime)
+  },
+
+  clearTimer() {
+    if (this.timerId) {
+      clearTimeout(this.timerId)
+      this.timerId = null
+    }
+  },
+
+  close() {
+    if (this.isClosing) return
+    this.isClosing = true
+
+    this.clearTimer()
+
+    // Add exit animation
+    this.el.classList.add('flash-exit')
+
+    // Wait for animation to complete before removing
+    setTimeout(() => {
+      // Push event to server to clear flash
+      this.pushEventTo(this.el, 'lv:clear-flash', {key: this.el.dataset.kind})
+
+      // Remove element from DOM
+      this.el.remove()
+    }, 300)
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, Flash},
 })
 
 // Show progress bar on live navigation and form submits

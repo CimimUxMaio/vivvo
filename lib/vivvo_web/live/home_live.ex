@@ -580,25 +580,13 @@ defmodule VivvoWeb.HomeLive do
 
   # Income Trend Card Component
   defp income_trend_card(assigns) do
-    max_expected =
-      assigns.income_trend
-      |> Enum.map(&elem(&1, 1))
-      |> Enum.max_by(&Decimal.to_float/1, fn -> Decimal.new(0) end)
-      |> Decimal.to_float()
-
-    max_expected = max(max_expected, 1.0)
-
     # Pre-compute all trend bar data
     trend_bars =
       Enum.map(assigns.income_trend, fn {month_date, expected, received} ->
-        calculate_trend_bar_data(month_date, expected, received, max_expected)
+        calculate_trend_bar_data(month_date, expected, received)
       end)
 
-    assigns =
-      assign(assigns,
-        max_expected: max_expected,
-        trend_bars: trend_bars
-      )
+    assigns = assign(assigns, :trend_bars, trend_bars)
 
     ~H"""
     <div class="bg-base-100 rounded-2xl p-6 shadow-sm border border-base-200">
@@ -617,21 +605,15 @@ defmodule VivvoWeb.HomeLive do
               </span>
             </div>
             <div class="relative h-8 bg-base-200 rounded-lg overflow-hidden">
-              <%!-- Expected amount bar (background) --%>
-              <div
-                class="absolute top-0 left-0 h-full bg-base-300/50 rounded-l-lg"
-                style={"width: #{bar.expected_pct}%"}
-              >
-              </div>
-              <%!-- Received amount bar --%>
+              <%!-- Collection progress bar --%>
               <div
                 class={[
                   "absolute top-0 left-0 h-full rounded-l-lg transition-all duration-500",
-                  bar.received_pct >= 100 && "bg-success",
-                  bar.received_pct >= 50 && bar.received_pct < 100 && "bg-warning",
-                  bar.received_pct < 50 && "bg-error"
+                  bar.collection_pct >= 100 && "bg-success",
+                  bar.collection_pct >= 50 && bar.collection_pct < 100 && "bg-warning",
+                  bar.collection_pct < 50 && "bg-error"
                 ]}
-                style={"width: #{bar.received_pct}%"}
+                style={"width: #{bar.collection_pct}%"}
               >
               </div>
             </div>
@@ -651,10 +633,6 @@ defmodule VivvoWeb.HomeLive do
         <div class="flex items-center gap-1.5">
           <div class="w-3 h-3 rounded bg-error"></div>
           <span class="text-base-content/60">{"< 50% Collected"}</span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <div class="w-3 h-3 rounded bg-base-300/50"></div>
-          <span class="text-base-content/60">{"Expected"}</span>
         </div>
       </div>
     </div>
@@ -769,6 +747,10 @@ defmodule VivvoWeb.HomeLive do
               <tr>
                 <th class="px-4 py-3 text-left font-medium text-base-content/70">Property</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">State</th>
+                <th class="px-4 py-3 text-center font-medium text-base-content/70 min-w-[100px] whitespace-nowrap">
+                  Days
+                </th>
+                <th class="px-4 py-3 text-right font-medium text-base-content/70">Rent</th>
                 <th class="px-4 py-3 text-right font-medium text-base-content/70">Income</th>
                 <th class="px-4 py-3 text-right font-medium text-base-content/70">Expected</th>
                 <th class="px-4 py-3 text-center font-medium text-base-content/70">Collection</th>
@@ -786,24 +768,50 @@ defmodule VivvoWeb.HomeLive do
                     </div>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <%= if metric.state == :occupied do %>
-                      <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-success/10 text-success rounded-full text-xs font-medium">
-                        Occupied
-                      </div>
+                    <%= cond do %>
+                      <% metric.state == :occupied -> %>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-success/10 text-success rounded-full text-xs font-medium">
+                          Occupied
+                        </div>
+                      <% metric.state == :upcoming -> %>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-info/10 text-info rounded-full text-xs font-medium">
+                          Upcoming
+                        </div>
+                      <% true -> %>
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-base-300/30 text-base-content/60 rounded-full text-xs font-medium">
+                          Vacant
+                        </div>
+                    <% end %>
+                  </td>
+                  <td class="px-4 py-3 text-center whitespace-nowrap">
+                    <%= cond do %>
+                      <% metric.state == :occupied -> %>
+                        <.days_until_end_display days={metric.days_until_end} />
+                      <% metric.state == :upcoming -> %>
+                        <span class="text-info">Starts in {metric.days_until_start}d</span>
+                      <% true -> %>
+                        <span class="text-base-content/30">-</span>
+                    <% end %>
+                  </td>
+                  <td class="px-4 py-3 text-right font-medium">
+                    <%= if metric.state in [:occupied, :upcoming] do %>
+                      {format_currency(metric.contract.rent)}
                     <% else %>
-                      <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-base-300/30 text-base-content/60 rounded-full text-xs font-medium">
-                        Vacant
-                      </div>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-right font-medium">
                     <%= if metric.state == :occupied do %>
                       {format_currency(metric.total_income)}
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-right text-base-content/70">
                     <%= if metric.state == :occupied do %>
                       {format_currency(metric.total_expected)}
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3">
@@ -826,6 +834,10 @@ defmodule VivvoWeb.HomeLive do
                           {Float.round(metric.collection_rate, 0)}%
                         </span>
                       </div>
+                    <% else %>
+                      <div class="text-center">
+                        <span class="text-base-content/30">-</span>
+                      </div>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-center">
@@ -835,11 +847,15 @@ defmodule VivvoWeb.HomeLive do
                       <% else %>
                         <span class="text-success">On time</span>
                       <% end %>
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                   <td class="px-4 py-3 text-center">
                     <%= if metric.state == :occupied do %>
                       <.property_status_badge collection_rate={metric.collection_rate} />
+                    <% else %>
+                      <span class="text-base-content/30">-</span>
                     <% end %>
                   </td>
                 </tr>
@@ -857,6 +873,34 @@ defmodule VivvoWeb.HomeLive do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  defp days_until_end_display(assigns) do
+    days = assigns.days
+
+    {color_class, text} =
+      cond do
+        is_nil(days) ->
+          {"text-base-content/30", "-"}
+
+        days == 0 ->
+          {"text-error", "Ending today"}
+
+        days > 30 ->
+          {"text-success", "#{days}d left"}
+
+        days >= 7 ->
+          {"text-warning", "#{days}d left"}
+
+        true ->
+          {"text-error", "#{days}d left"}
+      end
+
+    assigns = assign(assigns, color_class: color_class, text: text)
+
+    ~H"""
+    <span class={@color_class}>{@text}</span>
     """
   end
 
@@ -1174,7 +1218,7 @@ defmodule VivvoWeb.HomeLive do
       </div>
 
       <%!-- Horizontal Scrollable Property Cards --%>
-      <div class="flex -mx-4 px-4 overflow-x-auto scrollbar-hide gap-3 pb-1">
+      <div class="flex -mx-4 px-4 pt-1 overflow-x-auto scrollbar-hide gap-3 pb-1">
         <%= for contract <- @contracts do %>
           <% is_selected = @selected_contract && @selected_contract.id == contract.id %>
           <button
@@ -1313,31 +1357,16 @@ defmodule VivvoWeb.HomeLive do
           </div>
         </div>
 
-        <%!-- Progress Bar for Payment --%>
-        <%= if Decimal.gt?(@total_due, Decimal.new(0)) do %>
+        <%!-- Success Message with Next Payment Date (when paid up) --%>
+        <%= if Decimal.lte?(@total_due, Decimal.new(0)) do %>
           <div class="mt-6 pt-6 border-t border-base-200">
-            <div class="flex items-center justify-between text-sm mb-2">
-              <span class="text-base-content/60">Payment Progress</span>
-              <span class="font-medium text-error">Outstanding: {format_currency(@total_due)}</span>
-            </div>
-            <div class="w-full bg-base-200 rounded-full h-2.5">
-              <div class="bg-error h-2.5 rounded-full" style="width: 0%"></div>
-            </div>
-            <p class="text-xs text-base-content/50 mt-2">
-              Submit payment to bring your account up to date
-            </p>
-          </div>
-        <% else %>
-          <div class="mt-6 pt-6 border-t border-base-200">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-              <%!-- Success Message --%>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div class="flex items-center gap-2 text-success">
                 <.icon name="hero-check-circle" class="w-5 h-5" />
                 <span class="font-medium">All payments are up to date!</span>
               </div>
 
               <%= if @next_payment do %>
-                <%!-- Compact Next Payment Info --%>
                 <div
                   id="upcoming-payments"
                   class="flex items-center gap-2 text-sm text-base-content/70 sm:ml-4"
@@ -1454,7 +1483,7 @@ defmodule VivvoWeb.HomeLive do
         >
           <button
             phx-click="toggle_current"
-            class="w-full px-6 py-4 flex items-center justify-between hover:bg-warning/10 transition-colors bg-warning/5"
+            class="w-full px-6 py-4 flex items-center justify-between hover:bg-warning/10 hover:cursor-pointer transition-colors bg-warning/5"
           >
             <div class="flex items-center gap-2">
               <.icon name="hero-clock" class="w-5 h-5 text-warning" />
@@ -1495,7 +1524,7 @@ defmodule VivvoWeb.HomeLive do
         >
           <button
             phx-click="toggle_history"
-            class="w-full px-6 py-4 flex items-center justify-between hover:bg-base-200/50 transition-colors"
+            class="w-full px-6 py-4 flex items-center justify-between hover:bg-base-200/50 hover:cursor-pointer transition-colors"
           >
             <div class="flex items-center gap-2">
               <.icon name="hero-check-circle" class="w-5 h-5 text-success" />
@@ -1634,12 +1663,77 @@ defmodule VivvoWeb.HomeLive do
     """
   end
 
+  # Contract Timeline Component
+  defp contract_timeline(assigns) do
+    contract = assigns.contract
+
+    current_month = Contracts.get_current_payment_number(contract)
+    total_months = Contracts.contract_duration_months(contract)
+    days_remaining = Contracts.days_until_end(contract)
+
+    days_until_start =
+      case Date.compare(contract.start_date, Date.utc_today()) do
+        :gt -> Date.diff(contract.start_date, Date.utc_today())
+        _ -> 0
+      end
+
+    progress_pct =
+      if total_months > 0 do
+        max(0, current_month - 1) / total_months * 100
+      else
+        0.0
+      end
+
+    progress_color =
+      cond do
+        progress_pct <= 50 -> "bg-success"
+        progress_pct < 90 -> "bg-warning"
+        true -> "bg-error"
+      end
+
+    assigns =
+      assign(assigns,
+        current_month: current_month,
+        total_months: total_months,
+        progress_pct: progress_pct,
+        days_remaining: days_remaining,
+        days_until_start: days_until_start,
+        progress_color: progress_color
+      )
+
+    ~H"""
+    <div class="space-y-2">
+      <div class="flex items-center justify-between text-sm">
+        <span class="text-base-content/70">
+          <%= if @current_month == 0 do %>
+            Not started
+          <% else %>
+            <span class="sm:hidden">{@current_month}/{@total_months}</span>
+            <span class="hidden sm:inline">Month {@current_month} of {@total_months}</span>
+          <% end %>
+        </span>
+        <%= cond do %>
+          <% @days_until_start > 0 -> %>
+            <span class="text-base-content/50">Starts in {@days_until_start} days</span>
+          <% @days_remaining && @days_remaining > 0 -> %>
+            <span class="text-base-content/50">{@days_remaining} days remaining</span>
+          <% true -> %>
+            <span class="text-error">Lease ended</span>
+        <% end %>
+      </div>
+      <div class="w-full bg-base-200 rounded-full h-2 overflow-hidden">
+        <div
+          class={["h-full rounded-full transition-all duration-500", @progress_color]}
+          style={"width: #{@progress_pct}%"}
+        >
+        </div>
+      </div>
+    </div>
+    """
+  end
+
   # Contract Quick Access Component
   defp contract_quick_access(assigns) do
-    days_remaining = Contracts.days_until_end(assigns.contract)
-
-    assigns = assign(assigns, days_remaining: days_remaining)
-
     ~H"""
     <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
       <div class="flex items-center gap-2 mb-4">
@@ -1654,15 +1748,6 @@ defmodule VivvoWeb.HomeLive do
           <p class="font-medium">
             {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
           </p>
-          <%= if @days_remaining > 0 do %>
-            <p class="text-xs text-base-content/50 mt-1">
-              <%= if Contracts.ending_soon?(@contract) do %>
-                <span class="text-warning">Ends in {@days_remaining} days</span>
-              <% else %>
-                {@days_remaining} days remaining
-              <% end %>
-            </p>
-          <% end %>
         </div>
 
         <%!-- Monthly Rent --%>
@@ -1683,6 +1768,11 @@ defmodule VivvoWeb.HomeLive do
           <p class="font-medium">{@contract.property.name}</p>
           <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
         </div>
+      </div>
+
+      <%!-- Contract Timeline --%>
+      <div class="mt-6 pt-6 border-t border-base-200">
+        <.contract_timeline contract={@contract} />
       </div>
 
       <%= if @contract.notes && @contract.notes != "" do %>
@@ -1757,27 +1847,23 @@ defmodule VivvoWeb.HomeLive do
 
   # Calculates all display values for a trend bar item.
   # Returns a map with pre-computed values to simplify template logic.
-  defp calculate_trend_bar_data(month_date, expected, received, max_expected) do
+  defp calculate_trend_bar_data(month_date, expected, received) do
     month_label = Calendar.strftime(month_date, "%b %Y")
     expected_float = Decimal.to_float(expected)
     received_float = Decimal.to_float(received)
-    expected_pct = min(expected_float / max_expected * 100, 100)
 
-    received_pct =
+    collection_pct =
       if expected_float > 0 do
-        received_float / expected_float * 100
+        min(received_float / expected_float * 100, 100)
       else
         0
       end
-
-    received_pct = min(received_pct, 100)
 
     %{
       month_label: month_label,
       expected: expected,
       received: received,
-      expected_pct: expected_pct,
-      received_pct: received_pct
+      collection_pct: collection_pct
     }
   end
 end
