@@ -254,8 +254,7 @@ defmodule Vivvo.Contracts do
       iex> payment_overdue?(%Contract{expiration_day: 5})
       true  # if today is after the 5th of current month
   """
-  def payment_overdue?(%Contract{} = contract) do
-    today = Date.utc_today()
+  def payment_overdue?(%Contract{} = contract, today \\ Date.utc_today()) do
     today.day > contract.expiration_day
   end
 
