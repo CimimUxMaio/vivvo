@@ -1520,7 +1520,7 @@ defmodule VivvoWeb.HomeLive do
         >
           <button
             phx-click="toggle_current"
-            class="w-full px-6 py-4 flex items-center justify-between hover:bg-warning/10 transition-colors bg-warning/5"
+            class="w-full px-6 py-4 flex items-center justify-between hover:bg-warning/10 hover:cursor-pointer transition-colors bg-warning/5"
           >
             <div class="flex items-center gap-2">
               <.icon name="hero-clock" class="w-5 h-5 text-warning" />
@@ -1561,7 +1561,7 @@ defmodule VivvoWeb.HomeLive do
         >
           <button
             phx-click="toggle_history"
-            class="w-full px-6 py-4 flex items-center justify-between hover:bg-base-200/50 transition-colors"
+            class="w-full px-6 py-4 flex items-center justify-between hover:bg-base-200/50 hover:cursor-pointer transition-colors"
           >
             <div class="flex items-center gap-2">
               <.icon name="hero-check-circle" class="w-5 h-5 text-success" />
