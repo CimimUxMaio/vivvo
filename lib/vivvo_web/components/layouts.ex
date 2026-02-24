@@ -283,33 +283,60 @@ defmodule VivvoWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite" class="fixed top-20 right-4 z-50 space-y-2">
-      <.flash kind={:info} flash={@flash} />
-      <.flash kind={:error} flash={@flash} />
+    <div
+      id={@id}
+      aria-live="polite"
+      class="fixed top-20 right-4 z-50 flex flex-col gap-3 pointer-events-none"
+    >
+      <%!-- Flash messages container - pointer-events-auto allows interaction --%>
+      <div class="flex flex-col gap-3 pointer-events-auto">
+        <%!-- Info Flash --%>
+        <%= if info_msg = Phoenix.Flash.get(@flash, :info) do %>
+          <.live_component
+            module={VivvoWeb.Components.Flash}
+            id="flash-info"
+            kind={:info}
+            message={info_msg}
+            duration={5000}
+          />
+        <% end %>
 
-      <.flash
-        id="client-error"
-        kind={:error}
-        title={gettext("We can't find the internet")}
-        phx-disconnected={show(".phx-client-error #client-error") |> JS.remove_attribute("hidden")}
-        phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
-        hidden
-      >
-        {gettext("Attempting to reconnect")}
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-      </.flash>
+        <%!-- Error Flash --%>
+        <%= if error_msg = Phoenix.Flash.get(@flash, :error) do %>
+          <.live_component
+            module={VivvoWeb.Components.Flash}
+            id="flash-error"
+            kind={:error}
+            message={error_msg}
+            duration={8000}
+          />
+        <% end %>
+      </div>
 
-      <.flash
-        id="server-error"
-        kind={:error}
-        title={gettext("Something went wrong!")}
-        phx-disconnected={show(".phx-server-error #server-error") |> JS.remove_attribute("hidden")}
-        phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}
-        hidden
-      >
-        {gettext("Attempting to reconnect")}
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-      </.flash>
+      <%!-- Connection Error Messages --%>
+      <div class="flex flex-col gap-3 pointer-events-auto">
+        <.live_component
+          module={VivvoWeb.Components.Flash}
+          id="client-error"
+          kind={:error}
+          message={gettext("We can't find the internet. Attempting to reconnect...")}
+          duration={8000}
+          hidden
+          phx-disconnected={JS.remove_attribute("hidden", to: "#client-error")}
+          phx-connected={JS.set_attribute({"hidden", ""}, to: "#client-error")}
+        />
+
+        <.live_component
+          module={VivvoWeb.Components.Flash}
+          id="server-error"
+          kind={:error}
+          message={gettext("Something went wrong! Attempting to reconnect...")}
+          duration={8000}
+          hidden
+          phx-disconnected={JS.remove_attribute("hidden", to: "#server-error")}
+          phx-connected={JS.set_attribute({"hidden", ""}, to: "#server-error")}
+        />
+      </div>
     </div>
     """
   end

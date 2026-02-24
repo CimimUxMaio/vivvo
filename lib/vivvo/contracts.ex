@@ -254,8 +254,7 @@ defmodule Vivvo.Contracts do
       iex> payment_overdue?(%Contract{expiration_day: 5})
       true  # if today is after the 5th of current month
   """
-  def payment_overdue?(%Contract{} = contract) do
-    today = Date.utc_today()
+  def payment_overdue?(%Contract{} = contract, today \\ Date.utc_today()) do
     today.day > contract.expiration_day
   end
 
@@ -346,6 +345,35 @@ defmodule Vivvo.Contracts do
       0 -> []
       current -> Enum.to_list(1..current)
     end
+  end
+
+  @doc """
+  Get range of payment numbers with due dates in the past.
+
+  Returns an Elixir range (e.g., 1..3) representing payment periods whose
+  due dates have already passed. Uses O(1) optimization by only checking
+  the current payment number's due date - all prior periods are guaranteed past.
+
+  ## Examples
+
+      iex> get_past_payment_numbers(contract, ~D[2026-02-15])
+      1..2  # if payment periods 1 and 2 have passed
+
+      iex> get_past_payment_numbers(contract, ~D[2026-01-01])
+      1..0  # empty range - no due dates in the past yet
+
+  """
+  def get_past_payment_numbers(%Contract{} = contract, today) do
+    current = get_current_payment_number(contract)
+    current_due_date = calculate_due_date(contract, current)
+
+    last =
+      if Date.compare(current_due_date, today) == :lt,
+        do: current,
+        else: current - 1
+
+    Range.new(1, last, 1)
+    |> Enum.to_list()
   end
 
   @doc """
@@ -484,19 +512,48 @@ defmodule Vivvo.Contracts do
   end
 
   defp calculate_property_metrics(property, %Contract{} = contract, scope) do
-    total_expected = contract.rent
+    status = contract_status(contract)
 
-    total_received =
-      case get_current_payment_number(contract) do
-        current when current > 0 ->
-          Payments.total_accepted_for_month(scope, contract.id, current)
+    case status do
+      :upcoming ->
+        %{
+          property: property,
+          total_income: Decimal.new(0),
+          collection_rate: 0.0,
+          avg_delay_days: 0.0,
+          state: :upcoming,
+          total_expected: Decimal.new(0),
+          contract: contract,
+          days_until_start: days_until_start(contract),
+          days_until_end: nil
+        }
 
-        _ ->
-          Decimal.new(0)
-      end
+      :expired ->
+        %{
+          property: property,
+          total_income: Decimal.new(0),
+          collection_rate: 0.0,
+          avg_delay_days: 0,
+          state: :vacant,
+          total_expected: Decimal.new(0)
+        }
+
+      :active ->
+        calculate_active_property_metrics(property, contract, scope)
+    end
+  end
+
+  defp calculate_active_property_metrics(property, %Contract{} = contract, scope) do
+    today = Date.utc_today()
+    past_payment_numbers = get_past_payment_numbers(contract, today)
+
+    periods_count = Enum.count(past_payment_numbers)
+    total_expected = Decimal.mult(contract.rent, Decimal.new(periods_count))
+
+    total_received = Payments.total_rent_collected(scope, contract, today)
 
     collection_rate =
-      if Decimal.compare(total_expected, Decimal.new(0)) == :gt do
+      if periods_count > 0 do
         Decimal.div(total_received, total_expected)
         |> Decimal.mult(Decimal.new(100))
         |> Decimal.to_float()
@@ -504,17 +561,9 @@ defmodule Vivvo.Contracts do
         0.0
       end
 
-    avg_delay_days =
-      contract.payments
-      |> Enum.filter(&(&1.status == :accepted))
-      |> case do
-        [] ->
-          0.0
+    payments_by_month = Payments.get_contract_payments_by_month(scope, contract.id)
 
-        payments ->
-          total_delay = Enum.sum_by(payments, &calculate_delay(contract, &1))
-          Float.round(total_delay / length(payments), 1)
-      end
+    avg_delay_days = calculate_avg_delay_days(contract, payments_by_month, today)
 
     %{
       property: property,
@@ -522,15 +571,108 @@ defmodule Vivvo.Contracts do
       collection_rate: collection_rate,
       avg_delay_days: avg_delay_days,
       state: :occupied,
-      total_expected: total_expected
+      total_expected: total_expected,
+      contract: contract,
+      days_until_start: nil,
+      days_until_end: days_until_end(contract)
     }
   end
 
-  defp calculate_delay(%Contract{} = contract, payment) do
-    due_date = calculate_due_date(contract, payment.payment_number)
-    payment_date = DateTime.to_date(payment.inserted_at)
-    delay = Date.diff(payment_date, due_date)
-    max(0, delay)
+  @doc """
+  Calculate the average delay days for a contract.
+
+  For each month (payment_number):
+  - If fully paid: uses the delay of the payment that completed the rent
+  - If partially paid: uses the delay from due date to today
+
+  Early payments are counted as 0 delay (not negative).
+
+  ## Parameters
+  - `contract`: The contract struct with rent and due dates info
+  - `payments_by_month`: Map of %{payment_number => [payments]} from `Payments.get_contract_payments_by_month/2`
+  - `today`: The current date to use for partially paid months
+
+  ## Returns
+  Average delay as a float rounded to 1 decimal place, or 0.0 if no months
+
+  ## Examples
+
+      iex> calculate_avg_delay_days(contract, payments_by_month, ~D[2026-02-19])
+      3.5
+
+  """
+  def calculate_avg_delay_days(%Contract{} = contract, payments_by_month, %Date{} = today) do
+    past_payment_numbers = get_past_payment_numbers(contract, today)
+
+    # Handle empty range case
+    delays =
+      Enum.map(past_payment_numbers, fn payment_number ->
+        calculate_month_delay(contract, payments_by_month, payment_number, today)
+      end)
+
+    case delays do
+      [] -> 0.0
+      _ -> Float.round(Enum.sum(delays) / length(delays), 1)
+    end
+  end
+
+  defp calculate_month_delay(contract, payments_by_month, payment_number, today) do
+    due_date = calculate_due_date(contract, payment_number)
+    month_payments = Map.get(payments_by_month, payment_number)
+
+    cond do
+      is_nil(month_payments) ->
+        # No payments at all for this month
+        max(0, Date.diff(today, due_date))
+
+      month_fully_paid?(month_payments, contract.rent) ->
+        # Fully paid - find completion payment and calculate delay
+        calculate_completion_delay(month_payments, contract.rent, due_date)
+
+      true ->
+        # Partially paid - use today as completion date
+        max(0, Date.diff(today, due_date))
+    end
+  end
+
+  defp month_fully_paid?(month_payments, rent) do
+    total_paid =
+      month_payments
+      |> Enum.map(& &1.amount)
+      |> Enum.reduce(Decimal.new(0), &Decimal.add/2)
+
+    Decimal.compare(total_paid, rent) != :lt
+  end
+
+  defp calculate_completion_delay(month_payments, rent, due_date) do
+    case find_completion_payment(month_payments, rent) do
+      nil ->
+        0
+
+      completion_payment ->
+        payment_date = DateTime.to_date(completion_payment.inserted_at)
+        max(0, Date.diff(payment_date, due_date))
+    end
+  end
+
+  # Private helper to find the completion payment from a list of payments
+  # Uses tail recursion to track cumulative sum until rent is reached
+  defp find_completion_payment(payments, rent) do
+    do_find_completion_payment(payments, rent, Decimal.new(0))
+  end
+
+  defp do_find_completion_payment([], _rent, _cumulative), do: nil
+
+  defp do_find_completion_payment([payment | rest], rent, cumulative) do
+    new_cumulative = Decimal.add(cumulative, payment.amount)
+
+    if Decimal.compare(new_cumulative, rent) != :lt do
+      # This payment completed the rent
+      payment
+    else
+      # Continue to next payment
+      do_find_completion_payment(rest, rent, new_cumulative)
+    end
   end
 
   @doc """
@@ -595,6 +737,30 @@ defmodule Vivvo.Contracts do
 
     case Date.compare(end_date, today) do
       :gt -> Date.diff(end_date, today)
+      :eq -> 0
+      :lt -> nil
+    end
+  end
+
+  @doc """
+  Calculate days until contract starts.
+
+  Returns nil if contract has already started, 0 if it starts today.
+
+  ## Examples
+
+      iex> days_until_start(%Contract{start_date: ~D[2026-03-01]})
+      10
+
+      iex> days_until_start(%Contract{start_date: ~D[2020-01-01]})
+      nil
+
+  """
+  def days_until_start(%Contract{start_date: start_date}) do
+    today = Date.utc_today()
+
+    case Date.compare(start_date, today) do
+      :gt -> Date.diff(start_date, today)
       :eq -> 0
       :lt -> nil
     end
@@ -798,7 +964,16 @@ defmodule Vivvo.Contracts do
     end
   end
 
-  defp contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
+  @doc """
+  Calculate the total number of months in a contract period.
+
+  ## Examples
+
+      iex> contract_duration_months(%Contract{start_date: ~D[2026-01-01], end_date: ~D[2026-12-31]})
+      12
+  """
+  @spec contract_duration_months(Contract.t()) :: integer()
+  def contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
     (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
   end
 end

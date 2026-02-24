@@ -112,3 +112,49 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Flash Message Animations */
+.flash-message {
+  animation: flash-enter 0.3s ease-out forwards;
+}
+
+.flash-exit {
+  animation: flash-exit 0.3s ease-in forwards !important;
+}
+
+@keyframes flash-enter {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes flash-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes flash-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.flash-progress {
+  animation-name: flash-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}

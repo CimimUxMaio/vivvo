@@ -28,6 +28,7 @@ defmodule Vivvo.Payments do
   alias Vivvo.Repo
 
   alias Vivvo.Accounts.Scope
+  alias Vivvo.Contracts.Contract
   alias Vivvo.Payments.Payment
 
   @decimal_zero Decimal.new(0)
@@ -258,6 +259,30 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
+  Get all accepted payments for a contract, grouped by payment_number (month).
+
+  Returns a map of %{payment_number => [payments]} ordered by payment date.
+  This is used for efficient batch processing to avoid N+1 queries.
+
+  ## Examples
+
+      iex> get_contract_payments_by_month(scope, contract_id)
+      %{1 => [%Payment{amount: Decimal.new("600.00"), ...}, %Payment{amount: Decimal.new("400.00"), ...}],
+        2 => [%Payment{...}]}
+
+  """
+  def get_contract_payments_by_month(%Scope{} = scope, contract_id) do
+    Payment
+    |> join(:inner, [p], c in assoc(p, :contract))
+    |> where([p], p.contract_id == ^contract_id)
+    |> where([p, c], c.user_id == ^scope.user.id)
+    |> where([p], p.status == :accepted)
+    |> order_by([p], asc: p.payment_number, asc: p.inserted_at)
+    |> Repo.all()
+    |> Enum.group_by(& &1.payment_number)
+  end
+
+  @doc """
   Accept a payment (owner action).
 
   ## Examples
@@ -323,6 +348,49 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
+  Calculate total rent collected for all payment periods with due dates in the past.
+
+  This function determines which payment numbers have due dates that have already
+  passed and sums all accepted payments for those periods.
+
+  ## Examples
+
+      iex> total_rent_collected(scope, contract, ~D[2026-02-15])
+      Decimal.new("1500.00")
+  """
+  def total_rent_collected(%Scope{} = scope, %Contract{} = contract, today \\ Date.utc_today()) do
+    payment_numbers = get_past_payment_numbers(contract, today)
+
+    if payment_numbers == [] do
+      @decimal_zero
+    else
+      Payment
+      |> join(:inner, [p], c in assoc(p, :contract))
+      |> where([p], p.contract_id == ^contract.id)
+      |> where([p, c], c.user_id == ^scope.user.id)
+      |> where([p], p.payment_number in ^payment_numbers)
+      |> where([p], p.status == :accepted)
+      |> select([p], sum(p.amount))
+      |> Repo.one() || @decimal_zero
+    end
+  end
+
+  defp get_past_payment_numbers(%Contract{} = contract, today) do
+    current = Vivvo.Contracts.get_current_payment_number(contract)
+    current_due_date = Vivvo.Contracts.calculate_due_date(contract, current)
+
+    range =
+      cond do
+        Date.compare(current_due_date, today) in [:lt, :eq] -> 0..current
+        current - 1 >= 0 -> 0..(current - 1)
+        # No past payments
+        true -> []
+      end
+
+    Enum.to_list(range)
+  end
+
+  @doc """
   Calculate total pending payments for a specific month.
 
   ## Examples
@@ -376,8 +444,6 @@ defmodule Vivvo.Payments do
   end
 
   # Dashboard Analytics Functions
-
-  alias Vivvo.Contracts.Contract
 
   @doc """
   Get expected income for a specific month based on active contracts.
