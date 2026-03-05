@@ -35,3 +35,6 @@ vivvo-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Uploaded files
+/uploads/
+

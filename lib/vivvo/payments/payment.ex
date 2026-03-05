@@ -7,6 +7,7 @@ defmodule Vivvo.Payments.Payment do
 
   alias Vivvo.Accounts.User
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Files.File
 
   schema "payments" do
     field :payment_number, :integer
@@ -17,6 +18,7 @@ defmodule Vivvo.Payments.Payment do
 
     belongs_to :contract, Contract
     belongs_to :user, User
+    has_many :files, File, on_delete: :delete_all
 
     timestamps(type: :utc_datetime)
   end
@@ -34,6 +36,7 @@ defmodule Vivvo.Payments.Payment do
       :rejection_reason,
       :contract_id
     ])
+    |> cast_assoc(:files)
     |> validate_required([:payment_number, :amount, :contract_id])
     |> validate_number(:amount, greater_than: 0)
     |> validate_number(:payment_number, greater_than: 0)

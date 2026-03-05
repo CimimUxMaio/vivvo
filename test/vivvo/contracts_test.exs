@@ -391,7 +391,7 @@ defmodule Vivvo.ContractsTest do
     end
   end
 
-  describe "payment_overdue?/1" do
+  describe "payment_overdue?/2" do
     test "returns true when current day > expiration_day" do
       # Use a fixed date where day > expiration_day
       today = ~D[2026-02-15]

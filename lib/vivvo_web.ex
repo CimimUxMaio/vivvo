@@ -84,11 +84,15 @@ defmodule VivvoWeb do
 
       # HTML escaping functionality
       import Phoenix.HTML
+
       # Core UI components
       import VivvoWeb.CoreComponents
 
       # Format helpers for dates and times
       import VivvoWeb.FormatHelpers
+
+      # Upload helpers for file handling
+      import VivvoWeb.UploadHelpers
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

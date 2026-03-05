@@ -251,15 +251,18 @@ defmodule Vivvo.Contracts do
 
   ## Examples
 
-      iex> payment_overdue?(%Contract{expiration_day: 5})
-      true  # if today is after the 5th of current month
+      iex> payment_overdue?(%Contract{expiration_day: 5}, ~D[2024-01-10])
+      true
+
+      iex> payment_overdue?(%Contract{expiration_day: 10}, ~D[2024-01-05])
+      false
   """
   def payment_overdue?(%Contract{} = contract, today \\ Date.utc_today()) do
     today.day > contract.expiration_day
   end
 
   @doc """
-  List all contracts for a tenant (as the tenant user) with payments preloaded.
+  List all contracts for a tenant (as the tenant user) with payments and files preloaded.
 
   Note: This is a tenant-scoped operation (the user IS the tenant),
   unlike other functions in this module which are owner-scoped.
@@ -269,26 +272,26 @@ defmodule Vivvo.Contracts do
   ## Examples
 
       iex> list_contracts_for_tenant(scope)
-      [%Contract{payments: [%Payment{}, ...]}, ...]
+      [%Contract{payments: [%Payment{files: [...]}, ...]}, ...]
 
   """
   def list_contracts_for_tenant(%Scope{user: user} = _scope) do
     Contract
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, :payments])
+    |> preload([:property, payments: [:files]])
     |> Repo.all()
   end
 
   @doc """
-  Gets a single contract for a tenant by ID.
+  Gets a single contract for a tenant by ID with payments and files preloaded.
 
   Returns nil if the contract doesn't exist or doesn't belong to the tenant.
 
   ## Examples
 
       iex> get_contract_for_tenant(scope, 123)
-      %Contract{}
+      %Contract{payments: [%Payment{files: [...]}]}
 
       iex> get_contract_for_tenant(scope, 456)
       nil
@@ -299,7 +302,7 @@ defmodule Vivvo.Contracts do
     |> where([c], c.id == ^contract_id)
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, :payments])
+    |> preload([:property, payments: [:files]])
     |> Repo.one()
   end
 
@@ -900,7 +903,7 @@ defmodule Vivvo.Contracts do
           rent: Decimal.new("500.00"),
           total_paid: Decimal.new("500.00"),
           status: :paid,
-          payments: [%Payment{}]
+          payments: [%Payment{files: [...]}]
         }
       ]
 
@@ -912,14 +915,17 @@ defmodule Vivvo.Contracts do
     if current_payment_num == 0 do
       []
     else
+      # Fetch all payments for the contract with files preloaded
+      contract_payments = Payments.list_payments_for_contract(scope, contract.id)
+
       Enum.map(1..current_payment_num, fn payment_num ->
         due_date = calculate_due_date(contract, payment_num)
         total_paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
         month_status = Payments.get_month_status(scope, contract, payment_num)
 
-        # Get payments for this month
+        # Get payments for this month from the preloaded list
         month_payments =
-          Enum.filter(contract.payments, &(&1.payment_number == payment_num))
+          Enum.filter(contract_payments, &(&1.payment_number == payment_num))
           |> Enum.sort_by(& &1.inserted_at, :desc)
 
         %{
