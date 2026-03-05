@@ -29,6 +29,7 @@ defmodule Vivvo.Payments do
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Files
   alias Vivvo.Payments.Payment
 
   @decimal_zero Decimal.new(0)
@@ -119,32 +120,108 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
-  Creates a payment.
+  Creates a payment with optional file attachments.
 
-  ## Options
-
-    * `:remaining_allowance` - The maximum remaining amount allowed for this payment period
+  ## Parameters
+  - `scope`: User scope for authorization
+  - `attrs`: Payment attributes
+  - `uploaded_files`: List of uploaded file structs (optional, default: [])
+  - `opts`: Additional options like `:remaining_allowance`
 
   ## Examples
+
+      iex> create_payment(scope, %{amount: "100.00", ...}, [%{path: "/tmp/file.pdf", filename: "receipt.pdf"}])
+      {:ok, %Payment{files: [%File{}]}}
 
       iex> create_payment(scope, %{field: value})
       {:ok, %Payment{}}
 
-      iex> create_payment(scope, %{field: bad_value}, remaining_allowance: Decimal.new("100"))
+      iex> create_payment(scope, %{field: bad_value}, [], remaining_allowance: Decimal.new("100"))
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_payment(%Scope{} = scope, attrs, opts \\ []) do
+  def create_payment(%Scope{} = scope, attrs, uploaded_files \\ [], opts \\ []) do
     contract_id = Map.get(attrs, "contract_id") || Map.get(attrs, :contract_id)
 
-    with :ok <- validate_contract_ownership(scope, contract_id),
-         {:ok, payment = %Payment{}} <-
-           %Payment{}
-           |> Payment.changeset(attrs, scope, opts)
-           |> Repo.insert() do
-      broadcast_payment(scope, {:created, payment})
-      {:ok, payment}
+    with :ok <- validate_contract_ownership(scope, contract_id) do
+      multi =
+        Ecto.Multi.new()
+        |> Ecto.Multi.run(:file_attrs, fn _repo, _changes ->
+          save_uploaded_files_with_user(uploaded_files, scope)
+        end)
+        |> Ecto.Multi.run(:payment, fn repo, %{file_attrs: file_attrs} ->
+          # Insert payment and file records to database
+          # Normalize attrs to string keys to avoid mixed key types
+          attrs =
+            attrs
+            |> to_string_keys()
+            |> Map.put("files", file_attrs)
+
+          %Payment{}
+          |> Payment.changeset(attrs, scope, opts)
+          |> repo.insert()
+        end)
+
+      handle_payment_transaction_result(multi, scope, attrs, opts)
     end
+  end
+
+  defp to_string_keys(map) do
+    Enum.into(map, %{}, fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp save_uploaded_files_with_user([], _scope), do: {:ok, []}
+
+  defp save_uploaded_files_with_user(uploaded_files, scope) do
+    # Build file mappings with generated paths
+    file_mappings =
+      Enum.map(uploaded_files, fn upload ->
+        extension = Path.extname(upload.filename) |> String.trim_leading(".")
+
+        dest_path =
+          Path.join("payments", to_string(scope.user.id))
+          |> Files.generate_storage_file_path(extension)
+
+        {upload.path, dest_path}
+      end)
+
+    with {:ok, stored_paths} <- Files.store_files(file_mappings) do
+      # Combine uploaded file info with stored paths
+      file_attrs =
+        Enum.zip_with(uploaded_files, stored_paths, fn upload, path ->
+          %{label: upload.filename, path: path, user_id: scope.user.id}
+        end)
+
+      {:ok, file_attrs}
+    end
+  end
+
+  defp handle_payment_transaction_result(multi, scope, attrs, opts) do
+    case Repo.transaction(multi) do
+      {:ok, %{payment: payment}} ->
+        payment = Repo.preload(payment, :files)
+        broadcast_payment(scope, {:created, payment})
+        {:ok, payment}
+
+      {:error, :file_attrs, reason, _changes} ->
+        changeset =
+          %Payment{}
+          |> Payment.changeset(attrs, scope, opts)
+          |> Ecto.Changeset.add_error(:files, to_string(reason))
+          |> Map.put(:action, :insert)
+
+        {:error, changeset}
+
+      {:error, :payment, %Ecto.Changeset{} = changeset, %{file_attrs: file_attrs}} ->
+        cleanup_files(file_attrs)
+        {:error, changeset}
+    end
+  end
+
+  defp cleanup_files(file_attrs) do
+    Enum.each(file_attrs, fn %{path: path} ->
+      Files.delete_stored_file(path)
+    end)
   end
 
   defp validate_contract_ownership(_scope, nil), do: :ok
@@ -242,12 +319,12 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
-  List all payments for a specific contract.
+  List all payments for a specific contract with files preloaded.
 
   ## Examples
 
       iex> list_payments_for_contract(scope, contract_id)
-      [%Payment{}, ...]
+      [%Payment{files: [...]}, ...]
 
   """
   def list_payments_for_contract(%Scope{} = scope, contract_id) do
@@ -255,6 +332,7 @@ defmodule Vivvo.Payments do
     |> where([p], p.contract_id == ^contract_id)
     |> where([p], p.user_id == ^scope.user.id)
     |> order_by([p], desc: p.inserted_at)
+    |> preload(:files)
     |> Repo.all()
   end
 
@@ -516,7 +594,7 @@ defmodule Vivvo.Payments do
     |> where([p, c], c.user_id == ^scope.user.id)
     |> where([p], p.status == :pending)
     |> order_by([p], desc: p.inserted_at)
-    |> preload([p, c, t, prop], contract: {c, tenant: t, property: prop})
+    |> preload([p, c, t, prop], contract: {c, tenant: t, property: prop}, files: [])
     |> paginate(page, per_page)
     |> Repo.all()
   end

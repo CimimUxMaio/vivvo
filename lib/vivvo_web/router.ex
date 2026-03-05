@@ -54,6 +54,9 @@ defmodule VivvoWeb.Router do
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
 
+    # File download route
+    get "/files/:id", FileController, :show
+
     live_session :owner,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},

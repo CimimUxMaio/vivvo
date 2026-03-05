@@ -17,8 +17,8 @@ defmodule Vivvo.PaymentsTest do
       other_scope = user_scope_fixture()
       payment = payment_fixture(scope)
       other_payment = payment_fixture(other_scope)
-      assert Payments.list_payments(scope) == [payment]
-      assert Payments.list_payments(other_scope) == [other_payment]
+      assert Enum.map(Payments.list_payments(scope), & &1.id) == [payment.id]
+      assert Enum.map(Payments.list_payments(other_scope), & &1.id) == [other_payment.id]
     end
 
     test "get_payment!/2 returns the payment with given id" do
