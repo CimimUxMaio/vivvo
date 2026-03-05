@@ -128,6 +128,10 @@ defmodule Vivvo.Files do
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:ok, paths} -> {:ok, Enum.reverse(paths)}
+      error -> error
+    end
   end
 
   @doc """

@@ -8,7 +8,7 @@ defmodule Vivvo.Files.File do
   alias Vivvo.Accounts.User
   alias Vivvo.Payments.Payment
 
-  @allowed_extensions ~w(pdf jpg jpeg png gif bmp webp)
+  @allowed_extensions Application.compile_env(:vivvo, Vivvo.Files)[:allowed_extensions]
 
   schema "files" do
     field :label, :string

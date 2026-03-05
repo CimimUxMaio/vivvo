@@ -29,7 +29,6 @@ defmodule VivvoWeb.FileController do
 
           {:error, _reason} ->
             conn
-            |> put_status(500)
             |> put_flash(:error, "Failed to read file")
             |> redirect(to: ~p"/")
         end

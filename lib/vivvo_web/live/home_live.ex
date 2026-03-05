@@ -18,6 +18,8 @@ defmodule VivvoWeb.HomeLive do
   # Number of months to show in income trend chart
   @trend_months 6
 
+  @file_config Application.compile_env(:vivvo, Vivvo.Files)
+
   @impl true
   def mount(_params, _session, socket) do
     scope = socket.assigns.current_scope
@@ -41,9 +43,9 @@ defmodule VivvoWeb.HomeLive do
          remaining: nil
        })
        |> allow_upload(:files,
-         accept: ~w(.pdf .jpg .jpeg .png .gif .bmp .webp),
-         max_entries: 5,
-         max_file_size: 10_000_000
+         accept: Enum.map(@file_config[:allowed_extensions], &".#{&1}"),
+         max_entries: @file_config[:max_files_per_payment],
+         max_file_size: @file_config[:max_file_size]
        )}
     else
       # Owner view - new dashboard with streams for large collections
@@ -241,7 +243,9 @@ defmodule VivvoWeb.HomeLive do
      socket
      |> then(fn s ->
        # Cancel all pending uploads
-       Enum.reduce(file_entries, s, &cancel_upload(&1, :files, &2.ref))
+       Enum.reduce(file_entries, s, fn entry, socket ->
+         cancel_upload(socket, :files, entry.ref)
+       end)
      end)
      |> assign(:submitting_payment, nil)
      |> assign(:payment_form, nil)
