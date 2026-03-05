@@ -24,6 +24,15 @@ config :vivvo,
   ecto_repos: [Vivvo.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# File upload configuration
+config :vivvo, Vivvo.Files,
+  max_file_size: 10_000_000,
+  max_files_per_payment: 5,
+  allowed_extensions: ~w(pdf jpg jpeg png gif bmp webp)
+
+# Generic temp directory configuration (used by upload helpers and other features)
+config :vivvo, :temp_dir, System.get_env("TEMP_DIR") || "tmp"
+
 # Configure the endpoint
 config :vivvo, VivvoWeb.Endpoint,
   url: [host: "localhost"],
