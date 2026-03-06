@@ -61,21 +61,10 @@ jobs:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
           tags: tag:ci
 
-      - name: Setup deployment directory
+      - name: Trigger Deployment
         env:
-          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
-        run: |
-          ssh "$SSH_HOST" "mkdir -p ~/apps/vivvo/volumes/postgres"
-
-      - name: Copy deployment files
-        env:
-          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
-        run: |
-          scp docker-compose.testing.yml "$SSH_HOST:~/apps/vivvo/docker-compose.yml"
-          scp Makefile "$SSH_HOST:~/apps/vivvo/Makefile"
-
-      - name: Deploy containers
-        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          APP_PORT: ${{ vars.APP_PORT }}
           SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
           IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           POSTGRES_USER: ${{ secrets.TEST_POSTGRES_USER }}
@@ -85,7 +74,8 @@ jobs:
           PHX_HOST: ${{ secrets.TEST_PHX_HOST }}
         run: |
           ssh "$SSH_HOST" << EOF
-            cd ~/apps/vivvo
+            export APP_NAME="$APP_NAME"
+            export APP_PORT="$APP_PORT"
             export IMAGE="$IMAGE"
             export POSTGRES_USER="$POSTGRES_USER"
             export POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
@@ -93,20 +83,7 @@ jobs:
             export DATABASE_URL="ecto://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}"
             export SECRET_KEY_BASE="$SECRET_KEY_BASE"
             export PHX_HOST="$PHX_HOST"
-            docker compose pull vivvo
-            docker compose up -d --force-recreate
+
+            cd "~/apps/$APP_NAME"
+            make -f deploy/Makefile deploy.testing
           EOF
-
-      - name: Reset database and seed
-        env:
-          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
-        run: |
-          # Wait for containers to be healthy
-          sleep 15
-          ssh "$SSH_HOST" "cd ~/apps/vivvo && make deploy.reset"
-
-      - name: Verify deployment
-        env:
-          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
-        run: |
-          ssh "$SSH_HOST" "docker ps --filter name=vivvo --format '{{.Status}}' | grep -q 'Up'"
