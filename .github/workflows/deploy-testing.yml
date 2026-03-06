@@ -78,18 +78,21 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
           IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          POSTGRES_USER: ${{ secrets.TEST_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
           PHX_HOST: ${{ secrets.TEST_PHX_HOST }}
-          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
         run: |
           ssh "$SSH_HOST" << EOF
             cd ~/apps/vivvo
             export IMAGE="$IMAGE"
-            export DATABASE_URL="$DATABASE_URL"
+            export POSTGRES_USER="$POSTGRES_USER"
+            export POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
+            export POSTGRES_DB="$POSTGRES_DB"
+            export DATABASE_URL="ecto://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}"
             export SECRET_KEY_BASE="$SECRET_KEY_BASE"
             export PHX_HOST="$PHX_HOST"
-            export POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
             docker compose pull vivvo
             docker compose up -d --force-recreate
           EOF
