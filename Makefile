@@ -76,6 +76,29 @@ db.shell:
 		exit 1; \
 	fi
 
+# Deploy commands (for production/testing releases)
+DEPLOY_CONTAINER_NAME := vivvo
+
+.PHONY: deploy.migrate
+## Run database migrations on the deployed container
+deploy.migrate:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.migrate()'
+
+.PHONY: deploy.rollback
+## Rollback the last database migration on the deployed container
+deploy.rollback:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.rollback(Vivvo.Repo, 1)'
+
+.PHONY: deploy.seed
+## Run database seeds on the deployed container
+deploy.seed:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.seed()'
+
+.PHONY: deploy.reset
+## Reset database (drop, create, migrate, seed) on the deployed container
+deploy.reset:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.reset()'
+
 # Colors for terminal output
 BOLD := \033[1m
 DIM := \033[2m
@@ -104,6 +127,12 @@ help:
 	@echo "  $(YELLOW)db.reset$(RESET)      Reset the database by dropping, creating, migrating, and seeding"
 	@echo "  $(YELLOW)db.down$(RESET)       Stop and remove the database container"
 	@echo "  $(YELLOW)db.shell$(RESET)      Open a psql shell in the database container"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)Deploy Commands:$(RESET)"
+	@echo "  $(YELLOW)deploy.migrate$(RESET)  Run database migrations on the deployed container"
+	@echo "  $(YELLOW)deploy.rollback$(RESET) Rollback the last database migration"
+	@echo "  $(YELLOW)deploy.seed$(RESET)     Run database seeds on the deployed container"
+	@echo "  $(YELLOW)deploy.reset$(RESET)    Reset database (drop, create, migrate, seed)"
 	@echo ""
 	@echo "$(CYAN)$(BOLD)Other Commands:$(RESET)"
 	@echo "  $(DIM)help$(RESET)          Display this help message"

@@ -1,0 +1,31 @@
+services:
+  vivvo:
+    image: ${IMAGE}
+    container_name: vivvo
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      PHX_HOST: ${PHX_HOST}
+      PHX_SERVER: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: vivvo-postgres
+    restart: unless-stopped
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: vivvo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: vivvo_testing
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vivvo -d vivvo_testing"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

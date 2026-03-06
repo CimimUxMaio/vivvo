@@ -1,0 +1,109 @@
+name: Deploy Testing
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        default: "main"
+
+concurrency:
+  group: deploy-testing
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: vivvo
+  IMAGE_TAG: testing
+
+jobs:
+  build-and-deploy:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.event == 'push'
+      )
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push testing image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          tags: tag:ci
+
+      - name: Setup deployment directory
+        env:
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+        run: |
+          ssh "$SSH_HOST" "mkdir -p ~/apps/vivvo/volumes/postgres"
+
+      - name: Copy deployment files
+        env:
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+        run: |
+          scp docker-compose.testing.yml "$SSH_HOST:~/apps/vivvo/docker-compose.yml"
+          scp Makefile "$SSH_HOST:~/apps/vivvo/Makefile"
+
+      - name: Deploy containers
+        env:
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
+          PHX_HOST: ${{ secrets.TEST_PHX_HOST }}
+          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
+        run: |
+          ssh "$SSH_HOST" << EOF
+            cd ~/apps/vivvo
+            export IMAGE="$IMAGE"
+            export DATABASE_URL="$DATABASE_URL"
+            export SECRET_KEY_BASE="$SECRET_KEY_BASE"
+            export PHX_HOST="$PHX_HOST"
+            export POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
+            docker compose pull vivvo
+            docker compose up -d --force-recreate
+          EOF
+
+      - name: Reset database and seed
+        env:
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+        run: |
+          # Wait for containers to be healthy
+          sleep 15
+          ssh "$SSH_HOST" "cd ~/apps/vivvo && make deploy.reset"
+
+      - name: Verify deployment
+        env:
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+        run: |
+          ssh "$SSH_HOST" "docker ps --filter name=vivvo --format '{{.Status}}' | grep -q 'Up'"
