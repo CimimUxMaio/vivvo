@@ -6,7 +6,7 @@
 
 APP_NAME := vivvo
 DEPLOY_CONTAINER_NAME := $(APP_NAME)
-COMPOSE_FILE := docker-compose.testing.yml
+COMPOSE_FILE := deploy/docker-compose.testing.yml
 
 .PHONY: deploy.testing
 ## Deploy the testing environment
