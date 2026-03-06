@@ -42,14 +42,8 @@ defmodule Vivvo.Release do
   Run database seeds.
   """
   def seed do
-    load_app()
-
-    for repo <- repos() do
-      {:ok, _, _} =
-        Ecto.Migrator.with_repo(repo, fn _repo ->
-          run_seeds()
-        end)
-    end
+    start_app()
+    run_seeds()
   end
 
   @doc """
@@ -75,13 +69,12 @@ defmodule Vivvo.Release do
 
       # Run migrations
       {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
-
-      # Run seeds
-      {:ok, _, _} =
-        Ecto.Migrator.with_repo(repo, fn _repo ->
-          run_seeds()
-        end)
     end
+
+    # Start the full application (Repo, PubSub, etc.) before running seeds,
+    # since seeds use context functions that broadcast through PubSub
+    start_app()
+    run_seeds()
   end
 
   defp run_seeds do
@@ -98,5 +91,9 @@ defmodule Vivvo.Release do
 
   defp load_app do
     Application.load(@app)
+  end
+
+  defp start_app do
+    Application.ensure_all_started(@app)
   end
 end
