@@ -73,7 +73,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
           PHX_HOST: ${{ secrets.TEST_PHX_HOST }}
         run: |
-          ssh "$SSH_HOST" << EOF
+          ssh -o StrictHostKeyChecking=no "$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
             export APP_PORT="$APP_PORT"
             export IMAGE="$IMAGE"
