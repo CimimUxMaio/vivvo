@@ -58,7 +58,8 @@ FROM alpine:3.23 AS app
 RUN apk add --no-cache \
     openssl \
     ncurses-libs \
-    libstdc++
+    libstdc++ \
+    curl
 
 WORKDIR /app
 
