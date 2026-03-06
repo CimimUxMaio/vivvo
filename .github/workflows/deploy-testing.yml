@@ -84,6 +84,8 @@ jobs:
             export SECRET_KEY_BASE="$SECRET_KEY_BASE"
             export PHX_HOST="$PHX_HOST"
 
+            pwd
+
             cd "~/apps/$APP_NAME"
             make -f deploy/Makefile deploy.testing
           EOF
