@@ -59,11 +59,19 @@ defmodule Vivvo.Release do
     load_app()
 
     for repo <- repos() do
-      # Drop the database (ignore errors if it doesn't exist)
-      _ = repo.__adapter__().storage_down(repo.config())
+      # Drop the database, forcing disconnection of active sessions (requires PostgreSQL 13+)
+      case repo.__adapter__().storage_down(repo.config() ++ [force_drop: true]) do
+        :ok -> :ok
+        {:error, :already_down} -> :ok
+        {:error, error} -> raise "Could not drop database: #{inspect(error)}"
+      end
 
       # Create the database
-      :ok = repo.__adapter__().storage_up(repo.config())
+      case repo.__adapter__().storage_up(repo.config()) do
+        :ok -> :ok
+        {:error, :already_up} -> :ok
+        {:error, error} -> raise "Could not create database: #{inspect(error)}"
+      end
 
       # Run migrations
       {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))

@@ -59,6 +59,7 @@ RUN apk add --no-cache \
     openssl \
     ncurses-libs \
     libstdc++ \
+    bash \
     curl
 
 WORKDIR /app
