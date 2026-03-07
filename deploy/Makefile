@@ -53,9 +53,14 @@ db.rollback:
 db.seed:
 	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo rpc 'Vivvo.Release.seed()'
 
+.PHONY: db.clean_volumes
+## Clean application volumes (uploads and tmp) inside the container
+db.clean_volumes:
+	docker exec $(DEPLOY_CONTAINER_NAME) sh -c 'rm -rf /app/uploads/* /app/tmp/*'
+
 .PHONY: db.reset
 ## Reset database (drop, create, migrate, seed) on the deployed container
-db.reset: db.drop db.create db.migrate db.seed
+db.reset: db.drop db.create db.migrate db.seed db.clean_volumes
 
 .PHONY: help
 ## Display a help message listing all available commands and their descriptions
@@ -67,12 +72,13 @@ help:
 	@echo "  deploy.testing  Deploy the testing environment"
 	@echo ""
 	@echo "Database:"
-	@echo "  db.drop         Drop the database on the deployed container"
-	@echo "  db.create       Create the database on the deployed container"
-	@echo "  db.migrate      Run database migrations on the deployed container"
-	@echo "  db.rollback     Rollback the last database migration"
-	@echo "  db.seed         Run database seeds on the deployed container"
-	@echo "  db.reset        Reset database (drop, create, migrate, seed)"
+	@echo "  db.drop           Drop the database on the deployed container"
+	@echo "  db.create         Create the database on the deployed container"
+	@echo "  db.migrate        Run database migrations on the deployed container"
+	@echo "  db.rollback       Rollback the last database migration"
+	@echo "  db.seed           Run database seeds on the deployed container"
+	@echo "  db.reset          Reset database (drop, create, migrate, seed, clean volumes)"
+	@echo "  db.clean_volumes  Clean application volumes (uploads and tmp)"
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
