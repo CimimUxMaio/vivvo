@@ -28,6 +28,16 @@ deploy.testing:
 
 	@echo "✅ Deployment successful"
 
+.PHONY: db.drop
+## Drop the database on the deployed container
+db.drop:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.drop()'
+
+.PHONY: db.create
+## Create the database on the deployed container
+db.create:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.create()'
+
 .PHONY: db.migrate
 ## Run database migrations on the deployed container
 db.migrate:
@@ -41,12 +51,11 @@ db.rollback:
 .PHONY: db.seed
 ## Run database seeds on the deployed container
 db.seed:
-	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.seed()'
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo rpc 'Vivvo.Release.seed()'
 
 .PHONY: db.reset
 ## Reset database (drop, create, migrate, seed) on the deployed container
-db.reset:
-	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.reset()'
+db.reset: db.drop db.create db.migrate db.seed
 
 .PHONY: help
 ## Display a help message listing all available commands and their descriptions
@@ -58,6 +67,8 @@ help:
 	@echo "  deploy.testing  Deploy the testing environment"
 	@echo ""
 	@echo "Database:"
+	@echo "  db.drop         Drop the database on the deployed container"
+	@echo "  db.create       Create the database on the deployed container"
 	@echo "  db.migrate      Run database migrations on the deployed container"
 	@echo "  db.rollback     Rollback the last database migration"
 	@echo "  db.seed         Run database seeds on the deployed container"

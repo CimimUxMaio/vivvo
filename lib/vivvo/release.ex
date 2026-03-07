@@ -6,15 +6,16 @@ defmodule Vivvo.Release do
 
       bin/vivvo eval "Vivvo.Release.migrate()"
       bin/vivvo eval "Vivvo.Release.rollback(Vivvo.Repo, 1)"
-      bin/vivvo eval "Vivvo.Release.seed()"
-      bin/vivvo eval "Vivvo.Release.reset()"
+      bin/vivvo eval "Vivvo.Release.drop()"
+      bin/vivvo eval "Vivvo.Release.create()"
+      bin/vivvo rpc "Vivvo.Release.seed()"
 
   Or via Makefile targets:
 
-      make deploy.migrate
-      make deploy.rollback
-      make deploy.seed
-      make deploy.reset
+      make db.migrate
+      make db.rollback
+      make db.seed
+      make db.reset
   """
 
   @app :vivvo
@@ -39,45 +40,44 @@ defmodule Vivvo.Release do
   end
 
   @doc """
-  Run database seeds.
+  Drop the database, forcing disconnection of active sessions (requires PostgreSQL 13+).
   """
-  def seed do
-    start_app()
-    run_seeds()
-  end
-
-  @doc """
-  Reset the database: drop, create, migrate, and seed.
-  """
-  def reset do
+  def drop do
     load_app()
 
     for repo <- repos() do
-      # Drop the database, forcing disconnection of active sessions (requires PostgreSQL 13+)
       case repo.__adapter__().storage_down(repo.config() ++ [force_drop: true]) do
         :ok -> :ok
         {:error, :already_down} -> :ok
         {:error, error} -> raise "Could not drop database: #{inspect(error)}"
       end
+    end
+  end
 
-      # Create the database
+  @doc """
+  Create the database.
+  """
+  def create do
+    load_app()
+
+    for repo <- repos() do
       case repo.__adapter__().storage_up(repo.config()) do
         :ok -> :ok
         {:error, :already_up} -> :ok
         {:error, error} -> raise "Could not create database: #{inspect(error)}"
       end
-
-      # Run migrations
-      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
     end
-
-    # Start the full application (Repo, PubSub, etc.) before running seeds,
-    # since seeds use context functions that broadcast through PubSub
-    start_app()
-    run_seeds()
   end
 
-  defp run_seeds do
+  @doc """
+  Run database seeds.
+
+  Must be called via `rpc` (not `eval`) so that the already-running application's
+  processes (Repo, PubSub, etc.) are available to the seeds script:
+
+      bin/vivvo rpc "Vivvo.Release.seed()"
+  """
+  def seed do
     seeds_file = Application.app_dir(@app, "priv/repo/seeds.exs")
 
     if File.exists?(seeds_file) do
@@ -91,9 +91,5 @@ defmodule Vivvo.Release do
 
   defp load_app do
     Application.load(@app)
-  end
-
-  defp start_app do
-    Application.ensure_all_started(@app)
   end
 end
