@@ -1,0 +1,84 @@
+# Makefile for Deploy Commands
+#
+# Usage: make [target]
+#
+# This makefile contains targets for managing the deployed Vivvo container.
+
+APP_NAME := vivvo
+DEPLOY_CONTAINER_NAME := $(APP_NAME)
+COMPOSE_FILE := docker-compose.testing.yml
+
+.PHONY: deploy.testing
+## Deploy the testing environment
+deploy.testing:
+	@echo "📥 Pulling latest repository..."
+	git pull origin ci-cd-pipeline
+
+	@echo "🐳 Pulling latest Docker images..."
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) pull
+
+	@echo "🚀 Starting services and waiting for healthchecks..."
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) up -d --wait --wait-timeout 60
+
+	@echo "🔄 Resetting database..."
+	$(MAKE) db.reset
+
+	@echo "🧹 Cleaning unused Docker images..."
+	docker image prune -af --filter "until=72h"
+
+	@echo "✅ Deployment successful"
+
+.PHONY: db.drop
+## Drop the database on the deployed container
+db.drop:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.drop()'
+
+.PHONY: db.create
+## Create the database on the deployed container
+db.create:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.create()'
+
+.PHONY: db.migrate
+## Run database migrations on the deployed container
+db.migrate:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.migrate()'
+
+.PHONY: db.rollback
+## Rollback the last database migration on the deployed container
+db.rollback:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo eval 'Vivvo.Release.rollback(Vivvo.Repo, 1)'
+
+.PHONY: db.seed
+## Run database seeds on the deployed container
+db.seed:
+	docker exec $(DEPLOY_CONTAINER_NAME) bin/vivvo rpc 'Vivvo.Release.seed()'
+
+.PHONY: db.clean_volumes
+## Clean application volumes (uploads and tmp) inside the container
+db.clean_volumes:
+	docker exec $(DEPLOY_CONTAINER_NAME) sh -c 'rm -rf /app/uploads/* /app/tmp/*'
+
+.PHONY: db.reset
+## Reset database (drop, create, migrate, seed) on the deployed container
+db.reset: db.drop db.create db.migrate db.seed db.clean_volumes
+
+.PHONY: help
+## Display a help message listing all available commands and their descriptions
+help:
+	@echo ""
+	@echo "Deploy Commands:"
+	@echo ""
+	@echo "Deployment:"
+	@echo "  deploy.testing  Deploy the testing environment"
+	@echo ""
+	@echo "Database:"
+	@echo "  db.drop           Drop the database on the deployed container"
+	@echo "  db.create         Create the database on the deployed container"
+	@echo "  db.migrate        Run database migrations on the deployed container"
+	@echo "  db.rollback       Rollback the last database migration"
+	@echo "  db.seed           Run database seeds on the deployed container"
+	@echo "  db.reset          Reset database (drop, create, migrate, seed, clean volumes)"
+	@echo "  db.clean_volumes  Clean application volumes (uploads and tmp)"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
