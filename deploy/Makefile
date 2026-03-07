@@ -15,10 +15,10 @@ deploy.testing:
 	git pull origin ci-cd-pipeline
 
 	@echo "🐳 Pulling latest Docker images..."
-	docker compose -f $(COMPOSE_FILE) pull
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) pull
 
 	@echo "🚀 Starting services and waiting for healthchecks..."
-	docker compose -f $(COMPOSE_FILE) up -d --wait --wait-timeout 60
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) up -d --wait --wait-timeout 60
 
 	@echo "🔄 Resetting database..."
 	$(MAKE) db.reset

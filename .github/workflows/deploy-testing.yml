@@ -88,8 +88,6 @@ jobs:
             export SECRET_KEY_BASE="$SECRET_KEY_BASE"
             export PHX_HOST="$PHX_HOST"
 
-            export APP_ROOT_DIR=~/apps/$APP_NAME/
-
-            cd $APP_ROOT_DIR/deploy/
+            cd apps/vivvo/deploy/
             make deploy.testing
           EOF
