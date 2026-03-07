@@ -69,13 +69,13 @@ jobs:
         env:
           APP_NAME: ${{ vars.APP_NAME }}
           APP_PORT: ${{ vars.APP_PORT }}
+          PHX_HOST: ${{ vars.TEST_PHX_HOST }}
           SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
           IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           POSTGRES_USER: ${{ secrets.TEST_POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
-          PHX_HOST: ${{ secrets.TEST_PHX_HOST }}
         run: |
           ssh -o StrictHostKeyChecking=no "$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
