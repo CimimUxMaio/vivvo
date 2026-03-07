@@ -12,6 +12,10 @@ services:
       PHX_HOST: ${PHX_HOST}
       PHX_SERVER: "true"
 
+    volumes:
+      - ${APP_ROOT_DIR}/uploads:/app/uploads
+      - ${APP_ROOT_DIR}/tmp:/app/tmp
+
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:4000/health"]
       interval: 10s
@@ -28,7 +32,7 @@ services:
     restart: unless-stopped
 
     volumes:
-      - ./volumes/postgres:/var/lib/postgresql/data
+      - ${APP_ROOT_DIR}/volumes/postgres:/var/lib/postgresql/data
 
     environment:
       POSTGRES_USER: ${POSTGRES_USER}

@@ -12,7 +12,7 @@ COMPOSE_FILE := docker-compose.testing.yml
 ## Deploy the testing environment
 deploy.testing:
 	@echo "📥 Pulling latest repository..."
-	git pull origin main
+	git pull origin ci-cd-pipeline
 
 	@echo "🐳 Pulling latest Docker images..."
 	docker compose -f $(COMPOSE_FILE) pull
