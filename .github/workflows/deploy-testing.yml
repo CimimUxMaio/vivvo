@@ -72,7 +72,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
-          TARGET_BRANCH: ${{ github.ref }}
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
           tailscale ssh "$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
