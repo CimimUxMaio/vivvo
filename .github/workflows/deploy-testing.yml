@@ -80,7 +80,11 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
           TARGET_BRANCH: ${{ github.event.inputs.branch || 'main' }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$SSH_HOST" << EOF
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          ssh "$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
             export APP_PORT="$APP_PORT"
             export IMAGE="$IMAGE"
