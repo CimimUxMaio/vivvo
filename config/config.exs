@@ -31,7 +31,7 @@ config :vivvo, Vivvo.Files,
   allowed_extensions: ~w(pdf jpg jpeg png gif bmp webp)
 
 # Generic temp directory configuration (used by upload helpers and other features)
-config :vivvo, :temp_dir, System.get_env("TEMP_DIR") || "tmp"
+config :vivvo, :temp_dir, "tmp"
 
 # Configure the endpoint
 config :vivvo, VivvoWeb.Endpoint,

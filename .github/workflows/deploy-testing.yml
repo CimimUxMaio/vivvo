@@ -1,0 +1,106 @@
+name: Deploy Testing
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        default: "main"
+
+concurrency:
+  group: deploy-testing
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: vivvo
+  IMAGE_TAG: testing
+
+jobs:
+  build-and-deploy:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.event == 'push'
+      )
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push testing image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_CLIENT_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      - name: Trigger Deployment
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          APP_PORT: ${{ vars.APP_PORT }}
+          PHX_HOST: ${{ vars.TEST_PHX_HOST }}
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          POSTGRES_USER: ${{ secrets.TEST_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
+          SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
+          TARGET_BRANCH: ${{ github.event.inputs.branch || 'main' }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          ssh "$SSH_HOST" << EOF
+            export APP_NAME="$APP_NAME"
+            export APP_PORT="$APP_PORT"
+            export IMAGE="$IMAGE"
+            export POSTGRES_USER="$POSTGRES_USER"
+            export POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
+            export POSTGRES_DB="$POSTGRES_DB"
+            export DATABASE_URL="ecto://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}"
+            export SECRET_KEY_BASE="$SECRET_KEY_BASE"
+            export PHX_HOST="$PHX_HOST"
+
+            echo "📥 Pulling latest repository..."
+            cd "apps/$APP_NAME/"
+            git fetch origin "$TARGET_BRANCH"
+            git checkout --force "$TARGET_BRANCH"
+            git reset --hard "origin/$TARGET_BRANCH"
+
+            cd deploy/
+            make deploy.testing
+          EOF
