@@ -4,12 +4,8 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+
   workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to deploy"
-        required: true
-        default: "main"
 
 concurrency:
   group: deploy-testing
@@ -34,8 +30,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -78,13 +72,9 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
-          TARGET_BRANCH: ${{ github.event.inputs.branch || 'main' }}
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan "$SSH_HOST" >> ~/.ssh/known_hosts
-
-          ssh "$SSH_HOST" << EOF
+          tailscale ssh "$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
             export APP_PORT="$APP_PORT"
             export IMAGE="$IMAGE"
