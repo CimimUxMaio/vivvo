@@ -61,31 +61,6 @@ jobs:
           tags: tag:ci
           version: latest
 
-      - name: Debug Tailscale connection
-        env:
-          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
-        run: |
-          echo "=== Debugging Tailscale connection ==="
-          echo "SSH_HOST value: '$SSH_HOST'"
-          echo ""
-          echo "--- Tailscale status ---"
-          tailscale status --json || true
-          echo ""
-          echo "--- Trying to resolve SSH_HOST ---"
-          getent hosts "$SSH_HOST" || echo "getent failed"
-          echo ""
-          echo "--- Checking if SSH port is reachable ---"
-          for i in {1..30}; do
-            if nc -z -w 1 "$SSH_HOST" 22 &>/dev/null; then
-              echo "SSH port is reachable on $SSH_HOST"
-              exit 0
-            fi
-            echo "Waiting for SSH port... ($i/30)"
-            sleep 2
-          done
-          echo "Error: Could not reach SSH port on $SSH_HOST"
-          exit 1
-
       - name: Trigger Deployment
         env:
           APP_NAME: ${{ vars.APP_NAME }}
@@ -99,11 +74,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
           TARGET_BRANCH: ${{ github.ref }}
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan "$SSH_HOST" >> ~/.ssh/known_hosts
-
-          ssh "$SSH_HOST" << EOF
+          tailscale ssh "$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
             export APP_PORT="$APP_PORT"
             export IMAGE="$IMAGE"
