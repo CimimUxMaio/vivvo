@@ -92,9 +92,10 @@ jobs:
             export PHX_HOST="$PHX_HOST"
 
             echo "📥 Pulling latest repository..."
-            cd apps/vivvo/
-            git pull origin $TARGET_BRANCH
-            git checkout $TARGET_BRANCH
+            cd "apps/$APP_NAME/"
+            git fetch origin "$TARGET_BRANCH"
+            git checkout --force "$TARGET_BRANCH"
+            git reset --hard "origin/$TARGET_BRANCH"
 
             cd deploy/
             make deploy.testing
