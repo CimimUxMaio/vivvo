@@ -61,20 +61,29 @@ jobs:
           tags: tag:ci
           version: latest
 
-      - name: Wait for Tailscale connection
+      - name: Debug Tailscale connection
         env:
           SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
         run: |
-          echo "Waiting for Tailscale connection to $SSH_HOST..."
+          echo "=== Debugging Tailscale connection ==="
+          echo "SSH_HOST value: '$SSH_HOST'"
+          echo ""
+          echo "--- Tailscale status ---"
+          tailscale status --json || true
+          echo ""
+          echo "--- Trying to resolve SSH_HOST ---"
+          getent hosts "$SSH_HOST" || echo "getent failed"
+          echo ""
+          echo "--- Checking if SSH port is reachable ---"
           for i in {1..30}; do
-            if ping -c 1 -W 1 "$SSH_HOST" &>/dev/null; then
-              echo "Tailscale connection established"
+            if nc -z -w 1 "$SSH_HOST" 22 &>/dev/null; then
+              echo "SSH port is reachable on $SSH_HOST"
               exit 0
             fi
-            echo "Waiting for Tailscale connection... ($i/30)"
+            echo "Waiting for SSH port... ($i/30)"
             sleep 2
           done
-          echo "Error: Tailscale connection timeout"
+          echo "Error: Could not reach SSH port on $SSH_HOST"
           exit 1
 
       - name: Trigger Deployment
