@@ -4,12 +4,8 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+
   workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to deploy"
-        required: true
-        default: "main"
 
 concurrency:
   group: deploy-testing
@@ -34,8 +30,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -67,6 +61,22 @@ jobs:
           tags: tag:ci
           version: latest
 
+      - name: Wait for Tailscale connection
+        env:
+          SSH_HOST: ${{ secrets.TEST_SERVER_TAILSCALE_HOST }}
+        run: |
+          echo "Waiting for Tailscale connection to $SSH_HOST..."
+          for i in {1..30}; do
+            if ping -c 1 -W 1 "$SSH_HOST" &>/dev/null; then
+              echo "Tailscale connection established"
+              exit 0
+            fi
+            echo "Waiting for Tailscale connection... ($i/30)"
+            sleep 2
+          done
+          echo "Error: Tailscale connection timeout"
+          exit 1
+
       - name: Trigger Deployment
         env:
           APP_NAME: ${{ vars.APP_NAME }}
@@ -78,7 +88,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
-          TARGET_BRANCH: ${{ github.event.inputs.branch || 'main' }}
+          TARGET_BRANCH: ${{ github.ref }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
