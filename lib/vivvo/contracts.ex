@@ -72,22 +72,26 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
-  Gets the active contract for a specific property.
+  Gets the current active contract for a specific property as of the given date.
 
-  Returns nil if no active contract exists, or the contract struct with tenant preloaded.
+  Returns nil if no active contract exists for the date, or the contract struct with tenant preloaded.
 
   ## Examples
 
-      iex> get_contract_for_property(scope, 123)
+      iex> current_contract_for_property(scope, 123, ~D[2026-03-15])
       %Contract{tenant: %User{}}
 
-      iex> get_contract_for_property(scope, 456)
+      iex> current_contract_for_property(scope, 456, ~D[2026-03-15])
       nil
   """
-  def get_contract_for_property(%Scope{} = scope, property_id) do
+  def current_contract_for_property(%Scope{} = scope, property_id, today \\ Date.utc_today()) do
     from(c in Contract,
       where:
-        c.property_id == ^property_id and c.user_id == ^scope.user.id and c.archived == false,
+        c.property_id == ^property_id and
+          c.user_id == ^scope.user.id and
+          c.archived == false and
+          c.start_date <= ^today and
+          c.end_date >= ^today,
       preload: [:tenant, :payments, :rent_periods]
     )
     |> Repo.one()
@@ -106,54 +110,21 @@ defmodule Vivvo.Contracts do
 
   """
   def create_contract(%Scope{} = scope, attrs) do
-    property_id = get_property_id(attrs)
-    old_contract = maybe_get_contract_for_property(scope, property_id)
-
     attrs = prepare_rent_period_attrs(attrs)
 
     result =
       Ecto.Multi.new()
-      |> Ecto.Multi.run(:archive_old, maybe_archive_old_contract(scope, old_contract))
       |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
       |> Repo.transaction()
 
     case result do
       {:ok, %{contract: contract}} ->
         broadcast_contract(scope, {:created, contract})
-
-        unless is_nil(old_contract) do
-          broadcast_contract(scope, {:deleted, old_contract})
-        end
-
         {:ok, contract}
 
       {:error, _name, changeset, _changes} ->
         {:error, changeset}
     end
-  end
-
-  defp maybe_archive_old_contract(_scope, nil) do
-    fn _repo, _changes ->
-      {:ok, :no_existing_contract}
-    end
-  end
-
-  defp maybe_archive_old_contract(%Scope{} = scope, %Contract{} = old_contract) do
-    fn repo, _changes ->
-      old_contract
-      |> Contract.archive_changeset(scope)
-      |> repo.update()
-    end
-  end
-
-  defp get_property_id(attrs) do
-    Map.get(attrs, "property_id") || Map.get(attrs, :property_id)
-  end
-
-  defp maybe_get_contract_for_property(_scope, nil), do: nil
-
-  defp maybe_get_contract_for_property(%Scope{} = scope, property_id) do
-    get_contract_for_property(scope, property_id)
   end
 
   @doc """
@@ -308,6 +279,30 @@ defmodule Vivvo.Contracts do
     |> where([c], c.id == ^contract_id)
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
+    |> preload([:property, :rent_periods, payments: [:files]])
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets the current active contract for a tenant as of the given date.
+
+  Returns nil if no active contract exists for the tenant on the given date.
+
+  ## Examples
+
+      iex> current_contract_for_tenant(scope, ~D[2026-03-15])
+      %Contract{payments: [%Payment{files: [...]}]}
+
+      iex> current_contract_for_tenant(scope, ~D[2026-03-15])
+      nil
+
+  """
+  def current_contract_for_tenant(%Scope{user: user} = _scope, today \\ Date.utc_today()) do
+    Contract
+    |> where([c], c.tenant_id == ^user.id)
+    |> where([c], c.archived == false)
+    |> where([c], c.start_date <= ^today)
+    |> where([c], c.end_date >= ^today)
     |> preload([:property, :rent_periods, payments: [:files]])
     |> Repo.one()
   end
