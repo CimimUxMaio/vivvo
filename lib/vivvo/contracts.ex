@@ -110,15 +110,20 @@ defmodule Vivvo.Contracts do
 
   """
   def create_contract(%Scope{} = scope, attrs) do
-    attrs = prepare_rent_period_attrs(attrs)
+    Ecto.Multi.new()
+    |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
+    |> Ecto.Multi.insert(:rent_period, fn %{contract: contract} ->
+      rent_period_attrs =
+        attrs
+        |> initial_rent_period_attrs()
+        |> Map.put("contract_id", contract.id)
 
-    result =
-      Ecto.Multi.new()
-      |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
-      |> Repo.transaction()
-
-    case result do
+      RentPeriod.changeset(%RentPeriod{}, rent_period_attrs)
+    end)
+    |> Repo.transaction()
+    |> case do
       {:ok, %{contract: contract}} ->
+        contract = Repo.preload(contract, :rent_periods)
         broadcast_contract(scope, {:created, contract})
         {:ok, contract}
 
@@ -993,37 +998,9 @@ defmodule Vivvo.Contracts do
     (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
   end
 
-  @doc """
-  Prepares contract attributes by transforming rent params into nested rent_periods.
-
-  Calculates the initial rent period's start_date and end_date based on:
-  - First period: start_date = contract.start_date
-  - With duration: end_date = end_of_month(beginning_of_month(start_date) + (duration - 1) months)
-  - Without duration: end_date = contract.end_date
-
-  ## Examples
-
-      # With 3-month duration, starting 2026-01-10
-      # Result: start_date = 2026-01-10, end_date = 2026-03-31
-      iex> prepare_rent_period_attrs(%{
-      ...>   "start_date" => "2026-01-10",
-      ...>   "end_date" => "2027-01-10",
-      ...>   "rent_period_duration" => "3",
-      ...>   "rent" => "1200.00"
-      ...> })
-      %{"rent_periods" => [%{"value" => "1200.00", "start_date" => "2026-01-10", "end_date" => "2026-03-31"}], ...}
-
-      # Without duration (nil)
-      # Result: start_date = 2026-01-10, end_date = 2027-01-10
-      iex> prepare_rent_period_attrs(%{
-      ...>   "start_date" => "2026-01-10",
-      ...>   "end_date" => "2027-01-10",
-      ...>   "rent" => "1200.00"
-      ...> })
-      %{"rent_periods" => [%{"value" => "1200.00", "start_date" => "2026-01-10", "end_date" => "2027-01-10"}], ...}
-
-  """
-  def prepare_rent_period_attrs(attrs) do
+  # Calculates the initial rent period attributes from contract creation params.
+  # Returns a map suitable for RentPeriod.changeset/2.
+  defp initial_rent_period_attrs(attrs) do
     # Normalize to string keys to handle both atom and string key maps
     attrs =
       Enum.reduce(attrs, %{}, fn {key, value}, acc ->
@@ -1031,37 +1008,38 @@ defmodule Vivvo.Contracts do
         Map.put(acc, string_key, value)
       end)
 
-    rent_value = attrs["rent"]
-    start_date_str = attrs["start_date"]
-    end_date_str = attrs["end_date"]
+    start_date = parse_date(attrs["start_date"])
+    end_date = parse_date(attrs["end_date"])
     duration_str = attrs["rent_period_duration"]
+    rent = attrs["rent"]
 
-    with {:ok, start_date} <- parse_date(start_date_str),
-         {:ok, end_date} <- parse_date(end_date_str) do
-      duration = parse_duration(duration_str)
+    {period_start, period_end} =
+      case parse_duration(duration_str) do
+        nil ->
+          {start_date, end_date}
 
-      {period_start, period_end} =
-        calculate_initial_period_dates(start_date, end_date, duration)
+        duration ->
+          period_end =
+            start_date
+            |> Date.beginning_of_month()
+            |> Date.shift(month: duration - 1)
+            |> Date.end_of_month()
 
-      rent_period = %{
-        "value" => rent_value,
-        "start_date" => Date.to_iso8601(period_start),
-        "end_date" => Date.to_iso8601(period_end),
-        "index_type" => nil,
-        "index_value" => nil
-      }
+          {start_date, period_end}
+      end
 
-      attrs
-      |> Map.put("rent_periods", [rent_period])
-      |> Map.delete("rent")
-    else
-      _error -> attrs
-    end
+    %{
+      "value" => rent,
+      "start_date" => period_start,
+      "end_date" => period_end,
+      "index_type" => nil,
+      "index_value" => nil
+    }
   end
 
-  defp parse_date(%Date{} = date), do: {:ok, date}
-  defp parse_date(date_str) when is_binary(date_str), do: Date.from_iso8601(date_str)
-  defp parse_date(_), do: :error
+  defp parse_date(%Date{} = date), do: date
+  defp parse_date(date_str) when is_binary(date_str), do: Date.from_iso8601!(date_str)
+  defp parse_date(_), do: nil
 
   defp parse_duration(nil), do: nil
   defp parse_duration(duration) when is_integer(duration), do: duration
@@ -1074,52 +1052,6 @@ defmodule Vivvo.Contracts do
   end
 
   defp parse_duration(_), do: nil
-
-  @doc """
-  Calculates the start and end dates for the initial rent period.
-
-  ## Rules
-
-  - **First period (with duration)**:
-    - start_date = contract.start_date (exact)
-    - end_date = end_of_month(beginning_of_month(start_date) + (duration - 1) months)
-
-  - **Single period (no duration/nil)**:
-    - start_date = contract.start_date (exact)
-    - end_date = contract.end_date (exact)
-
-  ## Examples
-
-      # With duration = 3, contract starts 2026-01-10
-      # beginning_of_month(2026-01-10) = 2026-01-01
-      # shift by (3-1) = 2 months = 2026-03-01
-      # end_of_month(2026-03-01) = 2026-03-31
-      iex> calculate_initial_period_dates(~D[2026-01-10], ~D[2027-08-15], 3)
-      {~D[2026-01-10], ~D[2026-03-31]}
-
-      # Without duration (single period for entire contract)
-      iex> calculate_initial_period_dates(~D[2026-03-20], ~D[2027-02-10], nil)
-      {~D[2026-03-20], ~D[2027-02-10]}
-
-  """
-  def calculate_initial_period_dates(start_date, end_date, nil) do
-    {start_date, end_date}
-  end
-
-  def calculate_initial_period_dates(start_date, _end_date, duration)
-      when is_integer(duration) and duration > 0 do
-    period_end =
-      start_date
-      |> Date.beginning_of_month()
-      |> Date.shift(month: duration - 1)
-      |> Date.end_of_month()
-
-    {start_date, period_end}
-  end
-
-  def calculate_initial_period_dates(start_date, end_date, _invalid_duration) do
-    {start_date, end_date}
-  end
 
   @doc """
   Returns the rent period that covers the given date for a contract.

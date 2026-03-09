@@ -66,7 +66,6 @@ defmodule Vivvo.Contracts.Contract do
     )
     |> validate_index_fields()
     |> validate_end_date_after_start_date()
-    |> cast_assoc(:rent_periods)
     |> put_change(:user_id, user_scope.user.id)
   end
 

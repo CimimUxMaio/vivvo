@@ -34,6 +34,7 @@ defmodule Vivvo.Contracts.RentPeriod do
       :contract_id
     ])
     |> validate_required([
+      :contract_id,
       :value,
       :start_date,
       :end_date
