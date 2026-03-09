@@ -1133,7 +1133,8 @@ defmodule Vivvo.Contracts do
 
   - If the date falls within a rent period's date range, returns that period
   - If the contract is in the future (start_date > date), returns the earliest period
-  - If no period covers the date and contract has started, raises an error
+  - If the contract is expired (end_date < date), returns the latest period
+  - If no period covers the date and contract is active, raises an error
     (this indicates a bug in period generation)
 
   ## Examples
@@ -1162,15 +1163,23 @@ defmodule Vivvo.Contracts do
   end
 
   defp handle_no_matching_period(contract, periods, date) do
-    if Date.compare(contract.start_date, date) == :gt do
-      # Future contract — use the initial (earliest) period
-      Enum.min_by(periods, & &1.start_date, Date, fn ->
-        raise "Contract #{contract.id} has no rent periods"
-      end)
-    else
-      # Contract has started but no matching period — bug in period generation
-      raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
-              "This indicates a bug in rent period generation."
+    cond do
+      Date.compare(contract.start_date, date) == :gt ->
+        # Future contract -- use the initial (earliest) period
+        Enum.min_by(periods, & &1.start_date, Date, fn ->
+          raise "Contract #{contract.id} has no rent periods"
+        end)
+
+      Date.compare(contract.end_date, date) == :lt ->
+        # Expired contract -- use the latest period
+        Enum.max_by(periods, & &1.end_date, Date, fn ->
+          raise "Contract #{contract.id} has no rent periods"
+        end)
+
+      true ->
+        # Contract is active but no matching period -- bug in period generation
+        raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
+                "This indicates a bug in rent period generation."
     end
   end
 
