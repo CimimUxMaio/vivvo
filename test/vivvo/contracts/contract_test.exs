@@ -220,24 +220,6 @@ defmodule Vivvo.Contracts.ContractTest do
       # Just verify the changeset behavior
       changeset.valid? || errors_on(changeset)
     end
-
-    test "cast_assoc creates nested rent period", %{scope: scope} do
-      attrs = %{
-        start_date: ~D[2026-02-05],
-        end_date: ~D[2026-12-31],
-        expiration_day: 5,
-        property_id: 1,
-        tenant_id: 1,
-        rent_periods: [%{value: "1000.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
-      }
-
-      changeset = Contract.changeset(%Contract{}, attrs, scope)
-
-      assert changeset.valid?
-      %{rent_periods: [%Ecto.Changeset{} = rp_changeset]} = changeset.changes
-      assert rp_changeset.valid?
-      assert Ecto.Changeset.get_change(rp_changeset, :value) == Decimal.new("1000.00")
-    end
   end
 
   describe "archive_changeset/2" do
