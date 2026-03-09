@@ -8,6 +8,7 @@ defmodule Vivvo.Contracts do
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Contracts.RentPeriod
   alias Vivvo.Payments
   alias Vivvo.Properties.Property
 
@@ -64,7 +65,10 @@ defmodule Vivvo.Contracts do
 
   """
   def get_contract!(%Scope{} = scope, id) do
-    Repo.get_by!(Contract, id: id, user_id: scope.user.id, archived: false)
+    Contract
+    |> where([c], c.id == ^id and c.user_id == ^scope.user.id and c.archived == false)
+    |> preload([:tenant, :property, :rent_periods])
+    |> Repo.one!()
   end
 
   @doc """
@@ -84,7 +88,7 @@ defmodule Vivvo.Contracts do
     from(c in Contract,
       where:
         c.property_id == ^property_id and c.user_id == ^scope.user.id and c.archived == false,
-      preload: [:tenant, :payments]
+      preload: [:tenant, :payments, :rent_periods]
     )
     |> Repo.one()
   end
@@ -281,7 +285,7 @@ defmodule Vivvo.Contracts do
     Contract
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, payments: [:files]])
+    |> preload([:property, :rent_periods, payments: [:files]])
     |> Repo.all()
   end
 
@@ -304,7 +308,7 @@ defmodule Vivvo.Contracts do
     |> where([c], c.id == ^contract_id)
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, payments: [:files]])
+    |> preload([:property, :rent_periods, payments: [:files]])
     |> Repo.one()
   end
 
@@ -475,7 +479,7 @@ defmodule Vivvo.Contracts do
     |> where([c], c.archived == false)
     |> where([c], c.start_date <= ^today)
     |> where([c], c.end_date >= ^today)
-    |> preload([:property, :tenant, :payments])
+    |> preload([:property, :tenant, :rent_periods, :payments])
     |> order_by([c], asc: c.start_date)
     |> Repo.all()
   end
@@ -500,7 +504,7 @@ defmodule Vivvo.Contracts do
     |> where([p], p.user_id == ^scope.user.id)
     |> where([p], p.archived == false)
     |> order_by([p], asc: p.name)
-    |> preload(contract: [:tenant, :payments])
+    |> preload(contract: [:tenant, :rent_periods, :payments])
     |> Repo.all()
     |> Enum.map(&calculate_property_metrics(&1, &1.contract, scope))
   end
@@ -985,10 +989,6 @@ defmodule Vivvo.Contracts do
     (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
   end
 
-  # ============================================================================
-  # Rent Period Date Boundary Calculations (Phase 3)
-  # ============================================================================
-
   @doc """
   Prepares contract attributes by transforming rent params into nested rent_periods.
 
@@ -1109,5 +1109,62 @@ defmodule Vivvo.Contracts do
 
   def calculate_initial_period_dates(start_date, end_date, _invalid_duration) do
     {start_date, end_date}
+  end
+
+  @doc """
+  Returns the rent period that covers the given date for a contract.
+
+  ## Behavior
+
+  - If the date falls within a rent period's date range, returns that period
+  - If the contract is in the future (start_date > date), returns the earliest period
+  - If no period covers the date and contract has started, raises an error
+    (this indicates a bug in period generation)
+
+  ## Examples
+
+      iex> current_rent_period(contract_with_periods, ~D[2026-03-15])
+      %RentPeriod{start_date: ~D[2026-01-01], end_date: ~D[2026-03-31], value: Decimal.new("1200.00")}
+
+      iex> current_rent_period(future_contract, Date.utc_today())
+      %RentPeriod{}  # Returns earliest period for future contracts
+
+  """
+  def current_rent_period(%Contract{rent_periods: periods} = contract, date \\ Date.utc_today()) do
+    date_match =
+      Enum.find(periods, fn rp ->
+        Date.compare(rp.start_date, date) != :gt and
+          Date.compare(rp.end_date, date) != :lt
+      end)
+
+    case date_match do
+      %RentPeriod{} = rp ->
+        rp
+
+      nil ->
+        if Date.compare(contract.start_date, date) == :gt do
+          # Future contract — use the initial (earliest) period
+          Enum.min_by(periods, & &1.start_date, Date, fn ->
+            raise "Contract #{contract.id} has no rent periods"
+          end)
+        else
+          # Contract has started but no matching period — bug in period generation
+          raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
+                  "This indicates a bug in rent period generation."
+        end
+    end
+  end
+
+  @doc """
+  Returns the rent value for the given date from the appropriate rent period.
+
+  ## Examples
+
+      iex> current_rent_value(contract, ~D[2026-03-15])
+      Decimal.new("1200.00")
+
+  """
+  def current_rent_value(%Contract{} = contract, date \\ Date.utc_today()) do
+    current_rent_period(contract, date).value
   end
 end
