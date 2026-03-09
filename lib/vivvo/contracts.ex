@@ -395,13 +395,11 @@ defmodule Vivvo.Contracts do
 
   """
   def calculate_due_date(%Contract{start_date: start_date, expiration_day: exp_day}, payment_num) do
-    month_offset = payment_num - 1
-    year = start_date.year + div(start_date.month + month_offset - 1, 12)
-    month = rem(start_date.month + month_offset - 1, 12) + 1
-    last_day = Calendar.ISO.days_in_month(year, month)
+    shifted_date = Date.shift(start_date, month: payment_num - 1)
+    last_day = Date.days_in_month(shifted_date)
     day = min(exp_day, last_day)
 
-    Date.new!(year, month, day)
+    %{shifted_date | day: day}
   end
 
   @doc """
@@ -854,7 +852,8 @@ defmodule Vivvo.Contracts do
   # Calculates outstanding amount for a month. Returns negative value
   # when total payments exceed rent (overpayment credit).
   defp calculate_and_add_outstanding(scope, contract, payment_num, acc) do
-    rent = contract.rent
+    due_date = calculate_due_date(contract, payment_num)
+    rent = current_rent_value(contract, due_date)
     paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
     outstanding = Decimal.sub(rent, paid)
     Decimal.add(acc, outstanding)
