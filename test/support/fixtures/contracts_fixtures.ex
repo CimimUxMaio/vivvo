@@ -29,7 +29,8 @@ defmodule Vivvo.ContractsFixtures do
     today = Date.utc_today()
 
     default_attrs = %{
-      start_date: Date.add(today, 1),
+      # Start from today to ensure the contract covers the current date
+      start_date: today,
       end_date: Date.add(today, 30),
       expiration_day: 5,
       notes: "some notes",

@@ -598,10 +598,14 @@ defmodule Vivvo.Payments do
     |> join(:inner, [p], c in assoc(p, :contract))
     |> join(:inner, [p, c], t in assoc(c, :tenant))
     |> join(:inner, [p, c], prop in assoc(c, :property))
+    |> join(:inner, [p, c], rp in assoc(c, :rent_periods))
     |> where([p, c], c.user_id == ^scope.user.id)
     |> where([p], p.status == :pending)
     |> order_by([p], desc: p.inserted_at)
-    |> preload([p, c, t, prop], contract: {c, tenant: t, property: prop}, files: [])
+    |> preload([p, c, t, prop, rp],
+      contract: {c, rent_periods: rp, tenant: t, property: prop},
+      files: []
+    )
     |> paginate(page, per_page)
     |> Repo.all()
   end
@@ -759,7 +763,7 @@ defmodule Vivvo.Payments do
       |> where([c], c.archived == false)
       |> where([c], c.start_date <= ^today)
       |> where([c], c.end_date >= ^today)
-      |> preload([:payments])
+      |> preload([:payments, :rent_periods])
       |> Repo.all()
 
     Enum.reduce(

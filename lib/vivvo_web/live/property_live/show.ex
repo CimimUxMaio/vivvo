@@ -340,7 +340,7 @@ defmodule VivvoWeb.PropertyLive.Show do
         socket
       )
       when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments])
+    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
 
     months = Contracts.get_months_up_to_current(contract)
 
@@ -355,7 +355,7 @@ defmodule VivvoWeb.PropertyLive.Show do
         socket
       )
       when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments])
+    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
 
     months = Contracts.get_months_up_to_current(contract)
 
@@ -417,7 +417,6 @@ defmodule VivvoWeb.PropertyLive.Show do
     contract = Contracts.get_contract_for_property(scope, socket.assigns.property.id)
 
     if contract do
-      contract = Vivvo.Repo.preload(contract, [:tenant, :payments])
       months = Contracts.get_months_up_to_current(contract)
 
       socket

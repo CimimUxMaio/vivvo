@@ -631,15 +631,16 @@ defmodule Vivvo.Contracts do
   defp calculate_month_delay(contract, payments_by_month, payment_number, today) do
     due_date = calculate_due_date(contract, payment_number)
     month_payments = Map.get(payments_by_month, payment_number)
+    rent = current_rent_value(contract, due_date)
 
     cond do
       is_nil(month_payments) ->
         # No payments at all for this month
         max(0, Date.diff(today, due_date))
 
-      month_fully_paid?(month_payments, contract.rent) ->
+      month_fully_paid?(month_payments, rent) ->
         # Fully paid - find completion payment and calculate delay
-        calculate_completion_delay(month_payments, contract.rent, due_date)
+        calculate_completion_delay(month_payments, rent, due_date)
 
       true ->
         # Partially paid - use today as completion date

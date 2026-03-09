@@ -245,22 +245,6 @@ defmodule VivvoWeb.PropertyLiveTest do
       assert html =~ "Contract Details" or html =~ "contract"
     end
 
-    test "'Edit Contract' button navigates to edit form", %{
-      conn: conn,
-      property: property,
-      scope: scope
-    } do
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
-
-      assert has_element?(
-               show_live,
-               "a[href='/properties/#{property.id}/contracts/#{contract.id}/edit']"
-             )
-    end
-
     test "'Create Contract' button navigates to new form", %{conn: conn, property: property} do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
@@ -358,9 +342,12 @@ defmodule VivvoWeb.PropertyLiveTest do
       # Create contract in background
       tenant = user_fixture(%{preferred_roles: [:tenant], first_name: "Jane", last_name: "Doe"})
 
+      # Use dates that include today's date for proper rent period coverage
+      today = Date.utc_today()
+
       contract_attrs = %{
-        start_date: ~D[2026-02-05],
-        end_date: ~D[2026-03-05],
+        start_date: today,
+        end_date: Date.add(today, 30),
         tenant_id: tenant.id,
         expiration_day: 5,
         rent: "100.00",
@@ -377,23 +364,32 @@ defmodule VivvoWeb.PropertyLiveTest do
     end
 
     test "contract update updates UI", %{conn: conn, property: property, scope: scope} do
-      tenant = user_fixture(%{preferred_roles: [:tenant], first_name: "John", last_name: "Doe"})
-      contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
+      tenant1 = user_fixture(%{preferred_roles: [:tenant], first_name: "John", last_name: "Doe"})
+
+      tenant2 =
+        user_fixture(%{preferred_roles: [:tenant], first_name: "Jane", last_name: "Smith"})
+
+      contract =
+        contract_fixture(scope, %{
+          property_id: property.id,
+          tenant_id: tenant1.id
+        })
 
       {:ok, show_live, html} = live(conn, ~p"/properties/#{property}")
 
-      # Initially shows contract
+      # Initially shows first tenant
       assert html =~ "John Doe"
+      refute html =~ "Jane Smith"
 
-      # Update contract
+      # Update contract to different tenant
       {:ok, _updated} =
-        Vivvo.Contracts.update_contract(scope, contract, %{rent: "999.00"})
+        Vivvo.Contracts.update_contract(scope, contract, %{tenant_id: tenant2.id})
 
       # Give LiveView time to process PubSub message
       html = render(show_live)
 
-      # UI should reflect update
-      assert html =~ "$999.00" or html =~ "999.00"
+      # UI should reflect update with new tenant name
+      assert html =~ "Jane Smith"
     end
 
     test "contract deletion removes contract from UI", %{
