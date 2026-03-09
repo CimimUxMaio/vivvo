@@ -215,7 +215,6 @@ defmodule VivvoWeb.ContractLive.Form do
          |> push_navigate(to: ~p"/properties/#{socket.assigns.property}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        IO.inspect(changeset, label: "Save Changeset Error")
         {:noreply, assign(socket, form: to_form(changeset))}
     end
   end
