@@ -91,7 +91,7 @@ defmodule Vivvo.ContractsTest do
     end
   end
 
-  describe "get_contract_for_property/2" do
+  describe "current_contract_for_property/2" do
     test "returns active contract for property" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
@@ -100,7 +100,7 @@ defmodule Vivvo.ContractsTest do
       contract =
         contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
 
-      result = Contracts.get_contract_for_property(scope, property.id)
+      result = Contracts.current_contract_for_property(scope, property.id)
 
       assert result.id == contract.id
       assert result.property_id == property.id
@@ -110,7 +110,7 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       property = property_fixture(scope)
 
-      assert Contracts.get_contract_for_property(scope, property.id) == nil
+      assert Contracts.current_contract_for_property(scope, property.id) == nil
     end
 
     test "returns nil when only archived contracts exist" do
@@ -123,7 +123,7 @@ defmodule Vivvo.ContractsTest do
 
       {:ok, _archived} = Contracts.delete_contract(scope, contract)
 
-      assert Contracts.get_contract_for_property(scope, property.id) == nil
+      assert Contracts.current_contract_for_property(scope, property.id) == nil
     end
 
     test "preloads tenant association" do
@@ -133,7 +133,7 @@ defmodule Vivvo.ContractsTest do
 
       contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
 
-      result = Contracts.get_contract_for_property(scope, property.id)
+      result = Contracts.current_contract_for_property(scope, property.id)
 
       assert result.tenant != nil
       assert result.tenant.id == tenant.id
@@ -147,7 +147,7 @@ defmodule Vivvo.ContractsTest do
 
       contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
 
-      assert Contracts.get_contract_for_property(other_scope, property.id) == nil
+      assert Contracts.current_contract_for_property(other_scope, property.id) == nil
     end
 
     test "preloads rent_periods association" do
@@ -157,9 +157,34 @@ defmodule Vivvo.ContractsTest do
 
       contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
 
-      result = Contracts.get_contract_for_property(scope, property.id)
+      result = Contracts.current_contract_for_property(scope, property.id)
       assert result.rent_periods != nil
       assert result.rent_periods != []
+    end
+
+    test "returns contract active on specific date" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+      today = Date.utc_today()
+
+      contract_fixture(scope, %{
+        property_id: property.id,
+        tenant_id: tenant.id,
+        start_date: Date.add(today, -30),
+        end_date: Date.add(today, 30)
+      })
+
+      # Should find contract when querying today
+      assert Contracts.current_contract_for_property(scope, property.id, today) != nil
+
+      # Should not find contract when querying before start_date
+      assert Contracts.current_contract_for_property(scope, property.id, Date.add(today, -60)) ==
+               nil
+
+      # Should not find contract when querying after end_date
+      assert Contracts.current_contract_for_property(scope, property.id, Date.add(today, 60)) ==
+               nil
     end
   end
 
@@ -276,77 +301,6 @@ defmodule Vivvo.ContractsTest do
     test "with invalid data returns error changeset" do
       scope = user_scope_fixture()
       assert {:error, %Ecto.Changeset{}} = Contracts.create_contract(scope, @invalid_attrs)
-    end
-
-    test "archives existing contract when creating new one for same property" do
-      scope = user_scope_fixture()
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      property = property_fixture(scope)
-
-      old_contract =
-        contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      new_attrs = %{
-        start_date: ~D[2026-03-01],
-        end_date: ~D[2026-04-01],
-        expiration_day: 10,
-        notes: "new notes",
-        rent: "200.0",
-        property_id: property.id,
-        tenant_id: tenant.id
-      }
-
-      assert {:ok, %Contract{} = new_contract} = Contracts.create_contract(scope, new_attrs)
-
-      # Old contract should be archived
-      assert_raise Ecto.NoResultsError, fn ->
-        Contracts.get_contract!(scope, old_contract.id)
-      end
-
-      # New contract should be active
-      assert Contracts.get_contract_for_property(scope, property.id).id == new_contract.id
-
-      # Verify old contract is archived in database
-      archived =
-        Repo.get_by(Contract, id: old_contract.id, user_id: scope.user.id, archived: true)
-
-      assert archived != nil
-      assert archived.archived == true
-      assert archived.archived_by_id == scope.user.id
-    end
-
-    test "only archives contracts for the same property" do
-      scope = user_scope_fixture()
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      property1 = property_fixture(scope, %{name: "Property 1"})
-      property2 = property_fixture(scope, %{name: "Property 2"})
-
-      contract1 =
-        contract_fixture(scope, %{property_id: property1.id, tenant_id: tenant.id})
-
-      contract2 =
-        contract_fixture(scope, %{property_id: property2.id, tenant_id: tenant.id})
-
-      # Create new contract for property1
-      new_attrs = %{
-        start_date: ~D[2026-03-01],
-        end_date: ~D[2026-04-01],
-        expiration_day: 10,
-        notes: "new notes",
-        rent: "200.0",
-        property_id: property1.id,
-        tenant_id: tenant.id
-      }
-
-      assert {:ok, _new_contract} = Contracts.create_contract(scope, new_attrs)
-
-      # Contract for property1 should be archived
-      assert_raise Ecto.NoResultsError, fn ->
-        Contracts.get_contract!(scope, contract1.id)
-      end
-
-      # Contract for property2 should still be active
-      assert Contracts.get_contract!(scope, contract2.id).id == contract2.id
     end
   end
 

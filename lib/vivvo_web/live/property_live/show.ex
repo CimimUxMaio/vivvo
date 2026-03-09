@@ -252,7 +252,7 @@ defmodule VivvoWeb.PropertyLive.Show do
 
     scope = socket.assigns.current_scope
     property = Properties.get_property!(scope, id)
-    contract = Contracts.get_contract_for_property(scope, property.id)
+    contract = Contracts.current_contract_for_property(scope, property.id)
 
     months = if contract, do: Contracts.get_months_up_to_current(contract), else: []
 
@@ -414,7 +414,7 @@ defmodule VivvoWeb.PropertyLive.Show do
 
   defp refresh_contract_data(socket) do
     scope = socket.assigns.current_scope
-    contract = Contracts.get_contract_for_property(scope, socket.assigns.property.id)
+    contract = Contracts.current_contract_for_property(scope, socket.assigns.property.id)
 
     if contract do
       months = Contracts.get_months_up_to_current(contract)
