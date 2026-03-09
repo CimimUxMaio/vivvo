@@ -48,4 +48,20 @@ defmodule Vivvo.ContractsFixtures do
     {:ok, contract} = Vivvo.Contracts.create_contract(scope, attrs)
     contract
   end
+
+  @doc """
+  Generate an expired contract (end_date in the past).
+  """
+  def expired_contract_fixture(scope, attrs \\ %{}) do
+    contract_fixture(
+      scope,
+      Map.merge(
+        %{
+          start_date: Date.add(Date.utc_today(), -60),
+          end_date: Date.add(Date.utc_today(), -1)
+        },
+        attrs
+      )
+    )
+  end
 end

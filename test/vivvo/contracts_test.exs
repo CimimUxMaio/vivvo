@@ -718,6 +718,20 @@ defmodule Vivvo.ContractsTest do
       period = Contracts.current_rent_period(contract, today)
       assert period != nil
     end
+
+    test "returns latest period for expired contracts" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        expired_contract_fixture(scope, %{rent: "900.00"})
+
+      period = Contracts.current_rent_period(contract, today)
+      assert period != nil
+      assert period.value == Decimal.new("900.00")
+      # The returned period should be the latest one (closest to end_date)
+      assert Date.compare(period.end_date, today) == :lt
+    end
   end
 
   describe "current_rent_value/2" do
@@ -765,6 +779,16 @@ defmodule Vivvo.ContractsTest do
 
       rent_value = Contracts.current_rent_value(contract)
       assert rent_value == Decimal.new("1200.00")
+    end
+
+    test "returns latest period rent value for expired contracts" do
+      scope = user_scope_fixture()
+
+      contract =
+        expired_contract_fixture(scope, %{rent: "850.00"})
+
+      rent_value = Contracts.current_rent_value(contract)
+      assert rent_value == Decimal.new("850.00")
     end
   end
 
