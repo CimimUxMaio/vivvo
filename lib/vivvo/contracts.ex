@@ -555,9 +555,14 @@ defmodule Vivvo.Contracts do
   defp calculate_active_property_metrics(property, %Contract{} = contract, scope) do
     today = Date.utc_today()
     past_payment_numbers = get_past_payment_numbers(contract, today)
-
     periods_count = Enum.count(past_payment_numbers)
-    total_expected = Decimal.mult(contract.rent, Decimal.new(periods_count))
+
+    total_expected =
+      Enum.reduce(past_payment_numbers, Decimal.new(0), fn payment_num, acc ->
+        due_date = calculate_due_date(contract, payment_num)
+        rent = current_rent_value(contract, due_date)
+        Decimal.add(acc, rent)
+      end)
 
     total_received = Payments.total_rent_collected(scope, contract, today)
 
@@ -928,6 +933,7 @@ defmodule Vivvo.Contracts do
         due_date = calculate_due_date(contract, payment_num)
         total_paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
         month_status = Payments.get_month_status(scope, contract, payment_num)
+        rent = current_rent_value(contract, due_date)
 
         # Get payments for this month from the preloaded list
         month_payments =
@@ -937,7 +943,7 @@ defmodule Vivvo.Contracts do
         %{
           payment_number: payment_num,
           due_date: due_date,
-          rent: contract.rent,
+          rent: rent,
           total_paid: total_paid,
           status: month_status,
           is_overdue: month_overdue?(contract, payment_num, today) and month_status != :paid,
@@ -967,10 +973,13 @@ defmodule Vivvo.Contracts do
       []
     else
       Enum.map((current_payment_num + 1)..total_months, fn payment_num ->
+        due_date = calculate_due_date(contract, payment_num)
+        rent = current_rent_value(contract, due_date)
+
         %{
           payment_number: payment_num,
-          due_date: calculate_due_date(contract, payment_num),
-          rent: contract.rent
+          due_date: due_date,
+          rent: rent
         }
       end)
     end
@@ -1020,10 +1029,17 @@ defmodule Vivvo.Contracts do
 
   """
   def prepare_rent_period_attrs(attrs) do
-    rent_value = attrs["rent"] || attrs[:rent]
-    start_date_str = attrs["start_date"] || attrs[:start_date]
-    end_date_str = attrs["end_date"] || attrs[:end_date]
-    duration_str = attrs["rent_period_duration"] || attrs[:rent_period_duration]
+    # Normalize to string keys to handle both atom and string key maps
+    attrs =
+      Enum.reduce(attrs, %{}, fn {key, value}, acc ->
+        string_key = to_string(key)
+        Map.put(acc, string_key, value)
+      end)
+
+    rent_value = attrs["rent"]
+    start_date_str = attrs["start_date"]
+    end_date_str = attrs["end_date"]
+    duration_str = attrs["rent_period_duration"]
 
     with {:ok, start_date} <- parse_date(start_date_str),
          {:ok, end_date} <- parse_date(end_date_str) do
@@ -1043,7 +1059,6 @@ defmodule Vivvo.Contracts do
       attrs
       |> Map.put("rent_periods", [rent_period])
       |> Map.delete("rent")
-      |> Map.delete(:rent)
     else
       _error -> attrs
     end
@@ -1142,16 +1157,20 @@ defmodule Vivvo.Contracts do
         rp
 
       nil ->
-        if Date.compare(contract.start_date, date) == :gt do
-          # Future contract — use the initial (earliest) period
-          Enum.min_by(periods, & &1.start_date, Date, fn ->
-            raise "Contract #{contract.id} has no rent periods"
-          end)
-        else
-          # Contract has started but no matching period — bug in period generation
-          raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
-                  "This indicates a bug in rent period generation."
-        end
+        handle_no_matching_period(contract, periods, date)
+    end
+  end
+
+  defp handle_no_matching_period(contract, periods, date) do
+    if Date.compare(contract.start_date, date) == :gt do
+      # Future contract — use the initial (earliest) period
+      Enum.min_by(periods, & &1.start_date, Date, fn ->
+        raise "Contract #{contract.id} has no rent periods"
+      end)
+    else
+      # Contract has started but no matching period — bug in period generation
+      raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
+              "This indicates a bug in rent period generation."
     end
   end
 
