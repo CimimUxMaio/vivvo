@@ -17,7 +17,7 @@ defmodule VivvoWeb.ContractLive.Form do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.header>
-        {if @live_action == :new, do: "New Contract for", else: "Edit Contract for"} {@property.name}
+        New Contract for {@property.name}
         <:actions>
           <.button navigate={~p"/properties/#{@property}"}>
             <.icon name="hero-arrow-left" /> Back
@@ -121,6 +121,29 @@ defmodule VivvoWeb.ContractLive.Form do
           required
         />
 
+        <%!-- Index Type --%>
+        <.input
+          field={@form[:index_type]}
+          type="select"
+          label="Index Type"
+          prompt="None"
+          options={[
+            {"CPI", :cpi},
+            {"Fixed Percentage", :fixed_percentage}
+          ]}
+        />
+
+        <%!-- Rent Period Duration (only shown when index_type is selected) --%>
+        <%= unless @form[:index_type].value in ["", nil] do %>
+          <.input
+            field={@form[:rent_period_duration]}
+            type="number"
+            label="Rent Update Period (months)"
+            placeholder="Leave empty for no periodic updates"
+            min="1"
+          />
+        <% end %>
+
         <%!-- Notes --%>
         <.input field={@form[:notes]} type="textarea" label="Notes (Optional)" />
 
@@ -132,7 +155,7 @@ defmodule VivvoWeb.ContractLive.Form do
             phx-disable-with="Saving..."
             disabled={@tenant_users == []}
           >
-            {if @live_action == :new, do: "Create Contract", else: "Update Contract"}
+            Create Contract
           </.button>
           <.button navigate={~p"/properties/#{@property}"}>Cancel</.button>
         </footer>
@@ -167,15 +190,6 @@ defmodule VivvoWeb.ContractLive.Form do
     |> assign(:form, to_form(Contracts.change_contract(socket.assigns.current_scope, contract)))
   end
 
-  defp apply_action(socket, :edit, %{"id" => id}) do
-    contract = Contracts.get_contract!(socket.assigns.current_scope, id)
-
-    socket
-    |> assign(:page_title, "Edit Contract")
-    |> assign(:contract, contract)
-    |> assign(:form, to_form(Contracts.change_contract(socket.assigns.current_scope, contract)))
-  end
-
   @impl true
   def handle_event("validate", %{"contract" => contract_params}, socket) do
     changeset =
@@ -201,23 +215,7 @@ defmodule VivvoWeb.ContractLive.Form do
          |> push_navigate(to: ~p"/properties/#{socket.assigns.property}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
-    end
-  end
-
-  defp save_contract(socket, :edit, contract_params) do
-    case Contracts.update_contract(
-           socket.assigns.current_scope,
-           socket.assigns.contract,
-           contract_params
-         ) do
-      {:ok, _contract} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Contract updated successfully")
-         |> push_navigate(to: ~p"/properties/#{socket.assigns.property}")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
+        IO.inspect(changeset, label: "Save Changeset Error")
         {:noreply, assign(socket, form: to_form(changeset))}
     end
   end

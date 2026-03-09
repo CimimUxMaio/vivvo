@@ -76,7 +76,6 @@ defmodule VivvoWeb.Router do
 
       # Contract routes
       live "/properties/:property_id/contracts/new", ContractLive.Form, :new
-      live "/properties/:property_id/contracts/:id/edit", ContractLive.Form, :edit
     end
 
     post "/users/update-password", UserSessionController, :update_password

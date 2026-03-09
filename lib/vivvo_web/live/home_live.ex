@@ -206,10 +206,12 @@ defmodule VivvoWeb.HomeLive do
       # Calculate payment totals for display and validation
       accepted_total = Payments.total_accepted_for_month(scope, contract.id, month_num)
       pending_total = Payments.total_pending_for_month(scope, contract.id, month_num)
-      remaining = Decimal.sub(contract.rent, Decimal.add(accepted_total, pending_total))
+      due_date = Contracts.calculate_due_date(contract, month_num)
+      rent = Contracts.current_rent_value(contract, due_date)
+      remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
 
       # Pre-populate with minimum of rent or remaining allowance
-      initial_amount = Decimal.min(contract.rent, remaining)
+      initial_amount = Decimal.min(rent, remaining)
       initial_attrs = %{"amount" => initial_amount}
 
       changeset =
@@ -225,7 +227,7 @@ defmodule VivvoWeb.HomeLive do
        |> assign(:submitting_payment, {contract, month_num})
        |> assign(:payment_form, to_form(changeset))
        |> assign(:payment_summary, %{
-         rent: contract.rent,
+         rent: rent,
          accepted_total: accepted_total,
          pending_total: pending_total,
          remaining: remaining
@@ -260,7 +262,9 @@ defmodule VivvoWeb.HomeLive do
     # Get payment totals for display (updated in real-time)
     accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
     pending_total = Payments.total_pending_for_month(scope, contract.id, month)
-    remaining = Decimal.sub(contract.rent, Decimal.add(accepted_total, pending_total))
+    due_date = Contracts.calculate_due_date(contract, month)
+    rent = Contracts.current_rent_value(contract, due_date)
+    remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
 
     changeset =
       Payments.change_payment(
@@ -275,7 +279,7 @@ defmodule VivvoWeb.HomeLive do
      socket
      |> assign(payment_form: to_form(changeset))
      |> assign(:payment_summary, %{
-       rent: contract.rent,
+       rent: rent,
        accepted_total: accepted_total,
        pending_total: pending_total,
        remaining: remaining
@@ -295,7 +299,9 @@ defmodule VivvoWeb.HomeLive do
     # Re-calculate totals before submission to prevent race conditions
     accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
     pending_total = Payments.total_pending_for_month(scope, contract.id, month)
-    remaining_allowance = Decimal.sub(contract.rent, Decimal.add(accepted_total, pending_total))
+    due_date = Contracts.calculate_due_date(contract, month)
+    rent = Contracts.current_rent_value(contract, due_date)
+    remaining_allowance = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
 
     attrs =
       params
@@ -866,7 +872,7 @@ defmodule VivvoWeb.HomeLive do
                   </td>
                   <td class="px-4 py-3 text-right font-medium">
                     <%= if metric.state in [:occupied, :upcoming] do %>
-                      {format_currency(metric.contract.rent)}
+                      {format_currency(Contracts.current_rent_value(metric.contract))}
                     <% else %>
                       <span class="text-base-content/30">-</span>
                     <% end %>
@@ -1029,7 +1035,7 @@ defmodule VivvoWeb.HomeLive do
     tenant = contract.tenant
     property = contract.property
 
-    expected_amount = contract.rent
+    expected_amount = Contracts.current_rent_value(contract)
     paid_amount = assigns.payment.amount
 
     payment_status =
@@ -2175,7 +2181,9 @@ defmodule VivvoWeb.HomeLive do
         <%!-- Monthly Rent --%>
         <div>
           <p class="text-sm text-base-content/60 mb-1">Monthly Rent</p>
-          <p class="font-medium text-primary">{format_currency(@contract.rent)}</p>
+          <p class="font-medium text-primary">
+            {format_currency(Contracts.current_rent_value(@contract))}
+          </p>
         </div>
 
         <%!-- Payment Due Date --%>
