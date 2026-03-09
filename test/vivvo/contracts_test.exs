@@ -302,6 +302,213 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       assert {:error, %Ecto.Changeset{}} = Contracts.create_contract(scope, @invalid_attrs)
     end
+
+    test "returns overlapping_contract error when new contract overlaps at start" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      # Create existing contract: 2026-01-01 to 2026-06-30
+      existing_attrs = %{
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = existing_contract} =
+               Contracts.create_contract(scope, existing_attrs)
+
+      # Try to create overlapping contract: 2026-03-01 to 2026-12-31 (overlaps at start)
+      overlapping_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        rent: "1200.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:error, :overlapping_contract, returned_contract} =
+               Contracts.create_contract(scope, overlapping_attrs)
+
+      assert returned_contract.id == existing_contract.id
+    end
+
+    test "returns overlapping_contract error when new contract overlaps at end" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      # Create existing contract: 2026-06-01 to 2026-12-31
+      existing_attrs = %{
+        start_date: ~D[2026-06-01],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = existing_contract} =
+               Contracts.create_contract(scope, existing_attrs)
+
+      # Try to create overlapping contract: 2026-01-01 to 2026-08-31 (overlaps at end)
+      overlapping_attrs = %{
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-08-31],
+        expiration_day: 5,
+        rent: "1200.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:error, :overlapping_contract, returned_contract} =
+               Contracts.create_contract(scope, overlapping_attrs)
+
+      assert returned_contract.id == existing_contract.id
+    end
+
+    test "returns overlapping_contract error when new contract completely contains existing" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      # Create existing contract: 2026-03-01 to 2026-09-30
+      existing_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-09-30],
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = existing_contract} =
+               Contracts.create_contract(scope, existing_attrs)
+
+      # Try to create overlapping contract: 2026-01-01 to 2026-12-31 (completely contains existing)
+      overlapping_attrs = %{
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        rent: "1200.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:error, :overlapping_contract, returned_contract} =
+               Contracts.create_contract(scope, overlapping_attrs)
+
+      assert returned_contract.id == existing_contract.id
+    end
+
+    test "allows creating contract when no overlap exists" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      # Create existing contract: 2026-01-01 to 2026-06-30
+      existing_attrs = %{
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{}} = Contracts.create_contract(scope, existing_attrs)
+
+      # Create non-overlapping contract: 2026-07-01 to 2026-12-31 (starts exactly after existing ends)
+      non_overlapping_attrs = %{
+        start_date: ~D[2026-07-01],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        rent: "1200.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = new_contract} =
+               Contracts.create_contract(scope, non_overlapping_attrs)
+
+      assert new_contract.start_date == ~D[2026-07-01]
+      assert new_contract.end_date == ~D[2026-12-31]
+    end
+
+    test "archived contracts do not block new contracts" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      # Create existing contract: 2026-01-01 to 2026-06-30
+      existing_attrs = %{
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, existing_contract} = Contracts.create_contract(scope, existing_attrs)
+
+      # Archive the contract
+      assert {:ok, _} = Contracts.delete_contract(scope, existing_contract)
+
+      # Create overlapping contract: 2026-03-01 to 2026-09-30 (would overlap if not archived)
+      overlapping_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-09-30],
+        expiration_day: 5,
+        rent: "1200.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = new_contract} =
+               Contracts.create_contract(scope, overlapping_attrs)
+
+      assert new_contract.start_date == ~D[2026-03-01]
+      assert new_contract.end_date == ~D[2026-09-30]
+    end
+
+    test "contracts for different properties do not block each other" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property1 = property_fixture(scope)
+      property2 = property_fixture(scope)
+
+      # Create contract for property1: 2026-01-01 to 2026-06-30
+      existing_attrs = %{
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property1.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{}} = Contracts.create_contract(scope, existing_attrs)
+
+      # Create overlapping dates but for different property
+      new_contract_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-09-30],
+        expiration_day: 5,
+        rent: "1200.00",
+        property_id: property2.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = new_contract} =
+               Contracts.create_contract(scope, new_contract_attrs)
+
+      assert new_contract.property_id == property2.id
+    end
   end
 
   describe "delete_contract/2" do
