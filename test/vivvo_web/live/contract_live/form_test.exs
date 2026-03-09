@@ -4,7 +4,6 @@ defmodule VivvoWeb.ContractLive.FormTest do
   import Phoenix.LiveViewTest
   import Vivvo.AccountsFixtures
   import Vivvo.PropertiesFixtures
-  import Vivvo.ContractsFixtures
 
   alias Vivvo.Accounts
   alias Vivvo.Accounts.Scope
@@ -115,17 +114,6 @@ defmodule VivvoWeb.ContractLive.FormTest do
         |> render_change()
 
       assert result =~ "Rent Update Period"
-    end
-
-    test "warning message when property has existing contract", %{conn: conn, scope: scope} do
-      property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      _contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      {:ok, _view, html} = live(conn, ~p"/properties/#{property}/contracts/new")
-
-      assert html =~ "Warning"
-      assert html =~ "replace the current active contract"
     end
   end
 
@@ -383,36 +371,6 @@ defmodule VivvoWeb.ContractLive.FormTest do
         |> render_submit()
 
       assert result =~ "must be after start date"
-    end
-
-    test "archives existing contract when creating new one", %{conn: conn, scope: scope} do
-      property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      old_contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
-
-      # Use future dates that include today's date for proper rent period coverage
-      today = Date.utc_today()
-      start_date = Date.add(today, -5)
-      end_date = Date.add(today, 30)
-
-      view
-      |> form("#contract-form",
-        contract: %{
-          start_date: Date.to_iso8601(start_date),
-          end_date: Date.to_iso8601(end_date),
-          tenant_id: tenant.id,
-          expiration_day: 10,
-          rent: "200.00"
-        }
-      )
-      |> render_submit()
-
-      # Old contract should be archived
-      assert_raise Ecto.NoResultsError, fn ->
-        Vivvo.Contracts.get_contract!(scope, old_contract.id)
-      end
     end
   end
 end

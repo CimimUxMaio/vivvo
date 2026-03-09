@@ -3,7 +3,7 @@ defmodule VivvoWeb.ContractLive.Form do
   LiveView for creating and editing rental contracts.
 
   Handles contract creation with tenant selection, date ranges, rent amount,
-  and payment due dates. Warns when replacing existing contracts.
+  and payment due dates.
   """
   use VivvoWeb, :live_view
 
@@ -24,28 +24,6 @@ defmodule VivvoWeb.ContractLive.Form do
           </.button>
         </:actions>
       </.header>
-
-      <%!-- Warning if replacing existing contract --%>
-      <%= if @live_action == :new && @existing_contract do %>
-        <div class="rounded-md bg-yellow-50 p-4 mb-6">
-          <div class="flex">
-            <div class="flex-shrink-0">
-              <.icon name="hero-exclamation-triangle" class="h-5 w-5 text-yellow-400" />
-            </div>
-            <div class="ml-3">
-              <h3 class="text-sm font-medium text-yellow-800">
-                Warning: Replacing existing contract
-              </h3>
-              <div class="mt-2 text-sm text-yellow-700">
-                <p>
-                  This will replace the current active contract for this property.
-                  The existing contract will be archived.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      <% end %>
 
       <%= if @tenant_users == [] do %>
         <div class="rounded-md bg-red-50 p-4 mb-6">
@@ -170,14 +148,10 @@ defmodule VivvoWeb.ContractLive.Form do
     property = Properties.get_property!(socket.assigns.current_scope, property_id)
     tenant_users = Accounts.list_users_with_tenant_role(socket.assigns.current_scope)
 
-    existing_contract =
-      Contracts.get_contract_for_property(socket.assigns.current_scope, property.id)
-
     {:ok,
      socket
      |> assign(:property, property)
      |> assign(:tenant_users, tenant_users)
-     |> assign(:existing_contract, existing_contract)
      |> apply_action(socket.assigns.live_action, params)}
   end
 
