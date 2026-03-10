@@ -220,12 +220,19 @@ defmodule VivvoWeb.PropertyLiveTest do
       tenant = user_fixture(%{preferred_roles: [:tenant]})
 
       _contract =
-        contract_fixture(scope, %{
-          property_id: property.id,
-          tenant_id: tenant.id,
-          start_date: Date.add(Date.utc_today(), -10),
-          end_date: Date.add(Date.utc_today(), 10)
-        })
+        contract_fixture(
+          scope,
+          %{
+            property_id: property.id,
+            tenant_id: tenant.id,
+            start_date: Date.add(Date.utc_today(), -10),
+            end_date: Date.add(Date.utc_today(), 10),
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       {:ok, _show_live, html} = live(conn, ~p"/properties/#{property}")
 
@@ -429,10 +436,12 @@ defmodule VivvoWeb.PropertyLiveTest do
       # Initially no contract for our property
       assert html =~ "No active contract"
 
-      # Create contract for OTHER property
+      # Create contract for OTHER property using future dates
+      today = Date.utc_today()
+
       contract_attrs = %{
-        start_date: ~D[2026-02-05],
-        end_date: ~D[2026-03-05],
+        start_date: today,
+        end_date: Date.add(today, 30),
         tenant_id: tenant.id,
         expiration_day: 5,
         rent: "100.00",

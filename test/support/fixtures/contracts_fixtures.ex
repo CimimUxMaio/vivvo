@@ -10,7 +10,7 @@ defmodule Vivvo.ContractsFixtures do
   @doc """
   Generate a contract.
   """
-  def contract_fixture(scope, attrs \\ %{}) do
+  def contract_fixture(scope, attrs \\ %{}, opts \\ []) do
     # Create tenant and property if not provided
     tenant =
       if Map.has_key?(attrs, :tenant_id) do
@@ -45,7 +45,7 @@ defmodule Vivvo.ContractsFixtures do
 
     attrs = Enum.into(attrs, default_attrs)
 
-    {:ok, contract} = Vivvo.Contracts.create_contract(scope, attrs)
+    {:ok, contract} = Vivvo.Contracts.create_contract(scope, attrs, opts)
     contract
   end
 
@@ -53,15 +53,24 @@ defmodule Vivvo.ContractsFixtures do
   Generate an expired contract (end_date in the past).
   """
   def expired_contract_fixture(scope, attrs \\ %{}) do
-    contract_fixture(
-      scope,
+    today = Date.utc_today()
+
+    merged_attrs =
       Map.merge(
         %{
-          start_date: Date.add(Date.utc_today(), -60),
-          end_date: Date.add(Date.utc_today(), -1)
+          start_date: Date.add(today, -60),
+          end_date: Date.add(today, -1),
+          index_type: :fixed_percentage,
+          rent_period_duration: 12
         },
         attrs
       )
+
+    contract_fixture(
+      scope,
+      merged_attrs,
+      past_start_date?: true,
+      index_value: Decimal.new("0.0")
     )
   end
 end

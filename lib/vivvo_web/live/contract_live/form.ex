@@ -75,7 +75,13 @@ defmodule VivvoWeb.ContractLive.Form do
         />
 
         <%!-- Date fields --%>
-        <.input field={@form[:start_date]} type="date" label="Start Date" required />
+        <.input
+          field={@form[:start_date]}
+          type="date"
+          label="Start Date"
+          required
+          min={Date.utc_today()}
+        />
         <.input field={@form[:end_date]} type="date" label="End Date" required />
 
         <%!-- Expiration day --%>
@@ -192,6 +198,23 @@ defmodule VivvoWeb.ContractLive.Form do
         message =
           "Cannot create contract: an existing contract for this property overlaps with the selected dates " <>
             "(#{existing_contract.start_date} to #{existing_contract.end_date})"
+
+        {:noreply,
+         socket
+         |> put_flash(:error, message)
+         |> assign(
+           form:
+             to_form(
+               Contracts.change_contract(
+                 socket.assigns.current_scope,
+                 socket.assigns.contract,
+                 contract_params
+               )
+             )
+         )}
+
+      {:error, :past_start_date, _start_date} ->
+        message = "Cannot create contract: start date cannot be in the past"
 
         {:noreply,
          socket

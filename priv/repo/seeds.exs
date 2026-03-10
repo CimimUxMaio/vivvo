@@ -168,15 +168,22 @@ contract1_start = Date.add(today, -180)
 contract1_end = Date.add(today, 180)
 
 {:ok, contract1} =
-  Contracts.create_contract(demo_scope, %{
-    start_date: contract1_start,
-    end_date: contract1_end,
-    expiration_day: 5,
-    rent: Decimal.new("1200.00"),
-    property_id: sunset_apt.id,
-    tenant_id: tenant1.id,
-    notes: "Standard 1-year lease"
-  })
+  Contracts.create_contract(
+    demo_scope,
+    %{
+      start_date: contract1_start,
+      end_date: contract1_end,
+      expiration_day: 5,
+      rent: Decimal.new("1200.00"),
+      property_id: sunset_apt.id,
+      tenant_id: tenant1.id,
+      notes: "Standard 1-year lease with 6-month rent updates",
+      index_type: :fixed_percentage,
+      rent_period_duration: 6
+    },
+    past_start_date?: true,
+    index_value: Decimal.new("0.03")
+  )
 
 IO.puts("Created Contract 1 (Active: Sunset Apts → Tenant1)")
 
@@ -299,15 +306,22 @@ contract2_start = Date.add(today, -90)
 contract2_end = Date.add(today, 270)
 
 {:ok, contract2} =
-  Contracts.create_contract(demo_scope, %{
-    start_date: contract2_start,
-    end_date: contract2_end,
-    expiration_day: 10,
-    rent: Decimal.new("1500.00"),
-    property_id: downtown_loft.id,
-    tenant_id: tenant2.id,
-    notes: "Furnished loft, utilities included"
-  })
+  Contracts.create_contract(
+    demo_scope,
+    %{
+      start_date: contract2_start,
+      end_date: contract2_end,
+      expiration_day: 10,
+      rent: Decimal.new("1500.00"),
+      property_id: downtown_loft.id,
+      tenant_id: tenant2.id,
+      notes: "Furnished loft with annual CPI adjustments",
+      index_type: :cpi,
+      rent_period_duration: 12
+    },
+    past_start_date?: true,
+    index_value: Decimal.new("0.025")
+  )
 
 IO.puts("Created Contract 2 (Active: Downtown Loft → Tenant2)")
 
@@ -404,15 +418,22 @@ contract3_start = Date.add(today, -300)
 contract3_end = Date.add(today, 60)
 
 {:ok, contract3} =
-  Contracts.create_contract(demo_scope, %{
-    start_date: contract3_start,
-    end_date: contract3_end,
-    expiration_day: 15,
-    rent: Decimal.new("2000.00"),
-    property_id: garden_villa.id,
-    tenant_id: demo_user.id,
-    notes: "Demo user's own rental - ending soon"
-  })
+  Contracts.create_contract(
+    demo_scope,
+    %{
+      start_date: contract3_start,
+      end_date: contract3_end,
+      expiration_day: 15,
+      rent: Decimal.new("2000.00"),
+      property_id: garden_villa.id,
+      tenant_id: demo_user.id,
+      notes: "Demo user's own rental - ending soon",
+      index_type: :fixed_percentage,
+      rent_period_duration: 3
+    },
+    past_start_date?: true,
+    index_value: Decimal.new("0.04")
+  )
 
 IO.puts("Created Contract 3 (Ending Soon: Garden Villa → Demo User)")
 
@@ -489,15 +510,22 @@ contract4_start = Date.add(today, -450)
 contract4_end = Date.add(today, -90)
 
 {:ok, contract4} =
-  Contracts.create_contract(demo_scope, %{
-    start_date: contract4_start,
-    end_date: contract4_end,
-    expiration_day: 5,
-    rent: Decimal.new("1800.00"),
-    property_id: city_penthouse.id,
-    tenant_id: tenant2.id,
-    notes: "Completed 1-year lease"
-  })
+  Contracts.create_contract(
+    demo_scope,
+    %{
+      start_date: contract4_start,
+      end_date: contract4_end,
+      expiration_day: 5,
+      rent: Decimal.new("1800.00"),
+      property_id: city_penthouse.id,
+      tenant_id: tenant2.id,
+      notes: "Completed 1-year lease with annual rent adjustments",
+      index_type: :fixed_percentage,
+      rent_period_duration: 12
+    },
+    past_start_date?: true,
+    index_value: Decimal.new("0.02")
+  )
 
 IO.puts("Created Contract 4 (Expired: City Penthouse → Tenant2)")
 
@@ -556,15 +584,22 @@ contract5_start = Date.add(today, -60)
 contract5_end = Date.add(today, 300)
 
 {:ok, contract5} =
-  Contracts.create_contract(demo_scope, %{
-    start_date: contract5_start,
-    end_date: contract5_end,
-    expiration_day: 5,
-    rent: Decimal.new("900.00"),
-    property_id: cozy_studio.id,
-    tenant_id: tenant3.id,
-    notes: "Budget-friendly studio"
-  })
+  Contracts.create_contract(
+    demo_scope,
+    %{
+      start_date: contract5_start,
+      end_date: contract5_end,
+      expiration_day: 5,
+      rent: Decimal.new("900.00"),
+      property_id: cozy_studio.id,
+      tenant_id: tenant3.id,
+      notes: "Budget-friendly studio with 6-month adjustments",
+      index_type: :cpi,
+      rent_period_duration: 6
+    },
+    past_start_date?: true,
+    index_value: Decimal.new("0.035")
+  )
 
 IO.puts("Created Contract 5 (Active: Cozy Studio → Tenant3)")
 

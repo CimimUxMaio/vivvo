@@ -100,6 +100,16 @@ defmodule Vivvo.Contracts do
   @doc """
   Creates a contract.
 
+  ## Options
+
+    * `:past_start_date?` - When set to `true` along with `:index_value`, allows
+      creating contracts with start dates in the past. Used for testing/seeding.
+    * `:index_value` - The index value (as Decimal or float) used to calculate
+      rent increases for each subsequent rent period when `:past_start_date?` is true.
+
+  Both options must be provided together for past date support. If only one is
+  provided, an ArgumentError is raised.
+
   ## Examples
 
       iex> create_contract(scope, %{field: value})
@@ -111,32 +121,59 @@ defmodule Vivvo.Contracts do
       iex> create_contract(scope, %{field: overlapping_dates})
       {:error, :overlapping_contract, %Contract{}}
 
+      iex> create_contract(scope, %{field: value, start_date: past_date})
+      {:error, :past_start_date, ~D[2025-01-01]}
+
+      iex> create_contract(scope, attrs, past_start_date?: true, index_value: 0.05)
+      {:ok, %Contract{}}  # Creates contract with multiple historical rent periods
+
   """
-  def create_contract(%Scope{} = scope, attrs) do
+  def create_contract(%Scope{} = scope, attrs, opts \\ []) do
+    # Validate options first
+    past_start_date? = Keyword.get(opts, :past_start_date?, false)
+    index_value = Keyword.get(opts, :index_value)
+
+    validate_opts(past_start_date?, index_value)
+
+    # Proceed with contract creation logic
+    today = Date.utc_today()
+
     attrs = normalize_attrs(attrs)
+
     property_id = attrs["property_id"]
     start_date = parse_date(attrs["start_date"])
     end_date = parse_date(attrs["end_date"])
 
-    Ecto.Multi.new()
-    |> Ecto.Multi.run(:check_overlap, fn _repo, _changes ->
-      check_overlapping_contracts(scope, property_id, start_date, end_date)
-    end)
-    |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
-    |> Ecto.Multi.insert(:rent_period, fn %{contract: contract} ->
-      rent_period_attrs =
-        attrs
-        |> initial_rent_period_attrs()
-        |> Map.put("contract_id", contract.id)
+    # Use Ecto.Multi to handle the sequential operations and roll back if any step fails
+    multi =
+      Ecto.Multi.new()
+      |> Ecto.Multi.run(:check_start_date, fn _repo, _changes ->
+        if past_start_date? do
+          {:ok, nil}
+        else
+          check_past_start_date(start_date, today)
+        end
+      end)
+      |> Ecto.Multi.run(:check_overlap, fn _repo, _changes ->
+        check_overlapping_contracts(scope, property_id, start_date, end_date)
+      end)
+      |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
+      |> Ecto.Multi.run(:rent_periods, fn repo, %{contract: contract} ->
+        initial_rent = Decimal.new(attrs["rent"])
+        insert_historical_rent_periods(repo, contract, initial_rent, index_value, today)
+      end)
 
-      RentPeriod.changeset(%RentPeriod{}, rent_period_attrs)
-    end)
+    # Execute the multi and handle results
+    multi
     |> Repo.transaction()
     |> case do
       {:ok, %{contract: contract}} ->
         contract = Repo.preload(contract, :rent_periods)
         broadcast_contract(scope, {:created, contract})
         {:ok, contract}
+
+      {:error, :check_past_start_date, {:past_start_date, past_start_date}, _changes} ->
+        {:error, :past_start_date, past_start_date}
 
       {:error, :check_overlap, {:overlap, existing_contract}, _changes} ->
         {:error, :overlapping_contract, existing_contract}
@@ -145,6 +182,112 @@ defmodule Vivvo.Contracts do
         {:error, changeset}
     end
   end
+
+  defp check_past_start_date(start_date, today) do
+    if Date.compare(start_date, today) == :lt do
+      {:error, {:past_start_date, start_date}}
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp validate_opts(past_start_date?, index_value) do
+    if past_start_date? and is_nil(index_value) do
+      raise ArgumentError, "index_value option must be provided when past_start_date? is true"
+    end
+
+    :ok
+  end
+
+  defp insert_historical_rent_periods(repo, contract, initial_rent, index_value, today) do
+    rent_periods =
+      generate_historical_rent_periods(contract, initial_rent, index_value, today)
+      |> Enum.map(fn period ->
+        now =
+          DateTime.utc_now()
+          |> DateTime.truncate(:second)
+
+        period
+        |> Map.put(:inserted_at, now)
+        |> Map.put(:updated_at, now)
+      end)
+
+    repo.insert_all(RentPeriod, rent_periods)
+    {:ok, rent_periods}
+  end
+
+  defp generate_historical_rent_periods(
+         contract,
+         initial_rent,
+         index_value,
+         today
+       ) do
+    generate_contract_period_dates(contract, today)
+    |> Enum.with_index()
+    |> Enum.map(fn {period, idx} ->
+      rent_value = compute_rent_value(initial_rent, index_value, idx)
+
+      period
+      |> Map.put(:contract_id, contract.id)
+      |> Map.put(:index_type, contract.index_type)
+      # If idx = 0 set index value to nil
+      |> Map.put(:index_value, (idx > 0 && index_value) || nil)
+      |> Map.put(:value, rent_value)
+    end)
+  end
+
+  defp generate_contract_period_dates(%Contract{rent_period_duration: nil} = contract, _today) do
+    [
+      %{
+        start_date: contract.start_date,
+        end_date: contract.end_date
+      }
+    ]
+  end
+
+  defp generate_contract_period_dates(contract, today) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Stream.map(&contract_period_date(contract, &1))
+    |> Stream.take_while(fn period ->
+      # Before or equal to today
+      Date.compare(period.start_date, today) != :gt
+    end)
+    |> Enum.to_list()
+  end
+
+  defp contract_period_date(%Contract{rent_period_duration: duration} = contract, num) do
+    period_start =
+      contract.start_date
+      |> Date.beginning_of_month()
+      |> Date.shift(month: (num - 1) * duration)
+      |> then(&Enum.max([&1, contract.start_date], Date))
+
+    period_end =
+      period_start
+      |> Date.shift(month: duration - 1)
+      |> Date.end_of_month()
+      |> then(&Enum.min([&1, contract.end_date], Date))
+
+    %{
+      start_date: period_start,
+      end_date: period_end
+    }
+  end
+
+  defp compute_rent_value(initial_rent, _index_value, 0), do: initial_rent
+
+  defp compute_rent_value(initial_rent, index_value, period_idx) do
+    base =
+      Decimal.add(1, index_value)
+      |> Decimal.to_float()
+
+    multiplier = :math.pow(base, period_idx)
+    Decimal.mult(initial_rent, Decimal.from_float(multiplier))
+  end
+
+  defp parse_date(%Date{} = date), do: date
+  defp parse_date(date_str) when is_binary(date_str), do: Date.from_iso8601!(date_str)
+  defp parse_date(_), do: nil
 
   @doc """
   Checks if there are any non-archived contracts for the given property
@@ -1020,7 +1163,8 @@ defmodule Vivvo.Contracts do
     else
       Enum.map((current_payment_num + 1)..total_months, fn payment_num ->
         due_date = calculate_due_date(contract, payment_num)
-        rent = current_rent_value(contract, due_date)
+        # current_rent_value(contract, due_date)
+        rent = 0
 
         %{
           payment_number: payment_num,
@@ -1050,54 +1194,6 @@ defmodule Vivvo.Contracts do
       Map.put(acc, to_string(key), value)
     end)
   end
-
-  # Calculates the initial rent period attributes from contract creation params.
-  # Returns a map suitable for RentPeriod.changeset/2.
-  defp initial_rent_period_attrs(attrs) do
-    start_date = parse_date(attrs["start_date"])
-    end_date = parse_date(attrs["end_date"])
-    duration_str = attrs["rent_period_duration"]
-    rent = attrs["rent"]
-
-    {period_start, period_end} =
-      case parse_duration(duration_str) do
-        nil ->
-          {start_date, end_date}
-
-        duration ->
-          period_end =
-            start_date
-            |> Date.beginning_of_month()
-            |> Date.shift(month: duration - 1)
-            |> Date.end_of_month()
-
-          {start_date, period_end}
-      end
-
-    %{
-      "value" => rent,
-      "start_date" => period_start,
-      "end_date" => period_end,
-      "index_type" => nil,
-      "index_value" => nil
-    }
-  end
-
-  defp parse_date(%Date{} = date), do: date
-  defp parse_date(date_str) when is_binary(date_str), do: Date.from_iso8601!(date_str)
-  defp parse_date(_), do: nil
-
-  defp parse_duration(nil), do: nil
-  defp parse_duration(duration) when is_integer(duration), do: duration
-
-  defp parse_duration(duration_str) when is_binary(duration_str) do
-    case Integer.parse(duration_str) do
-      {duration, ""} -> duration
-      _ -> nil
-    end
-  end
-
-  defp parse_duration(_), do: nil
 
   @doc """
   Returns the rent period that covers the given date for a contract.

@@ -126,13 +126,18 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
       # Submit invalid data with end_date before start_date
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-10",
-            end_date: "2026-02-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id
           }
         )
@@ -147,12 +152,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-10",
-            end_date: "2026-02-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5,
             rent: "100"
@@ -169,12 +179,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 10)
+      end_date = Date.add(today, 30)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-02-10",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 25,
             rent: "100"
@@ -190,13 +205,18 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 10)
+      end_date = Date.add(today, 30)
+
       # Submit with missing required fields to trigger validation
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-02-10"
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date)
           }
         )
         |> render_submit()
@@ -211,12 +231,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-10",
-            end_date: "2026-02-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5
           }
@@ -237,12 +262,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
       |> form("#contract-form", contract: %{index_type: "cpi"})
       |> render_change()
 
+      # Use future dates for testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 10)
+      end_date = Date.add(today, 365)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-12-31",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5,
             rent: "1000",
@@ -265,9 +295,9 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
-      # Use future dates that include today's date for proper rent period coverage
+      # Use future dates to avoid past_start_date validation error
       today = Date.utc_today()
-      start_date = Date.add(today, -5)
+      start_date = Date.add(today, 5)
       end_date = Date.add(today, 30)
 
       {:ok, _view, html} =
@@ -299,9 +329,9 @@ defmodule VivvoWeb.ContractLive.FormTest do
       |> form("#contract-form", contract: %{index_type: "cpi"})
       |> render_change()
 
-      # Use future dates that include today's date for proper rent period coverage
+      # Use future dates to avoid past_start_date validation error
       today = Date.utc_today()
-      start_date = Date.add(today, -5)
+      start_date = Date.add(today, 5)
       end_date = Date.add(today, 365)
 
       {:ok, _view, html} =
@@ -330,9 +360,9 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
-      # Use future dates that include today's date for proper rent period coverage
+      # Use future dates to avoid past_start_date validation error
       today = Date.utc_today()
-      start_date = Date.add(today, -5)
+      start_date = Date.add(today, 5)
       end_date = Date.add(today, 30)
 
       {:ok, _, html} =
@@ -358,12 +388,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-10",
-            end_date: "2026-02-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5
           }

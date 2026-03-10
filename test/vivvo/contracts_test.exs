@@ -168,22 +168,24 @@ defmodule Vivvo.ContractsTest do
       property = property_fixture(scope)
       today = Date.utc_today()
 
-      contract_fixture(scope, %{
-        property_id: property.id,
-        tenant_id: tenant.id,
-        start_date: Date.add(today, -30),
-        end_date: Date.add(today, 30)
-      })
+      # Create contract starting today
+      _contract =
+        contract_fixture(scope, %{
+          property_id: property.id,
+          tenant_id: tenant.id,
+          start_date: today,
+          end_date: Date.add(today, 60)
+        })
 
       # Should find contract when querying today
       assert Contracts.current_contract_for_property(scope, property.id, today) != nil
 
       # Should not find contract when querying before start_date
-      assert Contracts.current_contract_for_property(scope, property.id, Date.add(today, -60)) ==
+      assert Contracts.current_contract_for_property(scope, property.id, Date.add(today, -1)) ==
                nil
 
       # Should not find contract when querying after end_date
-      assert Contracts.current_contract_for_property(scope, property.id, Date.add(today, 60)) ==
+      assert Contracts.current_contract_for_property(scope, property.id, Date.add(today, 61)) ==
                nil
     end
   end
@@ -194,9 +196,11 @@ defmodule Vivvo.ContractsTest do
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
 
+      today = Date.utc_today()
+
       valid_attrs = %{
-        start_date: ~D[2026-02-04],
-        end_date: ~D[2026-03-04],
+        start_date: today,
+        end_date: Date.add(today, 30),
         expiration_day: 5,
         notes: "some notes",
         rent: "120.5",
@@ -205,8 +209,8 @@ defmodule Vivvo.ContractsTest do
       }
 
       assert {:ok, %Contract{} = contract} = Contracts.create_contract(scope, valid_attrs)
-      assert contract.start_date == ~D[2026-02-04]
-      assert contract.end_date == ~D[2026-03-04]
+      assert contract.start_date == today
+      assert contract.end_date == Date.add(today, 30)
       assert contract.expiration_day == 5
       assert contract.notes == "some notes"
       assert contract.user_id == scope.user.id
@@ -216,9 +220,9 @@ defmodule Vivvo.ContractsTest do
       # Verify rent period was created
       assert length(contract.rent_periods) == 1
       [rent_period] = contract.rent_periods
-      assert rent_period.value == Decimal.new("120.5")
-      assert rent_period.start_date == ~D[2026-02-04]
-      assert rent_period.end_date == ~D[2026-03-04]
+      assert Decimal.equal?(rent_period.value, Decimal.new("120.5"))
+      assert rent_period.start_date == today
+      assert rent_period.end_date == Date.add(today, 30)
       assert rent_period.index_type == nil
       assert rent_period.index_value == nil
     end
@@ -227,10 +231,11 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
       valid_attrs = %{
-        start_date: ~D[2026-01-10],
-        end_date: ~D[2027-08-15],
+        start_date: today,
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1200.00",
         rent_period_duration: 3,
@@ -242,23 +247,31 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = contract} = Contracts.create_contract(scope, valid_attrs)
       assert contract.rent_period_duration == 3
 
-      # With 3-month duration starting 2026-01-10:
-      # beginning_of_month(2026-01-10) = 2026-01-01
-      # shift by (3-1) = 2 months = 2026-03-01
-      # end_of_month(2026-03-01) = 2026-03-31
+      # With 3-month duration starting today:
+      # beginning_of_month(today) = first day of current month
+      # shift by (3-1) = 2 months = first day of month + 2 months
+      # end_of_month(...) = last day of that month
       [rent_period] = contract.rent_periods
-      assert rent_period.start_date == ~D[2026-01-10]
-      assert rent_period.end_date == ~D[2026-03-31]
+      assert rent_period.start_date == today
+
+      expected_end =
+        today
+        |> Date.beginning_of_month()
+        |> Date.shift(month: 2)
+        |> Date.end_of_month()
+
+      assert rent_period.end_date == expected_end
     end
 
     test "without rent_period_duration creates single period spanning entire contract" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
       valid_attrs = %{
-        start_date: ~D[2026-03-20],
-        end_date: ~D[2027-02-10],
+        start_date: today,
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property.id,
@@ -269,18 +282,19 @@ defmodule Vivvo.ContractsTest do
       assert contract.rent_period_duration == nil
 
       [rent_period] = contract.rent_periods
-      assert rent_period.start_date == ~D[2026-03-20]
-      assert rent_period.end_date == ~D[2027-02-10]
+      assert rent_period.start_date == today
+      assert rent_period.end_date == Date.add(today, 365)
     end
 
     test "with index_type and index_value" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
       valid_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2027-01-01],
+        start_date: today,
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1000.00",
         rent_period_duration: 12,
@@ -292,9 +306,9 @@ defmodule Vivvo.ContractsTest do
 
       assert {:ok, %Contract{} = contract} = Contracts.create_contract(scope, valid_attrs)
       assert contract.index_type == :cpi
-      # Initial rent period still has nil index fields
       [rent_period] = contract.rent_periods
-      assert rent_period.index_type == nil
+      assert rent_period.index_type == :cpi
+      # Initial rent period still has nil index value
       assert rent_period.index_value == nil
     end
 
@@ -307,11 +321,12 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
-      # Create existing contract: 2026-01-01 to 2026-06-30
+      # Create existing contract: today to 6 months later
       existing_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2026-06-30],
+        start_date: today,
+        end_date: Date.add(today, 180),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property.id,
@@ -321,10 +336,10 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = existing_contract} =
                Contracts.create_contract(scope, existing_attrs)
 
-      # Try to create overlapping contract: 2026-03-01 to 2026-12-31 (overlaps at start)
+      # Try to create overlapping contract: 2 months later to 12 months later (overlaps at start)
       overlapping_attrs = %{
-        start_date: ~D[2026-03-01],
-        end_date: ~D[2026-12-31],
+        start_date: Date.add(today, 60),
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1200.00",
         property_id: property.id,
@@ -341,11 +356,12 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
-      # Create existing contract: 2026-06-01 to 2026-12-31
+      # Create existing contract: 6 months from now to 12 months from now
       existing_attrs = %{
-        start_date: ~D[2026-06-01],
-        end_date: ~D[2026-12-31],
+        start_date: Date.add(today, 180),
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property.id,
@@ -355,10 +371,10 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = existing_contract} =
                Contracts.create_contract(scope, existing_attrs)
 
-      # Try to create overlapping contract: 2026-01-01 to 2026-08-31 (overlaps at end)
+      # Try to create overlapping contract: today to 8 months later (overlaps at end)
       overlapping_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2026-08-31],
+        start_date: today,
+        end_date: Date.add(today, 240),
         expiration_day: 5,
         rent: "1200.00",
         property_id: property.id,
@@ -375,11 +391,12 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
-      # Create existing contract: 2026-03-01 to 2026-09-30
+      # Create existing contract: 3 months from now to 9 months from now
       existing_attrs = %{
-        start_date: ~D[2026-03-01],
-        end_date: ~D[2026-09-30],
+        start_date: Date.add(today, 90),
+        end_date: Date.add(today, 270),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property.id,
@@ -389,10 +406,10 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = existing_contract} =
                Contracts.create_contract(scope, existing_attrs)
 
-      # Try to create overlapping contract: 2026-01-01 to 2026-12-31 (completely contains existing)
+      # Try to create overlapping contract: today to 12 months later (completely contains existing)
       overlapping_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2026-12-31],
+        start_date: today,
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1200.00",
         property_id: property.id,
@@ -409,11 +426,12 @@ defmodule Vivvo.ContractsTest do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
-      # Create existing contract: 2026-01-01 to 2026-06-30
+      # Create existing contract: today to 6 months later
       existing_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2026-06-30],
+        start_date: today,
+        end_date: Date.add(today, 180),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property.id,
@@ -422,10 +440,12 @@ defmodule Vivvo.ContractsTest do
 
       assert {:ok, %Contract{}} = Contracts.create_contract(scope, existing_attrs)
 
-      # Create non-overlapping contract: 2026-07-01 to 2026-12-31 (starts exactly after existing ends)
+      # Create non-overlapping contract: 6 months + 1 day later to 12 months later (starts after existing ends)
+      non_overlapping_start = Date.add(today, 181)
+
       non_overlapping_attrs = %{
-        start_date: ~D[2026-07-01],
-        end_date: ~D[2026-12-31],
+        start_date: non_overlapping_start,
+        end_date: Date.add(today, 365),
         expiration_day: 5,
         rent: "1200.00",
         property_id: property.id,
@@ -435,19 +455,117 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = new_contract} =
                Contracts.create_contract(scope, non_overlapping_attrs)
 
-      assert new_contract.start_date == ~D[2026-07-01]
-      assert new_contract.end_date == ~D[2026-12-31]
+      assert new_contract.start_date == non_overlapping_start
+      assert new_contract.end_date == Date.add(today, 365)
+    end
+
+    test "returns past_start_date error when start_date is in the past" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+      today = Date.utc_today()
+      past_date = Date.add(today, -30)
+
+      attrs = %{
+        start_date: past_date,
+        end_date: Date.add(today, 30),
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:error, {:past_start_date, returned_date}} = Contracts.create_contract(scope, attrs)
+      assert returned_date == past_date
+    end
+
+    test "raises ArgumentError when only past_start_date? option is provided" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+      today = Date.utc_today()
+
+      attrs = %{
+        start_date: Date.add(today, -30),
+        end_date: Date.add(today, 30),
+        expiration_day: 5,
+        rent: "1000.00",
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert_raise ArgumentError,
+                   "index_value option must be provided when past_start_date? is true",
+                   fn ->
+                     Contracts.create_contract(scope, attrs, past_start_date?: true)
+                   end
+    end
+
+    test "creates contract with multiple rent periods when using past date options" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+      today = Date.utc_today()
+
+      # Create a contract starting 6 months ago with 3-month rent periods
+      # This should generate at least 2-3 rent periods to cover up to today
+      attrs = %{
+        start_date: Date.add(today, -180),
+        end_date: Date.add(today, 180),
+        expiration_day: 5,
+        rent: "1000.00",
+        rent_period_duration: 3,
+        index_type: :fixed_percentage,
+        property_id: property.id,
+        tenant_id: tenant.id
+      }
+
+      assert {:ok, %Contract{} = contract} =
+               Contracts.create_contract(scope, attrs,
+                 past_start_date?: true,
+                 index_value: Decimal.new("0.05")
+               )
+
+      # Should have multiple rent periods (at least 2, probably 3)
+      assert length(contract.rent_periods) >= 2
+
+      # First period should have the initial rent
+      first_period = Enum.min_by(contract.rent_periods, & &1.start_date, Date)
+      assert Decimal.equal?(first_period.value, Decimal.new("1000.00"))
+      assert first_period.start_date == Date.add(today, -180)
+
+      # Verify periods have increasing rent values (applying 5% index)
+      sorted_periods = Enum.sort_by(contract.rent_periods, & &1.start_date, Date)
+
+      sorted_periods
+      |> Enum.with_index()
+      |> Enum.reduce(nil, fn {period, index}, prev_rent ->
+        assert period.index_type == :fixed_percentage
+        assert period.index_value == ((index > 0 && Decimal.new("0.05")) || nil)
+
+        if index > 0 do
+          expected_rent = Decimal.mult(prev_rent, Decimal.new("1.05"))
+          assert Decimal.compare(period.value, expected_rent) == :eq
+        end
+
+        period.value
+      end)
+
+      # The last period should cover today's date or later
+      last_period = List.last(sorted_periods)
+      assert Date.compare(last_period.end_date, today) != :lt
     end
 
     test "archived contracts do not block new contracts" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
+      today = Date.utc_today()
 
-      # Create existing contract: 2026-01-01 to 2026-06-30
+      # Create existing contract: today to 6 months later
       existing_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2026-06-30],
+        start_date: today,
+        end_date: Date.add(today, 180),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property.id,
@@ -459,10 +577,13 @@ defmodule Vivvo.ContractsTest do
       # Archive the contract
       assert {:ok, _} = Contracts.delete_contract(scope, existing_contract)
 
-      # Create overlapping contract: 2026-03-01 to 2026-09-30 (would overlap if not archived)
+      # Create overlapping contract: 2 months later to 9 months later (would overlap if not archived)
+      new_start = Date.add(today, 60)
+      new_end = Date.add(today, 270)
+
       overlapping_attrs = %{
-        start_date: ~D[2026-03-01],
-        end_date: ~D[2026-09-30],
+        start_date: new_start,
+        end_date: new_end,
         expiration_day: 5,
         rent: "1200.00",
         property_id: property.id,
@@ -472,8 +593,8 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = new_contract} =
                Contracts.create_contract(scope, overlapping_attrs)
 
-      assert new_contract.start_date == ~D[2026-03-01]
-      assert new_contract.end_date == ~D[2026-09-30]
+      assert new_contract.start_date == new_start
+      assert new_contract.end_date == new_end
     end
 
     test "contracts for different properties do not block each other" do
@@ -481,11 +602,12 @@ defmodule Vivvo.ContractsTest do
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property1 = property_fixture(scope)
       property2 = property_fixture(scope)
+      today = Date.utc_today()
 
-      # Create contract for property1: 2026-01-01 to 2026-06-30
+      # Create contract for property1: today to 6 months later
       existing_attrs = %{
-        start_date: ~D[2026-01-01],
-        end_date: ~D[2026-06-30],
+        start_date: today,
+        end_date: Date.add(today, 180),
         expiration_day: 5,
         rent: "1000.00",
         property_id: property1.id,
@@ -496,8 +618,8 @@ defmodule Vivvo.ContractsTest do
 
       # Create overlapping dates but for different property
       new_contract_attrs = %{
-        start_date: ~D[2026-03-01],
-        end_date: ~D[2026-09-30],
+        start_date: Date.add(today, 60),
+        end_date: Date.add(today, 270),
         expiration_day: 5,
         rent: "1200.00",
         property_id: property2.id,
@@ -697,11 +819,18 @@ defmodule Vivvo.ContractsTest do
       start_date = Date.add(today, -60)
 
       contract =
-        contract_fixture(scope, %{
-          start_date: start_date,
-          end_date: Date.add(start_date, 365),
-          expiration_day: 1
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: start_date,
+            end_date: Date.add(start_date, 365),
+            expiration_day: 1,
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       result = Contracts.get_past_payment_numbers(contract, today)
 
@@ -712,12 +841,11 @@ defmodule Vivvo.ContractsTest do
 
     test "excludes current payment number when its due date hasn't passed" do
       scope = user_scope_fixture()
-      # Use a fixed date (Feb 15) with expiration_day=20 so due date hasn't passed
-      today = ~D[2026-02-15]
-      # Contract started 2 months ago (Dec 15)
-      start_date = ~D[2025-12-15]
-      # expiration_day=20 > today.day=15, so due date hasn't passed
-      expiration_day = 20
+      today = Date.utc_today()
+      # Contract starting today with expiration_day in the future
+      start_date = today
+      # Use tomorrow's day number (or 28 if today is end of month)
+      expiration_day = min(today.day + 1, 28)
 
       contract =
         contract_fixture(scope, %{
@@ -728,9 +856,12 @@ defmodule Vivvo.ContractsTest do
 
       result = Contracts.get_past_payment_numbers(contract, today)
 
-      # Current month (month 3, due Feb 20) hasn't passed yet
+      # Current month hasn't passed yet since expiration_day > today.day
+      # For a contract starting today, current payment number is 1
+      # but no periods have passed yet, so result should be empty
       current = Contracts.get_current_payment_number(contract)
-      assert List.last(result) == current - 1
+      assert current == 1
+      assert result == []
     end
   end
 
@@ -741,7 +872,7 @@ defmodule Vivvo.ContractsTest do
 
       contract =
         contract_fixture(scope, %{
-          start_date: Date.add(today, -30),
+          start_date: today,
           end_date: Date.add(today, 365),
           rent: "1000.00"
         })
@@ -749,7 +880,7 @@ defmodule Vivvo.ContractsTest do
       # The date today should be covered by the rent period
       period = Contracts.current_rent_period(contract, today)
       assert period != nil
-      assert period.value == Decimal.new("1000.00")
+      assert Decimal.equal?(period.value, Decimal.new("1000.00"))
       assert Date.compare(period.start_date, today) != :gt
       assert Date.compare(period.end_date, today) != :lt
     end
@@ -769,7 +900,7 @@ defmodule Vivvo.ContractsTest do
       today = Date.utc_today()
       period = Contracts.current_rent_period(contract, today)
       assert period != nil
-      assert period.value == Decimal.new("1000.00")
+      assert Decimal.equal?(period.value, Decimal.new("1000.00"))
       # Should be the earliest (and only) period
       assert period.start_date == future_start
     end
@@ -798,11 +929,18 @@ defmodule Vivvo.ContractsTest do
 
       # Create a contract that started in the past
       contract =
-        contract_fixture(scope, %{
-          start_date: Date.add(today, -90),
-          end_date: Date.add(today, 365),
-          rent: "1000.00"
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.add(today, -90),
+            end_date: Date.add(today, 365),
+            rent: "1000.00",
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       # Manually create a contract struct with rent periods that don't cover today
       contract_with_bad_periods = %{
@@ -825,7 +963,7 @@ defmodule Vivvo.ContractsTest do
     test "handles edge case: date exactly on start_date boundary" do
       scope = user_scope_fixture()
       today = Date.utc_today()
-      start_date = Date.add(today, -30)
+      start_date = today
 
       contract =
         contract_fixture(scope, %{
@@ -837,18 +975,17 @@ defmodule Vivvo.ContractsTest do
       # Date exactly at start should be included
       period = Contracts.current_rent_period(contract, start_date)
       assert period != nil
-      assert period.value == Decimal.new("1000.00")
+      assert Decimal.equal?(period.value, Decimal.new("1000.00"))
     end
 
     test "handles edge case: date exactly on end_date boundary" do
       scope = user_scope_fixture()
       today = Date.utc_today()
-      start_date = Date.add(today, -30)
       end_date = Date.add(today, 365)
 
       contract =
         contract_fixture(scope, %{
-          start_date: start_date,
+          start_date: today,
           end_date: end_date,
           rent: "1000.00"
         })
@@ -860,17 +997,17 @@ defmodule Vivvo.ContractsTest do
       # Date exactly at end should be included
       period = Contracts.current_rent_period(contract, period_end)
       assert period != nil
-      assert period.value == Decimal.new("1000.00")
+      assert Decimal.equal?(period.value, Decimal.new("1000.00"))
     end
 
     test "handles multiple rent periods correctly" do
       scope = user_scope_fixture()
       today = Date.utc_today()
 
-      # Create contract with explicit rent periods
+      # Create contract starting today
       contract =
         contract_fixture(scope, %{
-          start_date: Date.add(today, -90),
+          start_date: today,
           end_date: Date.add(today, 365),
           rent: "1000.00"
         })
@@ -889,7 +1026,7 @@ defmodule Vivvo.ContractsTest do
 
       period = Contracts.current_rent_period(contract, today)
       assert period != nil
-      assert period.value == Decimal.new("900.00")
+      assert Decimal.equal?(period.value, Decimal.new("900.00"))
       # The returned period should be the latest one (closest to end_date)
       assert Date.compare(period.end_date, today) == :lt
     end
@@ -902,13 +1039,13 @@ defmodule Vivvo.ContractsTest do
 
       contract =
         contract_fixture(scope, %{
-          start_date: Date.add(today, -30),
+          start_date: today,
           end_date: Date.add(today, 365),
           rent: "1500.00"
         })
 
       rent_value = Contracts.current_rent_value(contract, today)
-      assert rent_value == Decimal.new("1500.00")
+      assert Decimal.equal?(rent_value, Decimal.new("1500.00"))
     end
 
     test "returns rent value for future contracts" do
@@ -924,7 +1061,7 @@ defmodule Vivvo.ContractsTest do
 
       today = Date.utc_today()
       rent_value = Contracts.current_rent_value(contract, today)
-      assert rent_value == Decimal.new("2000.00")
+      assert Decimal.equal?(rent_value, Decimal.new("2000.00"))
     end
 
     test "defaults to today when no date provided" do
@@ -933,13 +1070,13 @@ defmodule Vivvo.ContractsTest do
 
       contract =
         contract_fixture(scope, %{
-          start_date: Date.add(today, -30),
+          start_date: today,
           end_date: Date.add(today, 365),
           rent: "1200.00"
         })
 
       rent_value = Contracts.current_rent_value(contract)
-      assert rent_value == Decimal.new("1200.00")
+      assert Decimal.equal?(rent_value, Decimal.new("1200.00"))
     end
 
     test "returns latest period rent value for expired contracts" do
@@ -949,7 +1086,7 @@ defmodule Vivvo.ContractsTest do
         expired_contract_fixture(scope, %{rent: "850.00"})
 
       rent_value = Contracts.current_rent_value(contract)
-      assert rent_value == Decimal.new("850.00")
+      assert Decimal.equal?(rent_value, Decimal.new("850.00"))
     end
   end
 
@@ -968,13 +1105,20 @@ defmodule Vivvo.ContractsTest do
       today = Date.utc_today()
       # Create contract with multiple months (started 3 months ago)
       contract =
-        contract_fixture(scope, %{
-          rent: "1000.00",
-          start_date: Date.add(today, -90),
-          end_date: Date.add(today, 365),
-          expiration_day: 1,
-          tenant_id: tenant_scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            rent: "1000.00",
+            start_date: Date.add(today, -90),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant_scope.user.id,
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       property_id = contract.property_id
 
@@ -1055,13 +1199,20 @@ defmodule Vivvo.ContractsTest do
 
       # Create contract that started 2 months ago
       contract =
-        contract_fixture(scope, %{
-          rent: "500.00",
-          start_date: Date.add(today, -60),
-          end_date: Date.add(today, 365),
-          expiration_day: 1,
-          tenant_id: tenant_scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            rent: "500.00",
+            start_date: Date.add(today, -60),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant_scope.user.id,
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       property_id = contract.property_id
 
@@ -1132,13 +1283,20 @@ defmodule Vivvo.ContractsTest do
       # Start date in the current month, with expiration_day = 1 (already passed)
       start_date = Date.beginning_of_month(today)
 
-      contract_fixture(scope, %{
-        rent: "1000.00",
-        start_date: start_date,
-        end_date: Date.add(start_date, 365),
-        expiration_day: 1,
-        tenant_id: tenant_scope.user.id
-      })
+      contract_fixture(
+        scope,
+        %{
+          rent: "1000.00",
+          start_date: start_date,
+          end_date: Date.add(start_date, 365),
+          expiration_day: 1,
+          tenant_id: tenant_scope.user.id,
+          index_type: :fixed_percentage,
+          rent_period_duration: 12
+        },
+        past_start_date?: true,
+        index_value: Decimal.new("0.0")
+      )
     end
 
     test "multiple partial payments - uses completion payment delay only", %{
@@ -1251,13 +1409,20 @@ defmodule Vivvo.ContractsTest do
       start_date = Date.add(today, -55)
 
       contract =
-        contract_fixture(scope, %{
-          rent: "1000.00",
-          start_date: start_date,
-          end_date: Date.add(start_date, 365),
-          expiration_day: 1,
-          tenant_id: tenant_scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            rent: "1000.00",
+            start_date: start_date,
+            end_date: Date.add(start_date, 365),
+            expiration_day: 1,
+            tenant_id: tenant_scope.user.id,
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       # Verify we have exactly 3 past payment periods
       past_periods = Contracts.get_past_payment_numbers(contract, today)

@@ -68,13 +68,20 @@ defmodule VivvoWeb.HomeLiveTest do
       property = property_fixture(scope)
 
       contract =
-        contract_fixture(scope, %{
-          tenant_id: tenant.id,
-          property_id: property.id,
-          start_date: Date.add(Date.utc_today(), -30),
-          end_date: Date.add(Date.utc_today(), 365),
-          rent: "1200.00"
-        })
+        contract_fixture(
+          scope,
+          %{
+            tenant_id: tenant.id,
+            property_id: property.id,
+            start_date: Date.add(Date.utc_today(), -30),
+            end_date: Date.add(Date.utc_today(), 365),
+            rent: "1200.00",
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       {:ok, _payment} =
         Vivvo.Payments.create_payment(tenant_scope, %{
@@ -127,13 +134,20 @@ defmodule VivvoWeb.HomeLiveTest do
       property = property_fixture(owner_scope)
 
       _contract =
-        contract_fixture(owner_scope, %{
-          tenant_id: tenant.id,
-          property_id: property.id,
-          start_date: Date.add(Date.utc_today(), -30),
-          end_date: Date.add(Date.utc_today(), 365),
-          rent: "900.00"
-        })
+        contract_fixture(
+          owner_scope,
+          %{
+            tenant_id: tenant.id,
+            property_id: property.id,
+            start_date: Date.add(Date.utc_today(), -30),
+            end_date: Date.add(Date.utc_today(), 365),
+            rent: "900.00",
+            index_type: :fixed_percentage,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.0")
+        )
 
       {:ok, _view, html} = live(conn, ~p"/")
       assert html =~ "Contract Details"
