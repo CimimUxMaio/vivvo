@@ -28,6 +28,7 @@ defmodule Vivvo.Payments do
   alias Vivvo.Repo
 
   alias Vivvo.Accounts.Scope
+  alias Vivvo.Contracts
   alias Vivvo.Contracts.Contract
   alias Vivvo.Files
   alias Vivvo.Payments.Payment
@@ -437,7 +438,7 @@ defmodule Vivvo.Payments do
       Decimal.new("1500.00")
   """
   def total_rent_collected(%Scope{} = scope, %Contract{} = contract, today \\ Date.utc_today()) do
-    payment_numbers = get_past_payment_numbers(contract, today)
+    payment_numbers = Contracts.get_past_payment_numbers(contract, today)
 
     if payment_numbers == [] do
       @decimal_zero
@@ -451,21 +452,6 @@ defmodule Vivvo.Payments do
       |> select([p], sum(p.amount))
       |> Repo.one() || @decimal_zero
     end
-  end
-
-  defp get_past_payment_numbers(%Contract{} = contract, today) do
-    current = Vivvo.Contracts.get_current_payment_number(contract)
-    current_due_date = Vivvo.Contracts.calculate_due_date(contract, current)
-
-    range =
-      cond do
-        Date.compare(current_due_date, today) in [:lt, :eq] -> 0..current
-        current - 1 >= 0 -> 0..(current - 1)
-        # No past payments
-        true -> []
-      end
-
-    Enum.to_list(range)
   end
 
   @doc """
