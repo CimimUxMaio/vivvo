@@ -12,9 +12,6 @@ defmodule Vivvo.Contracts do
   alias Vivvo.Payments
   alias Vivvo.Properties.Property
 
-  # Threshold (in days) for considering a contract as "ending soon"
-  @ending_soon_threshold_days 60
-
   @doc """
   Subscribes to scoped notifications about any contract changes.
 
@@ -277,12 +274,24 @@ defmodule Vivvo.Contracts do
   defp compute_rent_value(initial_rent, _index_value, 0), do: initial_rent
 
   defp compute_rent_value(initial_rent, index_value, period_idx) do
-    base =
-      Decimal.add(1, index_value)
-      |> Decimal.to_float()
+    base = Decimal.add(1, index_value)
+    multiplier = decimal_pow(base, period_idx)
+    Decimal.mult(initial_rent, multiplier)
+  end
 
-    multiplier = :math.pow(base, period_idx)
-    Decimal.mult(initial_rent, Decimal.from_float(multiplier))
+  # Calculates base^exp using pure Decimal arithmetic for precision
+  defp decimal_pow(_base, 0), do: Decimal.new(1)
+  defp decimal_pow(base, 1), do: base
+
+  defp decimal_pow(base, exp) when exp > 1 do
+    half = decimal_pow(base, div(exp, 2))
+    result = Decimal.mult(half, half)
+
+    if rem(exp, 2) == 0 do
+      result
+    else
+      Decimal.mult(result, base)
+    end
   end
 
   defp parse_date(%Date{} = date), do: date
@@ -334,16 +343,13 @@ defmodule Vivvo.Contracts do
 
   """
   def update_contract(%Scope{} = scope, %Contract{} = contract, attrs) do
-    if contract.user_id != scope.user.id do
-      {:error, :unauthorized}
-    else
-      with {:ok, contract = %Contract{}} <-
-             contract
-             |> Contract.changeset(attrs, scope)
-             |> Repo.update() do
-        broadcast_contract(scope, {:updated, contract})
-        {:ok, contract}
-      end
+    with :ok <- authorize_contract(contract, scope),
+         {:ok, contract = %Contract{}} <-
+           contract
+           |> Contract.changeset(attrs, scope)
+           |> Repo.update() do
+      broadcast_contract(scope, {:updated, contract})
+      {:ok, contract}
     end
   end
 
@@ -360,16 +366,13 @@ defmodule Vivvo.Contracts do
 
   """
   def delete_contract(%Scope{} = scope, %Contract{} = contract) do
-    if contract.user_id != scope.user.id do
-      {:error, :unauthorized}
-    else
-      with {:ok, contract = %Contract{}} <-
-             contract
-             |> Contract.archive_changeset(scope)
-             |> Repo.update() do
-        broadcast_contract(scope, {:deleted, contract})
-        {:ok, contract}
-      end
+    with :ok <- authorize_contract(contract, scope),
+         {:ok, contract = %Contract{}} <-
+           contract
+           |> Contract.archive_changeset(scope)
+           |> Repo.update() do
+      broadcast_contract(scope, {:deleted, contract})
+      {:ok, contract}
     end
   end
 
@@ -383,12 +386,16 @@ defmodule Vivvo.Contracts do
 
   """
   def change_contract(%Scope{} = scope, %Contract{} = contract, attrs \\ %{}) do
-    # Only check authorization if the contract already has an owner
-    if contract.user_id && contract.user_id != scope.user.id do
-      raise "Unauthorized"
-    end
-
     Contract.changeset(contract, attrs, scope)
+  end
+
+  # Authorizes that the contract belongs to the scope user
+  defp authorize_contract(%Contract{user_id: user_id}, %Scope{user: %{id: scope_user_id}}) do
+    if user_id == scope_user_id do
+      :ok
+    else
+      {:error, :unauthorized}
+    end
   end
 
   @doc """
@@ -478,30 +485,6 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
-  Gets the current active contract for a tenant as of the given date.
-
-  Returns nil if no active contract exists for the tenant on the given date.
-
-  ## Examples
-
-      iex> current_contract_for_tenant(scope, ~D[2026-03-15])
-      %Contract{payments: [%Payment{files: [...]}]}
-
-      iex> current_contract_for_tenant(scope, ~D[2026-03-15])
-      nil
-
-  """
-  def current_contract_for_tenant(%Scope{user: user} = _scope, today \\ Date.utc_today()) do
-    Contract
-    |> where([c], c.tenant_id == ^user.id)
-    |> where([c], c.archived == false)
-    |> where([c], c.start_date <= ^today)
-    |> where([c], c.end_date >= ^today)
-    |> preload([:property, :rent_periods, payments: [:files]])
-    |> Repo.one()
-  end
-
-  @doc """
   Calculate the current payment number based on months since start_date.
   Returns 0 if the contract hasn't started yet.
 
@@ -558,7 +541,7 @@ defmodule Vivvo.Contracts do
       1..2  # if payment periods 1 and 2 have passed
 
       iex> get_past_payment_numbers(contract, ~D[2026-01-01])
-      1..0  # empty range - no due dates in the past yet
+      []  # empty range - no due dates in the past yet
 
   """
   def get_past_payment_numbers(%Contract{} = contract, today) do
@@ -566,12 +549,15 @@ defmodule Vivvo.Contracts do
     current_due_date = calculate_due_date(contract, current)
 
     last =
-      if Date.compare(current_due_date, today) == :lt,
+      if Date.compare(current_due_date, today) in [:lt, :eq],
         do: current,
         else: current - 1
 
-    Range.new(1, last, 1)
-    |> Enum.to_list()
+    if last >= 1 do
+      Enum.to_list(1..last)
+    else
+      []
+    end
   end
 
   @doc """
@@ -935,13 +921,7 @@ defmodule Vivvo.Contracts do
 
   """
   def days_until_end(%Contract{end_date: end_date}) do
-    today = Date.utc_today()
-
-    case Date.compare(end_date, today) do
-      :gt -> Date.diff(end_date, today)
-      :eq -> 0
-      :lt -> nil
-    end
+    days_from_today(end_date)
   end
 
   @doc """
@@ -959,48 +939,17 @@ defmodule Vivvo.Contracts do
 
   """
   def days_until_start(%Contract{start_date: start_date}) do
+    days_from_today(start_date)
+  end
+
+  # Shared helper for calculating days from today to a target date
+  defp days_from_today(date) do
     today = Date.utc_today()
 
-    case Date.compare(start_date, today) do
-      :gt -> Date.diff(start_date, today)
+    case Date.compare(date, today) do
+      :gt -> Date.diff(date, today)
       :eq -> 0
       :lt -> nil
-    end
-  end
-
-  @doc """
-  Check if contract is ending soon (within #{@ending_soon_threshold_days} days).
-
-  ## Examples
-
-      iex> ending_soon?(%Contract{end_date: ~D[2026-03-01]})
-      true  # if today is within #{@ending_soon_threshold_days} days of end_date
-
-  """
-  def ending_soon?(%Contract{} = contract) do
-    case days_until_end(contract) do
-      nil -> false
-      days -> days > 0 and days <= @ending_soon_threshold_days
-    end
-  end
-
-  @doc """
-  Get a human-readable label for contract status with context.
-
-  ## Examples
-
-      iex> contract_status_label(contract)
-      "Ending Soon"
-
-  """
-  def contract_status_label(%Contract{} = contract) do
-    status = contract_status(contract)
-
-    cond do
-      status == :expired -> "Expired"
-      ending_soon?(contract) -> "Ending Soon"
-      status == :upcoming -> "Upcoming"
-      true -> "Active"
     end
   end
 
@@ -1144,34 +1093,25 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
-  Get upcoming payments (future months within contract period).
-
-  Returns a list of maps with upcoming payment info.
+  Returns the due date of the next upcoming payment, or nil if contract has ended.
 
   ## Examples
 
-      iex> get_upcoming_payments(contract)
-      [%{payment_number: 6, due_date: ~D[2026-06-10], rent: Decimal.new("500.00")}]
+      iex> next_payment_date(contract)
+      ~D[2026-04-10]
+
+      iex> next_payment_date(ended_contract)
+      nil
 
   """
-  def get_upcoming_payments(%Contract{} = contract) do
-    current_payment_num = get_current_payment_number(contract)
-    total_months = contract_duration_months(contract)
+  def next_payment_date(%Contract{} = contract) do
+    current = get_current_payment_number(contract)
+    total = contract_duration_months(contract)
 
-    if current_payment_num >= total_months do
-      []
+    if current < total do
+      calculate_due_date(contract, current + 1)
     else
-      Enum.map((current_payment_num + 1)..total_months, fn payment_num ->
-        due_date = calculate_due_date(contract, payment_num)
-        # current_rent_value(contract, due_date)
-        rent = 0
-
-        %{
-          payment_number: payment_num,
-          due_date: due_date,
-          rent: rent
-        }
-      end)
+      nil
     end
   end
 
