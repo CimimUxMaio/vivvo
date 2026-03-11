@@ -1314,8 +1314,7 @@ defmodule VivvoWeb.HomeLive do
         total_due = Contracts.total_amount_due(@current_scope, contract)
         earliest_due = Contracts.earliest_due_date(@current_scope, contract)
         payment_statuses = Contracts.get_payment_statuses(@current_scope, contract)
-        upcoming_payments = Contracts.get_upcoming_payments(contract)
-        next_payment = List.first(upcoming_payments) %>
+        next_due_date = Contracts.next_payment_date(contract) %>
 
         <%!-- A. Header: Current Situation Snapshot --%>
         <.situation_snapshot
@@ -1324,7 +1323,7 @@ defmodule VivvoWeb.HomeLive do
           payment_status={payment_status}
           total_due={total_due}
           earliest_due={earliest_due}
-          next_payment={next_payment}
+          next_due_date={next_due_date}
         />
 
         <%!-- B. Primary Action Zone --%>
@@ -1339,7 +1338,6 @@ defmodule VivvoWeb.HomeLive do
         <.payments_overview
           contract={contract}
           payment_statuses={payment_statuses}
-          upcoming_payments={upcoming_payments}
           scope={@current_scope}
           current_expanded={@current_expanded}
           history_expanded={@history_expanded}
@@ -1465,8 +1463,8 @@ defmodule VivvoWeb.HomeLive do
       end
 
     days_until_next =
-      if assigns.next_payment do
-        Date.diff(assigns.next_payment.due_date, Date.utc_today())
+      if assigns.next_due_date do
+        Date.diff(assigns.next_due_date, Date.utc_today())
       else
         nil
       end
@@ -1537,13 +1535,13 @@ defmodule VivvoWeb.HomeLive do
                 <span class="font-medium">All payments are up to date!</span>
               </div>
 
-              <%= if @next_payment do %>
+              <%= if @next_due_date do %>
                 <div
                   id="upcoming-payments"
                   class="flex items-center gap-2 text-sm text-base-content/70 sm:ml-4"
                 >
                   <.icon name="hero-calendar" class="w-4 h-4" />
-                  <span>Next due {format_date(@next_payment.due_date)}</span>
+                  <span>Next due {format_date(@next_due_date)}</span>
                   <span class="text-base-content/50">({format_time_until(@days_until_next)})</span>
                 </div>
               <% end %>
