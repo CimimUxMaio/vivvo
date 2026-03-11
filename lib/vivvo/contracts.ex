@@ -1264,4 +1264,53 @@ defmodule Vivvo.Contracts do
   def current_rent_value(%Contract{} = contract, date \\ Date.utc_today()) do
     current_rent_period(contract, date).value
   end
+
+  @doc """
+  Returns the next rent update date based on the current rent period.
+
+  Returns nil if:
+  - The contract has no rent periods
+  - The contract has no indexing configured (no rent_period_duration or index_type)
+  - The contract has ended
+  - The next update would be after the contract's end date
+
+  ## Examples
+
+      iex> next_rent_update_date(contract)
+      ~D[2026-04-01]
+
+  """
+  def next_rent_update_date(%Contract{} = contract) do
+    today = Date.utc_today()
+    current_period = current_rent_period(contract, today)
+    update_date = Date.add(current_period.end_date, 1)
+
+    if Date.after?(update_date, contract.end_date) do
+      nil
+    else
+      update_date
+    end
+  end
+
+  @doc """
+  Calculate days until the next rent update.
+
+  Returns nil if there is no next update (contract has ended, no indexing configured, etc.)
+  Returns 0 if the update is today.
+
+  ## Examples
+
+      iex> days_until_next_update(contract)
+      15
+
+      iex> days_until_next_update(contract_without_indexing)
+      nil
+
+  """
+  def days_until_next_update(%Contract{} = contract) do
+    case next_rent_update_date(contract) do
+      nil -> nil
+      date -> Date.diff(date, Date.utc_today())
+    end
+  end
 end
