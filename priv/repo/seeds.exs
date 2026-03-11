@@ -187,11 +187,16 @@ contract1_end = Date.add(today, 180)
 
 IO.puts("Created Contract 1 (Active: Sunset Apts → Tenant1)")
 
+# Preload rent_periods for contract1 so current_rent_value works
+contract1 = Repo.preload(contract1, :rent_periods)
+
 # Create payments for Contract 1
 # 6 months of payments: payments 1-4 accepted on time, payment 5 rejected then accepted, payment 6 pending
 for month <- 1..6 do
   due_date = Contracts.calculate_due_date(contract1, month)
   submitted_at = DateTime.new!(due_date, ~T[10:00:00])
+  # Get the correct rent value for this payment's due date
+  rent_amount = Contracts.current_rent_value(contract1, due_date)
 
   cond do
     month <= 4 ->
@@ -204,7 +209,7 @@ for month <- 1..6 do
           %Scope{user: tenant1},
           %{
             payment_number: month,
-            amount: Decimal.new("1200.00"),
+            amount: rent_amount,
             contract_id: contract1.id,
             notes: "Rent for month #{month}"
           }
@@ -225,7 +230,7 @@ for month <- 1..6 do
           %Scope{user: tenant1},
           %{
             payment_number: month,
-            amount: Decimal.new("1200.00"),
+            amount: rent_amount,
             contract_id: contract1.id,
             notes: "Initial submission - rejected"
           }
@@ -246,7 +251,7 @@ for month <- 1..6 do
           %Scope{user: tenant1},
           %{
             payment_number: month,
-            amount: Decimal.new("1200.00"),
+            amount: rent_amount,
             contract_id: contract1.id,
             notes: "Resubmitted after rejection"
           }
@@ -270,7 +275,7 @@ for month <- 1..6 do
             %Scope{user: tenant1},
             %{
               payment_number: month,
-              amount: Decimal.new("1200.00"),
+              amount: rent_amount,
               contract_id: contract1.id,
               notes: "Rent for month #{month} - pending approval"
             }
@@ -284,7 +289,7 @@ for month <- 1..6 do
             %Scope{user: tenant1},
             %{
               payment_number: month,
-              amount: Decimal.new("1200.00"),
+              amount: rent_amount,
               contract_id: contract1.id,
               notes: "Rent for month #{month}"
             }
@@ -325,11 +330,16 @@ contract2_end = Date.add(today, 270)
 
 IO.puts("Created Contract 2 (Active: Downtown Loft → Tenant2)")
 
+# Preload rent_periods for contract2 so current_rent_value works
+contract2 = Repo.preload(contract2, :rent_periods)
+
 # Create payments for Contract 2
 # 3 months: payments 1-2 accepted on time, payment 3 partial then completed
 for month <- 1..3 do
   due_date = Contracts.calculate_due_date(contract2, month)
   submitted_at = DateTime.new!(due_date, ~T[09:30:00])
+  # Get the correct rent value for this payment's due date
+  rent_amount = Contracts.current_rent_value(contract2, due_date)
 
   cond do
     month <= 2 ->
@@ -339,7 +349,7 @@ for month <- 1..3 do
           %Scope{user: tenant2},
           %{
             payment_number: month,
-            amount: Decimal.new("1500.00"),
+            amount: rent_amount,
             contract_id: contract2.id,
             notes: "Rent for month #{month}"
           }
@@ -361,7 +371,7 @@ for month <- 1..3 do
             %Scope{user: tenant2},
             %{
               payment_number: month,
-              amount: Decimal.new("1500.00"),
+              amount: rent_amount,
               contract_id: contract2.id,
               notes: "Rent for month #{month} - pending approval"
             }
@@ -369,13 +379,16 @@ for month <- 1..3 do
 
         # No accept/reject call - leaves it pending
       else
-        # Partial payment ($900 of $1500), then additional payment
+        # Partial payment (60% of rent), then additional payment for the rest
+        partial_amount = Decimal.mult(rent_amount, Decimal.new("0.6"))
+        remaining_amount = Decimal.sub(rent_amount, partial_amount)
+
         {:ok, payment1} =
           Payments.create_payment(
             %Scope{user: tenant2},
             %{
               payment_number: month,
-              amount: Decimal.new("900.00"),
+              amount: partial_amount,
               contract_id: contract2.id,
               notes: "Partial payment - will pay rest later"
             }
@@ -396,7 +409,7 @@ for month <- 1..3 do
             %Scope{user: tenant2},
             %{
               payment_number: month,
-              amount: Decimal.new("600.00"),
+              amount: remaining_amount,
               contract_id: contract2.id,
               notes: "Remaining balance for month #{month}"
             }
@@ -437,6 +450,9 @@ contract3_end = Date.add(today, 60)
 
 IO.puts("Created Contract 3 (Ending Soon: Garden Villa → Demo User)")
 
+# Preload rent_periods for contract3 so current_rent_value works
+contract3 = Repo.preload(contract3, :rent_periods)
+
 # Create payments for Contract 3 (demo user paying themselves - for demo purposes)
 # 10 months of payments, mix of on-time and slightly late
 for month <- 1..10 do
@@ -444,13 +460,15 @@ for month <- 1..10 do
   # Random delay: 50% on time, 50% 1-5 days late
   delay = if :rand.uniform() > 0.5, do: 0, else: Enum.random(1..5)
   submitted_at = DateTime.new!(due_date, ~T[14:00:00]) |> DateTime.add(delay, :day)
+  # Get the correct rent value for this payment's due date
+  rent_amount = Contracts.current_rent_value(contract3, due_date)
 
   {:ok, payment} =
     Payments.create_payment(
       demo_scope,
       %{
         payment_number: month,
-        amount: Decimal.new("2000.00"),
+        amount: rent_amount,
         contract_id: contract3.id,
         notes:
           "Rent for month #{month} - #{demo_user.first_name} #{demo_user.last_name} (self-payment)"
@@ -468,6 +486,8 @@ end
 # Month 11 - 50% chance of pending for the latest payment
 due_date_11 = Contracts.calculate_due_date(contract3, 11)
 submitted_at_11 = DateTime.new!(due_date_11, ~T[14:00:00])
+# Get the correct rent value for month 11
+rent_amount_11 = Contracts.current_rent_value(contract3, due_date_11)
 
 if :rand.uniform() > 0.5 do
   # Pending - create payment but don't accept or reject
@@ -476,7 +496,7 @@ if :rand.uniform() > 0.5 do
       demo_scope,
       %{
         payment_number: 11,
-        amount: Decimal.new("2000.00"),
+        amount: rent_amount_11,
         contract_id: contract3.id,
         notes: "Rent for month 11 - pending approval"
       }
@@ -490,7 +510,7 @@ else
       demo_scope,
       %{
         payment_number: 11,
-        amount: Decimal.new("2000.00"),
+        amount: rent_amount_11,
         contract_id: contract3.id,
         notes: "Rent for month 11"
       }
@@ -529,6 +549,9 @@ contract4_end = Date.add(today, -90)
 
 IO.puts("Created Contract 4 (Expired: City Penthouse → Tenant2)")
 
+# Preload rent_periods for contract4 so current_rent_value works
+contract4 = Repo.preload(contract4, :rent_periods)
+
 # Create payments for Contract 4 (12 months, all paid, 2 late payments)
 for month <- 1..12 do
   due_date = Contracts.calculate_due_date(contract4, month)
@@ -542,6 +565,8 @@ for month <- 1..12 do
     end
 
   submitted_at = DateTime.new!(due_date, ~T[11:00:00]) |> DateTime.add(delay, :day)
+  # Get the correct rent value for this payment's due date
+  rent_amount = Contracts.current_rent_value(contract4, due_date)
 
   if month == 12 && :rand.uniform() > 0.5 do
     # Pending - create payment but don't accept or reject
@@ -550,7 +575,7 @@ for month <- 1..12 do
         %Scope{user: tenant2},
         %{
           payment_number: month,
-          amount: Decimal.new("1800.00"),
+          amount: rent_amount,
           contract_id: contract4.id,
           notes: "Rent for month #{month} - pending approval"
         }
@@ -563,7 +588,7 @@ for month <- 1..12 do
         %Scope{user: tenant2},
         %{
           payment_number: month,
-          amount: Decimal.new("1800.00"),
+          amount: rent_amount,
           contract_id: contract4.id,
           notes: "Rent for month #{month}"
         }
@@ -603,6 +628,9 @@ contract5_end = Date.add(today, 300)
 
 IO.puts("Created Contract 5 (Active: Cozy Studio → Tenant3)")
 
+# Preload rent_periods for contract5 so current_rent_value works
+contract5 = Repo.preload(contract5, :rent_periods)
+
 # Create payments for Contract 5
 # Payment 1: accepted on time
 # Payment 2: accepted, 1 day late
@@ -611,13 +639,15 @@ for month <- 1..2 do
   due_date = Contracts.calculate_due_date(contract5, month)
   delay = if month == 2, do: 1, else: 0
   submitted_at = DateTime.new!(due_date, ~T[08:00:00]) |> DateTime.add(delay, :day)
+  # Get the correct rent value for this payment's due date
+  rent_amount = Contracts.current_rent_value(contract5, due_date)
 
   {:ok, payment} =
     Payments.create_payment(
       %Scope{user: tenant3},
       %{
         payment_number: month,
-        amount: Decimal.new("900.00"),
+        amount: rent_amount,
         contract_id: contract5.id,
         notes: "Rent for month #{month}"
       }
@@ -634,6 +664,8 @@ end
 # Month 3 - 50% chance of pending for the latest payment
 due_date_c5m3 = Contracts.calculate_due_date(contract5, 3)
 submitted_at_c5m3 = DateTime.new!(due_date_c5m3, ~T[08:00:00])
+# Get the correct rent value for month 3
+rent_amount_c5m3 = Contracts.current_rent_value(contract5, due_date_c5m3)
 
 if :rand.uniform() > 0.5 do
   # Pending - create payment but don't accept or reject
@@ -642,7 +674,7 @@ if :rand.uniform() > 0.5 do
       %Scope{user: tenant3},
       %{
         payment_number: 3,
-        amount: Decimal.new("900.00"),
+        amount: rent_amount_c5m3,
         contract_id: contract5.id,
         notes: "Rent for month 3 - pending approval"
       }
@@ -655,7 +687,7 @@ else
       %Scope{user: tenant3},
       %{
         payment_number: 3,
-        amount: Decimal.new("900.00"),
+        amount: rent_amount_c5m3,
         contract_id: contract5.id,
         notes: "Rent for month 3"
       }
