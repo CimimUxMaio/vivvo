@@ -2168,50 +2168,174 @@ defmodule VivvoWeb.HomeLive do
         <.icon name="hero-document-text" class="w-5 h-5 text-primary" />
         <h2 class="text-lg font-semibold">Contract Details</h2>
       </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <%!-- Lease Period --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Lease Period</p>
-          <p class="font-medium">
-            {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
-          </p>
-        </div>
-
-        <%!-- Monthly Rent --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Monthly Rent</p>
-          <p class="font-medium text-primary">
-            {format_currency(Contracts.current_rent_value(@contract))}
-          </p>
-        </div>
-
-        <%!-- Payment Due Date --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Payment Due</p>
-          <p class="font-medium">Day {@contract.expiration_day} of each month</p>
-        </div>
-
-        <%!-- Property Info --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Property</p>
-          <p class="font-medium">{@contract.property.name}</p>
-          <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
-        </div>
-      </div>
-
-      <%!-- Contract Timeline --%>
+      <.contract_basic_info_grid contract={@contract} />
       <div class="mt-6 pt-6 border-t border-base-200">
         <.contract_timeline contract={@contract} />
       </div>
+      <.contract_notes contract={@contract} />
+    </div>
+    """
+  end
 
-      <%= if @contract.notes && @contract.notes != "" do %>
-        <div class="mt-4 pt-4 border-t border-base-200">
-          <p class="text-sm text-base-content/60 mb-1">Notes</p>
-          <p class="text-sm text-base-content/80">{@contract.notes}</p>
-        </div>
+  # Contract Basic Info Grid - Contains lease period, rent, payment due, indexing info, and property
+  defp contract_basic_info_grid(assigns) do
+    has_indexing =
+      not is_nil(assigns.contract.rent_period_duration) and
+        not is_nil(assigns.contract.index_type)
+
+    assigns = assign(assigns, has_indexing: has_indexing)
+
+    ~H"""
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <.lease_period_item contract={@contract} />
+      <.current_rent_item contract={@contract} has_indexing={@has_indexing} />
+      <.payment_due_item contract={@contract} />
+      <.indexing_info_items :if={@has_indexing} contract={@contract} />
+      <.property_info_item contract={@contract} has_indexing={@has_indexing} />
+    </div>
+    """
+  end
+
+  # Lease Period Item
+  defp lease_period_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Lease Period</p>
+      <p class="font-medium">
+        {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
+      </p>
+    </div>
+    """
+  end
+
+  # Current Rent Item - Shows current rent with indexing indicator if applicable
+  defp current_rent_item(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    assigns = assign(assigns, next_update: next_update)
+
+    ~H"""
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <p class="text-sm text-base-content/60">Current Rent</p>
+        <%= if @has_indexing do %>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+            <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+          </span>
+        <% end %>
+      </div>
+      <p class="font-medium text-primary">
+        {format_currency(Contracts.current_rent_value(@contract))}
+      </p>
+      <%= if @has_indexing and @next_update do %>
+        <p class="text-xs text-base-content/50 mt-1">
+          Valid until {format_date(Date.add(@next_update, -1))}
+        </p>
       <% end %>
     </div>
+    """
+  end
+
+  # Payment Due Item
+  defp payment_due_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Payment Due</p>
+      <p class="font-medium">Day {@contract.expiration_day} of each month</p>
+    </div>
+    """
+  end
+
+  # Indexing Info Items - Group of three items: index type, frequency, next update
+  defp indexing_info_items(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    days_until_update = Contracts.days_until_next_update(assigns.contract)
+    index_label = index_type_label(assigns.contract.index_type)
+    duration_label = rent_period_duration_label(assigns.contract.rent_period_duration)
+
+    assigns =
+      assign(assigns,
+        next_update: next_update,
+        days_until_update: days_until_update,
+        index_label: index_label,
+        duration_label: duration_label
+      )
+
+    ~H"""
+    <.index_type_item label={@index_label} />
+    <.update_frequency_item label={@duration_label} />
+    <.next_update_item date={@next_update} days_until={@days_until_update} />
+    """
+  end
+
+  # Index Type Item
+  defp index_type_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Index Type</p>
+      <p class="font-medium">{@label}</p>
+    </div>
+    """
+  end
+
+  # Update Frequency Item
+  defp update_frequency_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Update Frequency</p>
+      <p class="font-medium">{@label}</p>
+    </div>
+    """
+  end
+
+  # Next Update Item
+  defp next_update_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Next Rent Update</p>
+      <%= if @date do %>
+        <p class="font-medium">{format_date(@date)}</p>
+        <p class="text-xs mt-1">
+          <%= cond do %>
+            <% @days_until == 0 -> %>
+              <span class="text-warning font-medium">Today</span>
+            <% @days_until < 0 -> %>
+              <span class="text-error">Update overdue</span>
+            <% @days_until <= 30 -> %>
+              <span class="text-warning">In {@days_until} days</span>
+            <% true -> %>
+              <span class="text-base-content/50">In {@days_until} days</span>
+          <% end %>
+        </p>
+      <% else %>
+        <p class="font-medium text-base-content/50">-</p>
+      <% end %>
+    </div>
+    """
+  end
+
+  # Property Info Item
+  defp property_info_item(assigns) do
+    ~H"""
+    <div class={[
+      "sm:col-span-2 lg:col-span-1",
+      @has_indexing && "sm:col-span-2 lg:col-span-3"
+    ]}>
+      <p class="text-sm text-base-content/60 mb-1">Property</p>
+      <p class="font-medium">{@contract.property.name}</p>
+      <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
+    </div>
+    """
+  end
+
+  # Contract Notes Component
+  defp contract_notes(assigns) do
+    ~H"""
+    <%= if @contract.notes && @contract.notes != "" do %>
+      <div class="mt-6 pt-6 border-t border-base-200">
+        <p class="text-sm text-base-content/60 mb-1">Notes</p>
+        <p class="text-sm text-base-content/80">{@contract.notes}</p>
+      </div>
+    <% end %>
     """
   end
 
@@ -2296,4 +2420,17 @@ defmodule VivvoWeb.HomeLive do
       collection_pct: collection_pct
     }
   end
+
+  # Helper functions for contract indexing information
+
+  # Returns a human-readable label for the index type.
+  defp index_type_label(nil), do: nil
+  defp index_type_label(:cpi), do: "CPI (Consumer Price Index)"
+  defp index_type_label(:fixed_percentage), do: "Fixed Percentage"
+
+  # Returns a human-readable label for the rent period duration.
+  defp rent_period_duration_label(nil), do: nil
+  defp rent_period_duration_label(1), do: "Monthly"
+  defp rent_period_duration_label(12), do: "Yearly"
+  defp rent_period_duration_label(months) when months > 0, do: "Every #{months} months"
 end
