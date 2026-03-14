@@ -82,6 +82,20 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Oban configuration
+config :vivvo, Oban,
+  engine: Oban.Engines.Basic,
+  queues: [default: 10, rent_periods: 5],
+  repo: Vivvo.Repo,
+  plugins: [
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Run at 12:00 PM on the 25th of each month
+       # This proactively creates rent periods for contracts whose current period ends this month
+       {"0 12 25 * *", Vivvo.Workers.RentPeriodSchedulerWorker}
+     ]}
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

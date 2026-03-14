@@ -12,6 +12,7 @@ defmodule Vivvo.Application do
       Vivvo.Repo,
       {DNSCluster, query: Application.get_env(:vivvo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Vivvo.PubSub},
+      {Oban, Application.fetch_env!(:vivvo, Oban)},
       # Start a worker by calling: Vivvo.Worker.start_link(arg)
       # {Vivvo.Worker, arg},
       # Start to serve requests, typically the last entry
