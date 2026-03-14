@@ -1253,4 +1253,86 @@ defmodule Vivvo.Contracts do
       date -> Date.diff(date, Date.utc_today())
     end
   end
+
+  @doc """
+  Creates a rent period. Used by system jobs only (no scope validation).
+
+  ## Examples
+
+      iex> create_rent_period(%{field: value})
+      {:ok, %RentPeriod{}}
+
+      iex> create_rent_period(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_rent_period(attrs) do
+    %RentPeriod{}
+    |> RentPeriod.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Gets a single contract by ID without scope validation. Used by system jobs.
+
+  Returns nil if the Contract does not exist.
+
+  ## Examples
+
+      iex> get_system_contract(123)
+      %Contract{}
+
+      iex> get_system_contract(456)
+      nil
+
+  """
+  def get_system_contract(id) do
+    Contract
+    |> where([c], c.id == ^id and c.archived == false)
+    |> preload([:rent_periods])
+    |> Repo.one()
+  end
+
+  @doc """
+  Returns a list of contracts whose latest rent period ends in the given month
+  and need a new rent period created. Used by the monthly scheduler worker.
+
+  Filters for:
+  - Non-archived contracts that haven't ended
+  - Contracts with index_type and rent_period_duration configured
+  - Latest rent period ends in the current month
+  - Contract extends beyond the latest period's end date
+
+  ## Examples
+
+      iex> contracts_needing_update(~D[2026-05-25])
+      [%Contract{}, ...]
+
+  """
+  def contracts_needing_update(%Date{} = today) do
+    # Subquery to get the latest rent period end_date for each contract
+    latest_periods_query =
+      from(rp in RentPeriod,
+        group_by: rp.contract_id,
+        select: %{
+          contract_id: rp.contract_id,
+          latest_end_date: max(rp.end_date)
+        }
+      )
+
+    from(c in Contract,
+      join: latest in subquery(latest_periods_query),
+      on: latest.contract_id == c.id,
+      where: c.archived == false,
+      where: c.end_date > ^today,
+      where: not is_nil(c.rent_period_duration),
+      where: not is_nil(c.index_type),
+      # Latest period ends in current month
+      where: fragment("EXTRACT(YEAR FROM ?) = ?", latest.latest_end_date, ^today.year),
+      where: fragment("EXTRACT(MONTH FROM ?) = ?", latest.latest_end_date, ^today.month),
+      # Contract extends beyond the latest period's end date
+      where: c.end_date > latest.latest_end_date
+    )
+    |> Repo.all()
+  end
 end
