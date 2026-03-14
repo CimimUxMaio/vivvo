@@ -3,6 +3,7 @@ defmodule Vivvo.ContractsTest do
 
   alias Vivvo.Contracts
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Repo
 
   import Vivvo.AccountsFixtures, only: [user_scope_fixture: 0, user_fixture: 1]
   import Vivvo.ContractsFixtures
@@ -1620,6 +1621,255 @@ defmodule Vivvo.ContractsTest do
       avg_delay = Contracts.calculate_avg_delay_days(contract, payments_by_month, today)
 
       assert avg_delay == 0.0
+    end
+  end
+
+  describe "create_rent_period/1" do
+    test "creates rent period with valid attributes" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+
+      attrs = %{
+        contract_id: contract.id,
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        value: Decimal.new("1200.00"),
+        index_type: :fixed_percentage,
+        index_value: Decimal.new("0.03")
+      }
+
+      assert {:ok, %Vivvo.Contracts.RentPeriod{} = rent_period} =
+               Contracts.create_rent_period(attrs)
+
+      assert rent_period.value == Decimal.new("1200.00")
+      assert rent_period.index_type == :fixed_percentage
+    end
+
+    test "returns error with invalid attributes" do
+      attrs = %{
+        contract_id: nil,
+        start_date: nil,
+        end_date: nil,
+        value: nil
+      }
+
+      assert {:error, %Ecto.Changeset{}} = Contracts.create_rent_period(attrs)
+    end
+  end
+
+  describe "get_system_contract/1" do
+    test "returns contract with rent periods when found" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+
+      result = Contracts.get_system_contract(contract.id)
+
+      assert result.id == contract.id
+      assert result.archived == false
+      assert is_list(result.rent_periods)
+    end
+
+    test "returns nil when contract does not exist" do
+      assert Contracts.get_system_contract(99_999_999) == nil
+    end
+
+    test "returns nil when contract is archived" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+
+      # Archive the contract
+      Repo.update!(Contract.archive_changeset(contract, scope))
+
+      assert Contracts.get_system_contract(contract.id) == nil
+    end
+  end
+
+  describe "contracts_needing_update/1" do
+    test "returns contracts with rent period ending in current month" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+      end_of_this_month = Date.end_of_month(today)
+
+      # Create contract with rent period ending in the current month
+      # Use today's date as start to avoid past_start_date requirement
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: today,
+            end_date: Date.add(today, 400),
+            rent_period_duration: 6,
+            index_type: :cpi
+          }
+        )
+
+      # Delete auto-generated period from fixture
+      contract = Contracts.get_contract!(scope, contract.id)
+
+      Enum.each(contract.rent_periods, fn rp ->
+        Repo.delete!(rp)
+      end)
+
+      _period =
+        rent_period_fixture(contract, %{
+          start_date: Date.add(end_of_this_month, -30),
+          end_date: end_of_this_month,
+          value: Decimal.new("1000.00"),
+          index_type: :cpi,
+          index_value: Decimal.new("0.03")
+        })
+
+      results = Contracts.contracts_needing_update(today)
+      assert length(results) == 1
+      assert hd(results).id == contract.id
+    end
+
+    test "excludes contracts with rent period ending in different month" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: today,
+            end_date: Date.add(today, 400),
+            rent_period_duration: 6,
+            index_type: :fixed_percentage
+          }
+        )
+
+      # Period ending next month
+      _period =
+        rent_period_fixture(contract, %{
+          start_date: today,
+          end_date: Date.end_of_month(Date.add(today, 30)),
+          value: Decimal.new("1000.00"),
+          index_type: :fixed_percentage,
+          index_value: Decimal.new("0.05")
+        })
+
+      results = Contracts.contracts_needing_update(today)
+      assert results == []
+    end
+
+    test "excludes archived contracts" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+      end_of_this_month = Date.end_of_month(today)
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: today,
+            end_date: Date.add(today, 400),
+            rent_period_duration: 6,
+            index_type: :cpi
+          }
+        )
+
+      _period =
+        rent_period_fixture(contract, %{
+          start_date: Date.add(end_of_this_month, -30),
+          end_date: end_of_this_month,
+          value: Decimal.new("1000.00"),
+          index_type: :cpi,
+          index_value: Decimal.new("0.03")
+        })
+
+      # Archive the contract
+      Repo.update!(Contract.archive_changeset(contract, scope))
+
+      results = Contracts.contracts_needing_update(today)
+      assert results == []
+    end
+
+    test "excludes contracts without index_type or rent_period_duration" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+      end_of_this_month = Date.end_of_month(today)
+
+      # Create contract without index_type and without rent_period_duration
+      # Both must be nil or both must be set (validation requirement)
+      contract_no_index =
+        contract_fixture(
+          scope,
+          %{
+            start_date: today,
+            end_date: Date.add(today, 400)
+          }
+        )
+
+      _period =
+        rent_period_fixture(contract_no_index, %{
+          start_date: Date.add(end_of_this_month, -30),
+          end_date: end_of_this_month,
+          value: Decimal.new("1000.00")
+        })
+
+      results = Contracts.contracts_needing_update(today)
+      assert results == []
+    end
+
+    test "excludes contracts that have already ended" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+      end_of_this_month = Date.end_of_month(today)
+
+      # Create a contract that has already ended (end_date in the past)
+      # We need to use past_start_date here since we're setting dates in the past
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.add(today, -400),
+            end_date: Date.add(today, -10),
+            rent_period_duration: 6,
+            index_type: :cpi
+          },
+          past_start_date?: true,
+          index_value: Decimal.new("0.03")
+        )
+
+      # Delete auto-generated periods and create our own
+      contract = Contracts.get_contract!(scope, contract.id)
+
+      Enum.each(contract.rent_periods, fn rp ->
+        Repo.delete!(rp)
+      end)
+
+      _period =
+        rent_period_fixture(contract, %{
+          start_date: Date.add(end_of_this_month, -30),
+          end_date: end_of_this_month,
+          value: Decimal.new("1000.00"),
+          index_type: :cpi,
+          index_value: Decimal.new("0.03")
+        })
+
+      results = Contracts.contracts_needing_update(today)
+      assert results == []
+    end
+
+    test "returns empty list when no contracts need updates" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Create a future contract - won't need updates
+      _contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.add(today, 30),
+            end_date: Date.add(today, 400),
+            rent_period_duration: 6,
+            index_type: :cpi
+          }
+        )
+
+      results = Contracts.contracts_needing_update(today)
+      assert results == []
     end
   end
 end

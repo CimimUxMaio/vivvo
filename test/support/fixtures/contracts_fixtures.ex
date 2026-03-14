@@ -73,4 +73,25 @@ defmodule Vivvo.ContractsFixtures do
       index_value: Decimal.new("0.0")
     )
   end
+
+  @doc """
+  Generate a rent period for a contract.
+  """
+  def rent_period_fixture(contract, attrs \\ %{}) do
+    today = Date.utc_today()
+
+    default_attrs = %{
+      contract_id: contract.id,
+      start_date: Date.add(today, -30),
+      end_date: today,
+      value: Decimal.new("1000.00"),
+      index_type: contract.index_type,
+      index_value: nil
+    }
+
+    attrs = Enum.into(attrs, default_attrs)
+
+    {:ok, rent_period} = Vivvo.Contracts.create_rent_period(attrs)
+    rent_period
+  end
 end
