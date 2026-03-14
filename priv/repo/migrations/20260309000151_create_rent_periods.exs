@@ -15,5 +15,8 @@ defmodule Vivvo.Repo.Migrations.CreateRentPeriods do
 
     create index(:rent_periods, [:contract_id])
     create index(:rent_periods, [:contract_id, :start_date, :end_date])
+    create index(:rent_periods, [:contract_id, :end_date])
+    create index(:contracts, [:archived, :end_date])
+    create index(:contracts, [:index_type, :rent_period_duration])
   end
 end
