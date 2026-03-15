@@ -410,7 +410,7 @@ defmodule Vivvo.PaymentsTest do
             end_date: Date.new!(today.year, 12, 15),
             rent: "1000.00",
             tenant_id: scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -455,7 +455,7 @@ defmodule Vivvo.PaymentsTest do
             end_date: Date.new!(today.year, 12, 31),
             rent: "1000.00",
             tenant_id: scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -515,7 +515,7 @@ defmodule Vivvo.PaymentsTest do
             end_date: Date.new!(today.year, 12, 31),
             rent: "1000.00",
             tenant_id: scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -551,7 +551,7 @@ defmodule Vivvo.PaymentsTest do
             end_date: Date.new!(today.year, 12, 31),
             rent: "1000.00",
             tenant_id: scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -587,7 +587,7 @@ defmodule Vivvo.PaymentsTest do
             end_date: Date.new!(today.year, 12, 31),
             rent: "1000.00",
             tenant_id: scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,

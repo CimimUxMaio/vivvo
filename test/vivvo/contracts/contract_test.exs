@@ -142,7 +142,7 @@ defmodule Vivvo.Contracts.ContractTest do
         property_id: 1,
         tenant_id: 1,
         rent_period_duration: 12,
-        index_type: :cpi,
+        index_type: :ipc,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
       }
 
@@ -158,14 +158,14 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
-        index_type: :cpi,
+        index_type: :ipc,
         rent_period_duration: 12,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
       }
 
       changeset = Contract.changeset(%Contract{}, attrs, scope)
       assert changeset.valid?
-      assert Ecto.Changeset.get_change(changeset, :index_type) == :cpi
+      assert Ecto.Changeset.get_change(changeset, :index_type) == :ipc
     end
 
     test "accepts fixed_percentage as index_type", %{scope: scope} do
@@ -175,14 +175,14 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
-        index_type: :fixed_percentage,
+        index_type: :icl,
         rent_period_duration: 6,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
       }
 
       changeset = Contract.changeset(%Contract{}, attrs, scope)
       assert changeset.valid?
-      assert Ecto.Changeset.get_change(changeset, :index_type) == :fixed_percentage
+      assert Ecto.Changeset.get_change(changeset, :index_type) == :icl
     end
 
     test "validates rent_period_duration must be greater than 0 when present", %{scope: scope} do
@@ -209,7 +209,7 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
-        index_type: :cpi,
+        index_type: :ipc,
         index_value: "3.0",
         rent_period_duration: nil,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]

@@ -60,7 +60,7 @@ defmodule Vivvo.ContractsFixtures do
         %{
           start_date: Date.add(today, -60),
           end_date: Date.add(today, -1),
-          index_type: :fixed_percentage,
+          index_type: :icl,
           rent_period_duration: 12
         },
         attrs

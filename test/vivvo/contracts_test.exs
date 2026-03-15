@@ -240,7 +240,7 @@ defmodule Vivvo.ContractsTest do
         expiration_day: 5,
         rent: "1200.00",
         rent_period_duration: 3,
-        index_type: :cpi,
+        index_type: :ipc,
         property_id: property.id,
         tenant_id: tenant.id
       }
@@ -299,16 +299,16 @@ defmodule Vivvo.ContractsTest do
         expiration_day: 5,
         rent: "1000.00",
         rent_period_duration: 12,
-        index_type: :cpi,
+        index_type: :ipc,
         index_value: "3.0",
         property_id: property.id,
         tenant_id: tenant.id
       }
 
       assert {:ok, %Contract{} = contract} = Contracts.create_contract(scope, valid_attrs)
-      assert contract.index_type == :cpi
+      assert contract.index_type == :ipc
       [rent_period] = contract.rent_periods
-      assert rent_period.index_type == :cpi
+      assert rent_period.index_type == :ipc
       # Initial rent period still has nil index value
       assert rent_period.index_value == nil
     end
@@ -516,7 +516,7 @@ defmodule Vivvo.ContractsTest do
         expiration_day: 5,
         rent: "1000.00",
         rent_period_duration: 3,
-        index_type: :fixed_percentage,
+        index_type: :icl,
         property_id: property.id,
         tenant_id: tenant.id
       }
@@ -541,7 +541,7 @@ defmodule Vivvo.ContractsTest do
       sorted_periods
       |> Enum.with_index()
       |> Enum.reduce(nil, fn {period, index}, prev_rent ->
-        assert period.index_type == :fixed_percentage
+        assert period.index_type == :icl
         assert period.index_value == ((index > 0 && Decimal.new("0.05")) || nil)
 
         if index > 0 do
@@ -826,7 +826,7 @@ defmodule Vivvo.ContractsTest do
             start_date: start_date,
             end_date: Date.add(start_date, 365),
             expiration_day: 1,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -936,7 +936,7 @@ defmodule Vivvo.ContractsTest do
             start_date: Date.add(today, -90),
             end_date: Date.add(today, 365),
             rent: "1000.00",
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -1114,7 +1114,7 @@ defmodule Vivvo.ContractsTest do
             end_date: Date.add(today, 365),
             expiration_day: 1,
             tenant_id: tenant_scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -1208,7 +1208,7 @@ defmodule Vivvo.ContractsTest do
             end_date: Date.add(today, 365),
             expiration_day: 1,
             tenant_id: tenant_scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -1292,7 +1292,7 @@ defmodule Vivvo.ContractsTest do
           end_date: Date.add(start_date, 365),
           expiration_day: 1,
           tenant_id: tenant_scope.user.id,
-          index_type: :fixed_percentage,
+          index_type: :icl,
           rent_period_duration: 12
         },
         past_start_date?: true,
@@ -1418,7 +1418,7 @@ defmodule Vivvo.ContractsTest do
             end_date: Date.add(start_date, 365),
             expiration_day: 1,
             tenant_id: tenant_scope.user.id,
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -1634,7 +1634,7 @@ defmodule Vivvo.ContractsTest do
         start_date: ~D[2026-01-01],
         end_date: ~D[2026-06-30],
         value: Decimal.new("1200.00"),
-        index_type: :fixed_percentage,
+        index_type: :icl,
         index_value: Decimal.new("0.03")
       }
 
@@ -1642,7 +1642,7 @@ defmodule Vivvo.ContractsTest do
                Contracts.create_rent_period(attrs)
 
       assert rent_period.value == Decimal.new("1200.00")
-      assert rent_period.index_type == :fixed_percentage
+      assert rent_period.index_type == :icl
     end
 
     test "returns error with invalid attributes" do
@@ -1699,7 +1699,7 @@ defmodule Vivvo.ContractsTest do
             start_date: today,
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           }
         )
 
@@ -1715,7 +1715,7 @@ defmodule Vivvo.ContractsTest do
           start_date: Date.add(end_of_this_month, -30),
           end_date: end_of_this_month,
           value: Decimal.new("1000.00"),
-          index_type: :cpi,
+          index_type: :ipc,
           index_value: Decimal.new("0.03")
         })
 
@@ -1735,7 +1735,7 @@ defmodule Vivvo.ContractsTest do
             start_date: today,
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :fixed_percentage
+            index_type: :icl
           }
         )
 
@@ -1745,7 +1745,7 @@ defmodule Vivvo.ContractsTest do
           start_date: today,
           end_date: Date.end_of_month(Date.add(today, 30)),
           value: Decimal.new("1000.00"),
-          index_type: :fixed_percentage,
+          index_type: :icl,
           index_value: Decimal.new("0.05")
         })
 
@@ -1765,7 +1765,7 @@ defmodule Vivvo.ContractsTest do
             start_date: today,
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           }
         )
 
@@ -1774,7 +1774,7 @@ defmodule Vivvo.ContractsTest do
           start_date: Date.add(end_of_this_month, -30),
           end_date: end_of_this_month,
           value: Decimal.new("1000.00"),
-          index_type: :cpi,
+          index_type: :ipc,
           index_value: Decimal.new("0.03")
         })
 
@@ -1826,7 +1826,7 @@ defmodule Vivvo.ContractsTest do
             start_date: Date.add(today, -400),
             end_date: Date.add(today, -10),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           },
           past_start_date?: true,
           index_value: Decimal.new("0.03")
@@ -1844,7 +1844,7 @@ defmodule Vivvo.ContractsTest do
           start_date: Date.add(end_of_this_month, -30),
           end_date: end_of_this_month,
           value: Decimal.new("1000.00"),
-          index_type: :cpi,
+          index_type: :ipc,
           index_value: Decimal.new("0.03")
         })
 
@@ -1864,7 +1864,7 @@ defmodule Vivvo.ContractsTest do
             start_date: Date.add(today, 30),
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           }
         )
 

@@ -15,13 +15,13 @@ defmodule Vivvo.IndexService do
 
   ## Returns
 
-    * `{:ok, %{year: integer, month: integer, value: Decimal.t()}}` - Successfully fetched data
+    * `{:ok, %{date: Date.t(), value: Decimal.t()}}` - Successfully fetched data
     * `{:error, reason}` - Failed to fetch or parse data
 
   ## Examples
 
       iex> IndexService.latest(:ipc)
-      {:ok, %{year: 2026, month: 2, value: Decimal.new("2.9")}}
+      {:ok, %{date: ~D[2026-02-01], value: Decimal.new("2.9")}}
   """
   @spec latest(index_type()) :: {:ok, map()} | {:error, term()}
   def latest(index_type) do
@@ -52,15 +52,15 @@ defmodule Vivvo.IndexService do
 
   ## Returns
 
-    * `{:ok, list(%{year: integer, month: integer, value: Decimal.t()})}` - Successfully fetched data
+    * `{:ok, list(%{date: Date.t(), value: Decimal.t()})}` - Successfully fetched data
     * `{:error, reason}` - Failed to fetch or parse data
 
   ## Examples
 
       iex> IndexService.history(:ipc, ~D[2025-03-01], ~D[2025-07-31])
       {:ok, [
-        %{year: 2025, month: 3, value: Decimal.new("3.7")},
-        %{year: 2025, month: 4, value: Decimal.new("2.8")},
+        %{date: ~D[2025-03-01], value: Decimal.new("3.7")},
+        %{date: ~D[2025-04-01], value: Decimal.new("2.8")},
         ...
       ]}
   """
@@ -107,8 +107,9 @@ defmodule Vivvo.IndexService do
   defp parse_index(:ipc, %{"anio" => year, "mes" => month, "indice_ipc" => val}) do
     with {:ok, year} <- parse_integer(year),
          {:ok, month} <- parse_integer(month),
+         {:ok, date} <- Date.new(year, month, 1),
          {:ok, value} <- parse_decimal(val) do
-      {:ok, %{year: year, month: month, value: value}}
+      {:ok, %{date: date, value: value}}
     end
   end
 
@@ -116,8 +117,9 @@ defmodule Vivvo.IndexService do
   defp parse_index(:ipc, %{"anio" => year, "mes" => month, "valor" => val}) do
     with {:ok, year} <- parse_integer(year),
          {:ok, month} <- parse_integer(month),
+         {:ok, date} <- Date.new(year, month, 1),
          {:ok, value} <- parse_decimal(val) do
-      {:ok, %{year: year, month: month, value: value}}
+      {:ok, %{date: date, value: value}}
     end
   end
 
@@ -125,7 +127,7 @@ defmodule Vivvo.IndexService do
   defp parse_index(:icl, %{"fecha" => date, "valor" => val}) do
     with {:ok, date} <- parse_date(date),
          {:ok, value} <- parse_decimal(val) do
-      {:ok, %{year: date.year, month: date.month, value: value}}
+      {:ok, %{date: date, value: value}}
     end
   end
 

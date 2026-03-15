@@ -178,7 +178,7 @@ contract1_end = Date.add(today, 180)
       property_id: sunset_apt.id,
       tenant_id: tenant1.id,
       notes: "Standard 1-year lease with 6-month rent updates",
-      index_type: :fixed_percentage,
+      index_type: :icl,
       rent_period_duration: 6
     },
     past_start_date?: true,
@@ -320,8 +320,8 @@ contract2_end = Date.add(today, 270)
       rent: Decimal.new("1500.00"),
       property_id: downtown_loft.id,
       tenant_id: tenant2.id,
-      notes: "Furnished loft with annual CPI adjustments",
-      index_type: :cpi,
+      notes: "Furnished loft with annual IPC adjustments",
+      index_type: :ipc,
       rent_period_duration: 12
     },
     past_start_date?: true,
@@ -441,7 +441,7 @@ contract3_end = Date.add(today, 60)
       property_id: garden_villa.id,
       tenant_id: demo_user.id,
       notes: "Demo user's own rental - ending soon",
-      index_type: :fixed_percentage,
+      index_type: :icl,
       rent_period_duration: 3
     },
     past_start_date?: true,
@@ -540,7 +540,7 @@ contract4_end = Date.add(today, -90)
       property_id: city_penthouse.id,
       tenant_id: tenant2.id,
       notes: "Completed 1-year lease with annual rent adjustments",
-      index_type: :fixed_percentage,
+      index_type: :icl,
       rent_period_duration: 12
     },
     past_start_date?: true,
@@ -619,7 +619,7 @@ contract5_end = Date.add(today, 300)
       property_id: cozy_studio.id,
       tenant_id: tenant3.id,
       notes: "Budget-friendly studio with 6-month adjustments",
-      index_type: :cpi,
+      index_type: :ipc,
       rent_period_duration: 6
     },
     past_start_date?: true,

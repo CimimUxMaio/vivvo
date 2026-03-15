@@ -110,7 +110,7 @@ defmodule VivvoWeb.ContractLive.FormTest do
       # Select index type to show rent period duration
       result =
         view
-        |> form("#contract-form", contract: %{index_type: "cpi"})
+        |> form("#contract-form", contract: %{index_type: "ipc"})
         |> render_change()
 
       assert result =~ "Rent Update Period"
@@ -259,7 +259,7 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       # First select index_type to make rent_period_duration visible
       view
-      |> form("#contract-form", contract: %{index_type: "cpi"})
+      |> form("#contract-form", contract: %{index_type: "ipc"})
       |> render_change()
 
       # Use future dates for testing
@@ -276,7 +276,7 @@ defmodule VivvoWeb.ContractLive.FormTest do
             tenant_id: tenant.id,
             expiration_day: 5,
             rent: "1000",
-            index_type: "cpi",
+            index_type: "ipc",
             rent_period_duration: "0"
           }
         )
@@ -326,7 +326,7 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       # First select index_type to make rent_period_duration visible
       view
-      |> form("#contract-form", contract: %{index_type: "cpi"})
+      |> form("#contract-form", contract: %{index_type: "ipc"})
       |> render_change()
 
       # Use future dates to avoid past_start_date validation error
@@ -344,7 +344,7 @@ defmodule VivvoWeb.ContractLive.FormTest do
             expiration_day: 5,
             rent: "1200.00",
             rent_period_duration: "12",
-            index_type: "cpi",
+            index_type: "ipc",
             notes: "Contract with CPI indexing"
           }
         )

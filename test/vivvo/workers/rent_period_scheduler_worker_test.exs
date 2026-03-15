@@ -28,7 +28,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: five_months_ago,
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           },
           past_start_date?: true,
           index_value: Decimal.new("0.03")
@@ -36,11 +36,15 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
       assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
 
+      # Get the actual index value from API to verify
+      {:ok, %{value: api_value}} = Vivvo.IndexService.latest(:ipc)
+      expected_index_value = Decimal.div(api_value, 100)
+
       assert_enqueued(
         worker: RentPeriodCreationWorker,
         args: %{
           contract_id: contract.id,
-          index_value: Decimal.new("0.03"),
+          index_value: expected_index_value,
           year: today.year,
           month: today.month
         }
@@ -60,7 +64,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: today,
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :fixed_percentage
+            index_type: :icl
           }
         )
 
@@ -92,7 +96,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: two_months_ago,
             end_date: Date.add(today, 400),
             rent_period_duration: 3,
-            index_type: :cpi
+            index_type: :ipc
           },
           past_start_date?: true,
           index_value: Decimal.new("0.03")
@@ -117,7 +121,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: Date.add(today, 30),
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           }
         )
 
@@ -143,7 +147,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: five_months_ago,
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
-            index_type: :cpi
+            index_type: :ipc
           },
           past_start_date?: true,
           index_value: Decimal.new("0.03")
@@ -206,7 +210,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: one_month_ago,
             end_date: Date.add(today, 400),
             rent_period_duration: 2,
-            index_type: :cpi
+            index_type: :ipc
           },
           past_start_date?: true,
           index_value: Decimal.new("0.03")
@@ -219,7 +223,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             start_date: one_month_ago,
             end_date: Date.add(today, 400),
             rent_period_duration: 2,
-            index_type: :fixed_percentage
+            index_type: :icl
           },
           past_start_date?: true,
           index_value: Decimal.new("0.05")

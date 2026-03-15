@@ -227,7 +227,7 @@ defmodule VivvoWeb.PropertyLiveTest do
             tenant_id: tenant.id,
             start_date: Date.add(Date.utc_today(), -10),
             end_date: Date.add(Date.utc_today(), 10),
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,

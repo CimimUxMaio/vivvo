@@ -76,7 +76,7 @@ defmodule VivvoWeb.HomeLiveTest do
             start_date: Date.add(Date.utc_today(), -30),
             end_date: Date.add(Date.utc_today(), 365),
             rent: "1200.00",
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
@@ -142,7 +142,7 @@ defmodule VivvoWeb.HomeLiveTest do
             start_date: Date.add(Date.utc_today(), -30),
             end_date: Date.add(Date.utc_today(), 365),
             rent: "900.00",
-            index_type: :fixed_percentage,
+            index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,

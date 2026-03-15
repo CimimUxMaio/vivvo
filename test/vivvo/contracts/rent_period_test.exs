@@ -80,7 +80,7 @@ defmodule Vivvo.Contracts.RentPeriodTest do
     end
 
     test "accepts valid index_type values" do
-      for index_type <- ["cpi", "fixed_percentage", nil] do
+      for index_type <- ["ipc", "icl", nil] do
         attrs = %{
           value: "1000.00",
           start_date: ~D[2026-01-01],
@@ -126,7 +126,7 @@ defmodule Vivvo.Contracts.RentPeriodTest do
         start_date: ~D[2026-01-01],
         end_date: ~D[2026-12-31],
         contract_id: 1,
-        index_type: "fixed_percentage",
+        index_type: "icl",
         index_value: "5.0"
       }
 
@@ -140,7 +140,7 @@ defmodule Vivvo.Contracts.RentPeriodTest do
         start_date: ~D[2026-01-01],
         end_date: ~D[2026-12-31],
         contract_id: 1,
-        index_type: "cpi",
+        index_type: "ipc",
         index_value: "3.0"
       }
 
