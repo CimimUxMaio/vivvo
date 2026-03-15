@@ -21,7 +21,7 @@ defmodule Vivvo.Contracts.Contract do
     field :notes, :string, default: ""
 
     field :rent_period_duration, :integer
-    field :index_type, Ecto.Enum, values: [:cpi, :fixed_percentage]
+    field :index_type, Ecto.Enum, values: [:ipc, :icl]
 
     belongs_to :tenant, User
     belongs_to :property, Property

@@ -13,7 +13,7 @@ defmodule Vivvo.Contracts.RentPeriod do
 
   schema "rent_periods" do
     field :value, :decimal
-    field :index_type, Ecto.Enum, values: [:cpi, :fixed_percentage]
+    field :index_type, Ecto.Enum, values: [:ipc, :icl]
     field :index_value, :decimal
     field :start_date, :date
     field :end_date, :date
