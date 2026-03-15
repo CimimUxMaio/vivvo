@@ -25,7 +25,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
     today = Date.utc_today()
 
     # Fetch ALL index values upfront (only 2 calls regardless of contract count)
-    index_values = IndexService.get_all_index_values()
+    index_values = fetch_all_index_values()
 
     # Query all contracts needing rent period updates (all filtering done in database)
     contracts = Contracts.contracts_needing_update(today)
@@ -49,4 +49,26 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
 
     {:ok, %{scheduled_count: length(contracts)}}
   end
+
+  # Builds a map of all available index values for efficient batch processing.
+  # Fetches each index type and converts the percentage value to a decimal.
+  defp fetch_all_index_values do
+    [:ipc, :icl]
+    |> Enum.map(fn index_type ->
+      case IndexService.latest(index_type) do
+        {:ok, %{value: value}} ->
+          # Convert percentage to decimal (e.g., 2.9% -> 0.029)
+          decimal_value = Decimal.div(value, 100)
+          {index_type, decimal_value}
+
+        {:error, _reason} ->
+          # Fallback to default values if API fails
+          {index_type, default_index_value(index_type)}
+      end
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp default_index_value(:ipc), do: Decimal.new("0.029")
+  defp default_index_value(:icl), do: Decimal.new("0.025")
 end

@@ -112,8 +112,8 @@ defmodule VivvoWeb.ContractLive.Form do
           label="Index Type"
           prompt="None"
           options={[
-            {"CPI", :cpi},
-            {"Fixed Percentage", :fixed_percentage}
+            {"IPC", :ipc},
+            {"ICL", :icl}
           ]}
         />
 

@@ -2423,8 +2423,8 @@ defmodule VivvoWeb.HomeLive do
 
   # Returns a human-readable label for the index type.
   defp index_type_label(nil), do: nil
-  defp index_type_label(:cpi), do: "CPI (Consumer Price Index)"
-  defp index_type_label(:fixed_percentage), do: "Fixed Percentage"
+  defp index_type_label(:ipc), do: "IPC (Índice de Precios al Consumidor)"
+  defp index_type_label(:icl), do: "ICL (Índice de Contratos de Locación)"
 
   # Returns a human-readable label for the rent period duration.
   defp rent_period_duration_label(nil), do: nil
