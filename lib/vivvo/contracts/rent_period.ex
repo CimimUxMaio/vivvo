@@ -14,7 +14,7 @@ defmodule Vivvo.Contracts.RentPeriod do
   schema "rent_periods" do
     field :value, :decimal
     field :index_type, Ecto.Enum, values: [:ipc, :icl]
-    field :index_value, :decimal
+    field :update_factor, :decimal
     field :start_date, :date
     field :end_date, :date
 
@@ -28,7 +28,7 @@ defmodule Vivvo.Contracts.RentPeriod do
     |> cast(attrs, [
       :value,
       :index_type,
-      :index_value,
+      :update_factor,
       :start_date,
       :end_date,
       :contract_id

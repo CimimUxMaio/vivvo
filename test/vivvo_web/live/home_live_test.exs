@@ -80,7 +80,7 @@ defmodule VivvoWeb.HomeLiveTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       {:ok, _payment} =
@@ -146,7 +146,7 @@ defmodule VivvoWeb.HomeLiveTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       {:ok, _view, html} = live(conn, ~p"/")

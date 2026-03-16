@@ -31,20 +31,20 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
 
       # Get the actual index value from API to verify
       {:ok, %{value: api_value}} = Vivvo.IndexService.latest(:ipc)
-      expected_index_value = Decimal.div(api_value, 100)
+      expected_update_factor = Decimal.div(api_value, 100)
 
       assert_enqueued(
         worker: RentPeriodCreationWorker,
         args: %{
           contract_id: contract.id,
-          index_value: expected_index_value,
+          update_factor: expected_update_factor,
           year: today.year,
           month: today.month
         }
@@ -99,7 +99,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       # Run scheduler - should schedule one job
@@ -150,14 +150,14 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       # Insert first job manually to test Oban's unique constraint
       {:ok, _job1} =
         %{
           contract_id: contract.id,
-          index_value: Decimal.new("0.03"),
+          update_factor: Decimal.new("0.03"),
           year: today.year,
           month: today.month
         }
@@ -171,7 +171,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       {:ok, _job2} =
         %{
           contract_id: contract.id,
-          index_value: Decimal.new("0.04"),
+          update_factor: Decimal.new("0.04"),
           year: today.year,
           month: today.month
         }
@@ -186,7 +186,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
       # Verify it's the first one with 0.03 value
       job = Repo.one!(Oban.Job)
-      assert job.args["index_value"] == "0.03"
+      assert job.args["update_factor"] == "0.03"
     end
 
     test "different contracts can be scheduled in same month" do
@@ -213,7 +213,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       contract_b =
@@ -226,14 +226,14 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :icl
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.05")
+          update_factor: Decimal.new("0.05")
         )
 
       # Insert jobs for both contracts in same month
       {:ok, _job1} =
         %{
           contract_id: contract_a.id,
-          index_value: Decimal.new("0.03"),
+          update_factor: Decimal.new("0.03"),
           year: today.year,
           month: today.month
         }
@@ -246,7 +246,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       {:ok, _job2} =
         %{
           contract_id: contract_b.id,
-          index_value: Decimal.new("0.05"),
+          update_factor: Decimal.new("0.05"),
           year: today.year,
           month: today.month
         }

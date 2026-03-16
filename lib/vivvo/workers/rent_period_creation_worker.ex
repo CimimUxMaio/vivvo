@@ -26,7 +26,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
   def perform(%{
         args: %{
           "contract_id" => contract_id,
-          "index_value" => index_value,
+          "update_factor" => update_factor,
           "year" => year,
           "month" => month
         }
@@ -37,11 +37,11 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
         {:ok, :contract_not_found}
 
       contract ->
-        create_rent_period_for_contract(contract, index_value, year, month)
+        create_rent_period_for_contract(contract, update_factor, year, month)
     end
   end
 
-  defp create_rent_period_for_contract(contract, index_value, year, month) do
+  defp create_rent_period_for_contract(contract, update_factor, year, month) do
     # Find the period ending in the scheduler's year/month
     target_period =
       Enum.find(contract.rent_periods, fn period ->
@@ -66,16 +66,16 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
 
           {:ok, :already_exists}
         else
-          do_create_rent_period(contract, index_value, period, new_start_date)
+          do_create_rent_period(contract, update_factor, period, new_start_date)
         end
     end
   end
 
-  defp do_create_rent_period(contract, index_value, previous_period, new_start_date) do
+  defp do_create_rent_period(contract, update_factor, previous_period, new_start_date) do
     new_end_date =
       calculate_period_end(new_start_date, contract.rent_period_duration, contract.end_date)
 
-    new_rent = calculate_new_rent(previous_period.value, index_value)
+    new_rent = calculate_new_rent(previous_period.value, update_factor)
 
     attrs = %{
       contract_id: contract.id,
@@ -83,7 +83,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
       end_date: new_end_date,
       value: new_rent,
       index_type: contract.index_type,
-      index_value: index_value
+      update_factor: update_factor
     }
 
     Contracts.create_rent_period(attrs)
@@ -131,8 +131,8 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
     |> then(&Enum.min([&1, contract_end_date], Date))
   end
 
-  defp calculate_new_rent(previous_value, index_value) do
-    multiplier = Decimal.add(1, index_value)
+  defp calculate_new_rent(previous_value, update_factor) do
+    multiplier = Decimal.add(1, update_factor)
     Decimal.mult(previous_value, multiplier)
   end
 end

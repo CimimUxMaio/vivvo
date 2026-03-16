@@ -5,7 +5,7 @@ defmodule Vivvo.Repo.Migrations.CreateRentPeriods do
     create table(:rent_periods) do
       add :value, :decimal, null: false
       add :index_type, :string, null: true
-      add :index_value, :decimal, null: true
+      add :update_factor, :decimal, null: true
       add :start_date, :date, null: false
       add :end_date, :date, null: false
       add :contract_id, references(:contracts, on_delete: :delete_all), null: false

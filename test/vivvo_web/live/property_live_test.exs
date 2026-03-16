@@ -231,7 +231,7 @@ defmodule VivvoWeb.PropertyLiveTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       {:ok, _show_live, html} = live(conn, ~p"/properties/#{property}")

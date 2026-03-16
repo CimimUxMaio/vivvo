@@ -70,7 +70,7 @@ defmodule Vivvo.ContractsFixtures do
       scope,
       merged_attrs,
       past_start_date?: true,
-      index_value: Decimal.new("0.0")
+      update_factor: Decimal.new("0.0")
     )
   end
 
@@ -86,7 +86,7 @@ defmodule Vivvo.ContractsFixtures do
       end_date: today,
       value: Decimal.new("1000.00"),
       index_type: contract.index_type,
-      index_value: nil
+      update_factor: nil
     }
 
     attrs = Enum.into(attrs, default_attrs)

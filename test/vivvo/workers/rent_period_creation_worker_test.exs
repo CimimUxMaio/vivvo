@@ -32,7 +32,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       # Find the period ending this month
@@ -43,14 +43,14 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
       assert target_period != nil
 
-      index_value = Decimal.new("0.05")
+      update_factor = Decimal.new("0.05")
       expected_new_start = Date.add(target_period.end_date, 1)
-      expected_rent = Decimal.mult(target_period.value, Decimal.add(1, index_value))
+      expected_rent = Decimal.mult(target_period.value, Decimal.add(1, update_factor))
 
       assert {:ok, %RentPeriod{} = rent_period} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: index_value,
+                 update_factor: update_factor,
                  year: today.year,
                  month: today.month
                })
@@ -58,7 +58,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert Decimal.eq?(rent_period.value, expected_rent)
       assert rent_period.start_date == expected_new_start
       assert rent_period.index_type == :ipc
-      assert Decimal.eq?(rent_period.index_value, index_value)
+      assert Decimal.eq?(rent_period.update_factor, update_factor)
     end
 
     test "is idempotent - returns :already_exists when run twice with same year/month" do
@@ -81,7 +81,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       initial_count = length(Contracts.get_contract!(scope, contract.id).rent_periods)
@@ -90,7 +90,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert {:ok, %RentPeriod{}} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: Decimal.new("0.03"),
+                 update_factor: Decimal.new("0.03"),
                  year: today.year,
                  month: today.month
                })
@@ -102,7 +102,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert {:ok, :already_exists} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: Decimal.new("0.03"),
+                 update_factor: Decimal.new("0.03"),
                  year: today.year,
                  month: today.month
                })
@@ -131,7 +131,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       _target_period =
@@ -142,7 +142,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert {:ok, rent_period} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: Decimal.new("0.03"),
+                 update_factor: Decimal.new("0.03"),
                  year: today.year,
                  month: today.month
                })
@@ -178,7 +178,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert {:ok, :period_not_found} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: Decimal.new("0.03"),
+                 update_factor: Decimal.new("0.03"),
                  year: last_month.year,
                  month: last_month.month
                })
@@ -203,7 +203,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.03")
+          update_factor: Decimal.new("0.03")
         )
 
       target_period =
@@ -211,13 +211,13 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
           p.end_date.year == today.year and p.end_date.month == today.month
         end)
 
-      index_value = Decimal.new("0.03")
-      expected_rent = Decimal.mult(target_period.value, Decimal.add(1, index_value))
+      update_factor = Decimal.new("0.03")
+      expected_rent = Decimal.mult(target_period.value, Decimal.add(1, update_factor))
 
       assert {:ok, rent_period} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: index_value,
+                 update_factor: update_factor,
                  year: today.year,
                  month: today.month
                })
@@ -231,7 +231,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert {:ok, :contract_not_found} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: non_existent_id,
-                 index_value: Decimal.new("0.03"),
+                 update_factor: Decimal.new("0.03"),
                  year: 2025,
                  month: 1
                })
@@ -256,7 +256,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       Repo.update!(Contract.archive_changeset(contract, scope))
@@ -264,7 +264,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert {:ok, :contract_not_found} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 index_value: Decimal.new("0.03"),
+                 update_factor: Decimal.new("0.03"),
                  year: today.year,
                  month: today.month
                })

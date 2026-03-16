@@ -386,7 +386,7 @@ defmodule Vivvo.PaymentsTest do
             end_date: Date.new!(today.year, 12, 31)
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       # Payment 1 = November start_year
@@ -414,7 +414,7 @@ defmodule Vivvo.PaymentsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       # Payment for February (payment_number 2) but submitted in March
@@ -459,7 +459,7 @@ defmodule Vivvo.PaymentsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       # January payment (on time)
@@ -519,7 +519,7 @@ defmodule Vivvo.PaymentsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       # Partial payment for February (payment_number 1)
@@ -555,7 +555,7 @@ defmodule Vivvo.PaymentsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       # Partial payment for February
@@ -591,7 +591,7 @@ defmodule Vivvo.PaymentsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          index_value: Decimal.new("0.0")
+          update_factor: Decimal.new("0.0")
         )
 
       # Create payments for different months

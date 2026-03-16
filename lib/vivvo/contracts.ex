@@ -99,9 +99,9 @@ defmodule Vivvo.Contracts do
 
   ## Options
 
-    * `:past_start_date?` - When set to `true` along with `:index_value`, allows
+    * `:past_start_date?` - When set to `true` along with `:update_factor`, allows
       creating contracts with start dates in the past. Used for testing/seeding.
-    * `:index_value` - The index value (as Decimal or float) used to calculate
+    * `:update_factor` - The index value (as Decimal or float) used to calculate
       rent increases for each subsequent rent period when `:past_start_date?` is true.
 
   Both options must be provided together for past date support. If only one is
@@ -121,16 +121,16 @@ defmodule Vivvo.Contracts do
       iex> create_contract(scope, %{field: value, start_date: past_date})
       {:error, :past_start_date, ~D[2025-01-01]}
 
-      iex> create_contract(scope, attrs, past_start_date?: true, index_value: 0.05)
+      iex> create_contract(scope, attrs, past_start_date?: true, update_factor: 0.05)
       {:ok, %Contract{}}  # Creates contract with multiple historical rent periods
 
   """
   def create_contract(%Scope{} = scope, attrs, opts \\ []) do
     # Validate options first
     past_start_date? = Keyword.get(opts, :past_start_date?, false)
-    index_value = Keyword.get(opts, :index_value)
+    update_factor = Keyword.get(opts, :update_factor)
 
-    validate_opts(past_start_date?, index_value)
+    validate_opts(past_start_date?, update_factor)
 
     # Proceed with contract creation logic
     today = Date.utc_today()
@@ -157,7 +157,7 @@ defmodule Vivvo.Contracts do
       |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
       |> Ecto.Multi.run(:rent_periods, fn repo, %{contract: contract} ->
         initial_rent = Decimal.new(attrs["rent"])
-        insert_historical_rent_periods(repo, contract, initial_rent, index_value, today)
+        insert_historical_rent_periods(repo, contract, initial_rent, update_factor, today)
       end)
 
     # Execute the multi and handle results
@@ -188,17 +188,17 @@ defmodule Vivvo.Contracts do
     end
   end
 
-  defp validate_opts(past_start_date?, index_value) do
-    if past_start_date? and is_nil(index_value) do
-      raise ArgumentError, "index_value option must be provided when past_start_date? is true"
+  defp validate_opts(past_start_date?, update_factor) do
+    if past_start_date? and is_nil(update_factor) do
+      raise ArgumentError, "update_factor option must be provided when past_start_date? is true"
     end
 
     :ok
   end
 
-  defp insert_historical_rent_periods(repo, contract, initial_rent, index_value, today) do
+  defp insert_historical_rent_periods(repo, contract, initial_rent, update_factor, today) do
     rent_periods =
-      generate_historical_rent_periods(contract, initial_rent, index_value, today)
+      generate_historical_rent_periods(contract, initial_rent, update_factor, today)
       |> Enum.map(fn period ->
         now =
           DateTime.utc_now()
@@ -216,19 +216,19 @@ defmodule Vivvo.Contracts do
   defp generate_historical_rent_periods(
          contract,
          initial_rent,
-         index_value,
+         update_factor,
          today
        ) do
     generate_contract_period_dates(contract, today)
     |> Enum.with_index()
     |> Enum.map(fn {period, idx} ->
-      rent_value = compute_rent_value(initial_rent, index_value, idx)
+      rent_value = compute_rent_value(initial_rent, update_factor, idx)
 
       period
       |> Map.put(:contract_id, contract.id)
       |> Map.put(:index_type, contract.index_type)
       # If idx = 0 set index value to nil
-      |> Map.put(:index_value, (idx > 0 && index_value) || nil)
+      |> Map.put(:update_factor, (idx > 0 && update_factor) || nil)
       |> Map.put(:value, rent_value)
     end)
   end
@@ -271,10 +271,10 @@ defmodule Vivvo.Contracts do
     }
   end
 
-  defp compute_rent_value(initial_rent, _index_value, 0), do: initial_rent
+  defp compute_rent_value(initial_rent, _update_factor, 0), do: initial_rent
 
-  defp compute_rent_value(initial_rent, index_value, period_idx) do
-    base = Decimal.add(1, index_value)
+  defp compute_rent_value(initial_rent, update_factor, period_idx) do
+    base = Decimal.add(1, update_factor)
     multiplier = decimal_pow(base, period_idx)
     Decimal.mult(initial_rent, multiplier)
   end

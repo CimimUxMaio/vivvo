@@ -65,14 +65,14 @@ defmodule Vivvo.Contracts.RentPeriodTest do
       assert %{end_date: ["must be after start date"]} = errors_on(changeset)
     end
 
-    test "allows nil for index_type and index_value" do
+    test "allows nil for index_type and update_factor" do
       attrs = %{
         value: "1000.00",
         start_date: ~D[2026-01-01],
         end_date: ~D[2026-12-31],
         contract_id: 1,
         index_type: nil,
-        index_value: nil
+        update_factor: nil
       }
 
       changeset = RentPeriod.changeset(%RentPeriod{}, attrs)
@@ -127,7 +127,7 @@ defmodule Vivvo.Contracts.RentPeriodTest do
         end_date: ~D[2026-12-31],
         contract_id: 1,
         index_type: "icl",
-        index_value: "5.0"
+        update_factor: "5.0"
       }
 
       changeset = RentPeriod.changeset(%RentPeriod{}, attrs)
@@ -141,7 +141,7 @@ defmodule Vivvo.Contracts.RentPeriodTest do
         end_date: ~D[2026-12-31],
         contract_id: 1,
         index_type: "ipc",
-        index_value: "3.0"
+        update_factor: "3.0"
       }
 
       changeset = RentPeriod.changeset(%RentPeriod{}, attrs)
@@ -174,7 +174,7 @@ defmodule Vivvo.Contracts.RentPeriodTest do
       assert rent_period.end_date == ~D[2026-12-31]
       assert rent_period.contract_id == contract.id
       assert rent_period.index_type == nil
-      assert rent_period.index_value == nil
+      assert rent_period.update_factor == nil
     end
   end
 end
