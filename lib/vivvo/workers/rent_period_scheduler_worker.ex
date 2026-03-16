@@ -17,12 +17,17 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
     unique: [period: :infinity, keys: [:year, :month]]
 
   alias Vivvo.Contracts
+  alias Vivvo.Indexes
   alias Vivvo.IndexService
   alias Vivvo.Workers.RentPeriodCreationWorker
 
   @impl Oban.Worker
   def perform(_job) do
     today = Date.utc_today()
+
+    # Update index histories BEFORE processing contracts
+    # This ensures we have the latest index data from external APIs
+    update_index_histories(today)
 
     # Fetch ALL index values upfront (only 2 calls regardless of contract count)
     index_values = fetch_all_index_values()
@@ -50,10 +55,42 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
     {:ok, %{scheduled_count: length(contracts)}}
   end
 
+  # Updates index histories for all index types by querying the external API
+  # for values between the latest date in the database and today.
+  # This should be done BEFORE processing contracts to ensure we have fresh data.
+  defp update_index_histories(today) do
+    require Logger
+
+    with {:ok, missing_histories} <- fetch_missing_histories(today),
+         {:ok, _count} <- Indexes.create_index_histories(missing_histories) do
+      Logger.info(
+        "Successfully updated index histories with #{length(missing_histories)} new entries"
+      )
+    else
+      {:error, reason} ->
+        Logger.error("Failed to update index histories: #{inspect(reason)}")
+    end
+  end
+
+  defp fetch_missing_histories(today) do
+    IndexService.index_types()
+    |> Enum.map(fn type ->
+      {from_date, to_date} = Indexes.get_missing_date_range(type, today)
+      IndexService.history(type, from_date, to_date)
+    end)
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, histories}, {:ok, acc} ->
+        {:cont, {:ok, acc ++ histories}}
+
+      {:ok, _}, {:error, reason} ->
+        {:halt, {:error, reason}}
+    end)
+  end
+
   # Builds a map of all available index values for efficient batch processing.
   # Fetches each index type and converts the percentage value to a decimal.
   defp fetch_all_index_values do
-    [:ipc, :icl]
+    IndexService.index_types()
     |> Enum.map(fn index_type ->
       case IndexService.latest(index_type) do
         {:ok, %{value: value}} ->

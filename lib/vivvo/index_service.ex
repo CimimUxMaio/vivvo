@@ -9,6 +9,20 @@ defmodule Vivvo.IndexService do
   @base_url "https://api.argly.com.ar/api"
 
   @doc """
+  Returns the list of available index types.
+
+  This function serves as the single source of truth for all
+  supported index types in the application.
+
+  ## Examples
+
+      iex> IndexService.index_types()
+      [:ipc, :icl]
+  """
+  @spec index_types() :: list(index_type())
+  def index_types, do: [:ipc, :icl]
+
+  @doc """
   Returns the current/latest index value for the given index type.
 
   Makes an HTTP request to the /ipc or /icl endpoint and returns the parsed data.
@@ -104,30 +118,30 @@ defmodule Vivvo.IndexService do
   end
 
   # IPC latest endpoint format
-  defp parse_index(:ipc, %{"anio" => year, "mes" => month, "indice_ipc" => val}) do
+  defp parse_index(:ipc = index_type, %{"anio" => year, "mes" => month, "indice_ipc" => val}) do
     with {:ok, year} <- parse_integer(year),
          {:ok, month} <- parse_integer(month),
          {:ok, date} <- Date.new(year, month, 1),
          {:ok, value} <- parse_decimal(val) do
-      {:ok, %{date: date, value: value}}
+      {:ok, %{type: index_type, date: date, value: value}}
     end
   end
 
   # IPC history endpoint format (uses "valor" instead of "indice_ipc")
-  defp parse_index(:ipc, %{"anio" => year, "mes" => month, "valor" => val}) do
+  defp parse_index(:ipc = index_type, %{"anio" => year, "mes" => month, "valor" => val}) do
     with {:ok, year} <- parse_integer(year),
          {:ok, month} <- parse_integer(month),
          {:ok, date} <- Date.new(year, month, 1),
          {:ok, value} <- parse_decimal(val) do
-      {:ok, %{date: date, value: value}}
+      {:ok, %{type: index_type, date: date, value: value}}
     end
   end
 
   # ICL endpoint format
-  defp parse_index(:icl, %{"fecha" => date, "valor" => val}) do
+  defp parse_index(:icl = index_type, %{"fecha" => date, "valor" => val}) do
     with {:ok, date} <- parse_date(date),
          {:ok, value} <- parse_decimal(val) do
-      {:ok, %{date: date, value: value}}
+      {:ok, %{type: index_type, date: date, value: value}}
     end
   end
 
