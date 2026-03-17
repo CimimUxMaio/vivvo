@@ -194,31 +194,10 @@ defmodule VivvoWeb.ContractLive.Form do
          |> put_flash(:info, "Contract created successfully")
          |> push_navigate(to: ~p"/properties/#{socket.assigns.property}")}
 
-      {:error, :overlapping_contract, existing_contract} ->
-        message =
-          "Cannot create contract: an existing contract for this property overlaps with the selected dates " <>
-            "(#{existing_contract.start_date} to #{existing_contract.end_date})"
-
+      {:error, :rent_periods, _error} ->
         {:noreply,
          socket
-         |> put_flash(:error, message)
-         |> assign(
-           form:
-             to_form(
-               Contracts.change_contract(
-                 socket.assigns.current_scope,
-                 socket.assigns.contract,
-                 contract_params
-               )
-             )
-         )}
-
-      {:error, :past_start_date, _start_date} ->
-        message = "Cannot create contract: start date cannot be in the past"
-
-        {:noreply,
-         socket
-         |> put_flash(:error, message)
+         |> put_flash(:error, "An error occurred while creating the contract. Please try again.")
          |> assign(
            form:
              to_form(
