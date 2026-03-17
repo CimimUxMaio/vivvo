@@ -36,17 +36,13 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
       assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
 
-      # Get the actual index value from API to verify
-      {:ok, %{value: api_value}} = Vivvo.IndexService.latest(:ipc)
-      expected_update_factor = Decimal.div(api_value, 100)
+      today_string = Date.to_iso8601(today)
 
       assert_enqueued(
         worker: RentPeriodCreationWorker,
         args: %{
           contract_id: contract.id,
-          update_factor: expected_update_factor,
-          year: today.year,
-          month: today.month
+          today: today_string
         }
       )
     end
@@ -129,9 +125,10 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       refute_enqueued(worker: RentPeriodCreationWorker)
     end
 
-    test "unique constraint prevents duplicate RentPeriodCreationWorker jobs for same contract in same month" do
+    test "unique constraint prevents duplicate RentPeriodCreationWorker jobs for same contract on same day" do
       scope = user_scope_fixture()
       today = Date.utc_today()
+      today_string = Date.to_iso8601(today)
 
       # Create a contract that started 5 months ago with 6-month duration
       # This gives a period ending this month
@@ -157,26 +154,22 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       {:ok, _job1} =
         %{
           contract_id: contract.id,
-          update_factor: Decimal.new("0.03"),
-          year: today.year,
-          month: today.month
+          today: today_string
         }
         |> RentPeriodCreationWorker.new(
-          unique: [period: :infinity, keys: [:contract_id, :year, :month]],
+          unique: [period: :infinity, keys: [:contract_id, :today]],
           queue: :rent_periods
         )
         |> Oban.insert()
 
-      # Try to insert second job with same contract_id, year, month - should be rejected
+      # Try to insert second job with same contract_id and today - should be rejected
       {:ok, _job2} =
         %{
           contract_id: contract.id,
-          update_factor: Decimal.new("0.04"),
-          year: today.year,
-          month: today.month
+          today: today_string
         }
         |> RentPeriodCreationWorker.new(
-          unique: [period: :infinity, keys: [:contract_id, :year, :month]],
+          unique: [period: :infinity, keys: [:contract_id, :today]],
           queue: :rent_periods
         )
         |> Oban.insert()
@@ -184,19 +177,18 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       # Should only have 1 job in queue (the first one)
       assert Repo.aggregate(Oban.Job, :count) == 1
 
-      # Verify it's the first one with 0.03 value
+      # Verify it has the correct args
       job = Repo.one!(Oban.Job)
-      assert job.args["update_factor"] == "0.03"
+      assert job.args["contract_id"] == contract.id
+      assert job.args["today"] == today_string
     end
 
-    test "different contracts can be scheduled in same month" do
+    test "different contracts can be scheduled on same day" do
       scope = user_scope_fixture()
       today = Date.utc_today()
+      today_string = Date.to_iso8601(today)
 
-      # Create two contracts that started 11 months ago with 3-month duration
-      # 11 = 3*3 + 2, so after 3 full periods (9 months), we're at month 10
-      # Next period starts at month 10, ends at month 12 (which is this month if we're at month 12)
-      # Actually, let's use 2-month duration with contract starting 1 month ago
+      # Create two contracts that started 1 month ago with 2-month duration
       # That gives period ending this month
       one_month_ago =
         today
@@ -229,16 +221,14 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
           update_factor: Decimal.new("0.05")
         )
 
-      # Insert jobs for both contracts in same month
+      # Insert jobs for both contracts on same day
       {:ok, _job1} =
         %{
           contract_id: contract_a.id,
-          update_factor: Decimal.new("0.03"),
-          year: today.year,
-          month: today.month
+          today: today_string
         }
         |> RentPeriodCreationWorker.new(
-          unique: [period: :infinity, keys: [:contract_id, :year, :month]],
+          unique: [period: :infinity, keys: [:contract_id, :today]],
           queue: :rent_periods
         )
         |> Oban.insert()
@@ -246,12 +236,10 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       {:ok, _job2} =
         %{
           contract_id: contract_b.id,
-          update_factor: Decimal.new("0.05"),
-          year: today.year,
-          month: today.month
+          today: today_string
         }
         |> RentPeriodCreationWorker.new(
-          unique: [period: :infinity, keys: [:contract_id, :year, :month]],
+          unique: [period: :infinity, keys: [:contract_id, :today]],
           queue: :rent_periods
         )
         |> Oban.insert()
@@ -267,6 +255,45 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       assert length(job_args) == 2
       assert Enum.at(job_args, 0)["contract_id"] == contract_a.id
       assert Enum.at(job_args, 1)["contract_id"] == contract_b.id
+    end
+
+    test "backoff function returns exponential delays up to 12 hours" do
+      # Test the backoff function with different attempts
+      # Backoff is returned in seconds
+      job = %{attempt: 1}
+      backoff_1 = RentPeriodSchedulerWorker.backoff(job)
+      # 15 minutes
+      assert backoff_1 == 900
+
+      job = %{attempt: 2}
+      backoff_2 = RentPeriodSchedulerWorker.backoff(job)
+      # 30 minutes
+      assert backoff_2 == 1800
+
+      job = %{attempt: 3}
+      backoff_3 = RentPeriodSchedulerWorker.backoff(job)
+      # 60 minutes
+      assert backoff_3 == 3600
+
+      job = %{attempt: 4}
+      backoff_4 = RentPeriodSchedulerWorker.backoff(job)
+      # 2 hours
+      assert backoff_4 == 7200
+
+      job = %{attempt: 5}
+      backoff_5 = RentPeriodSchedulerWorker.backoff(job)
+      # 4 hours
+      assert backoff_5 == 14_400
+
+      job = %{attempt: 6}
+      backoff_6 = RentPeriodSchedulerWorker.backoff(job)
+      # 8 hours
+      assert backoff_6 == 28_800
+
+      job = %{attempt: 7}
+      backoff_7 = RentPeriodSchedulerWorker.backoff(job)
+      # Should be capped at 12 hours (43200 seconds)
+      assert backoff_7 == 43_200
     end
   end
 end
