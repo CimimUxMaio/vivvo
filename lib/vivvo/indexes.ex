@@ -8,6 +8,7 @@ defmodule Vivvo.Indexes do
   """
 
   import Ecto.Query, warn: false
+  require Logger
   alias Vivvo.Indexes.IndexHistory
   alias Vivvo.Repo
 
@@ -160,4 +161,122 @@ defmodule Vivvo.Indexes do
 
   """
   def get_index_history!(id), do: Repo.get!(IndexHistory, id)
+
+  @doc """
+  Returns index histories for a given type within a date range (inclusive).
+
+  Results are ordered by date in ascending order.
+
+  ## Examples
+
+      iex> get_index_history_by_date_range(:ipc, ~D[2026-01-01], ~D[2026-03-01])
+      [%IndexHistory{date: ~D[2026-01-01], value: Decimal.new("2.5")}, ...]
+
+  """
+  def get_index_history_by_date_range(type, start_date, end_date) do
+    IndexHistory
+    |> where([ih], ih.type == ^type)
+    |> where([ih], ih.date >= ^start_date)
+    |> where([ih], ih.date <= ^end_date)
+    |> order_by([ih], asc: ih.date)
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets the index history value for a specific type and exact date.
+
+  Returns nil if no record exists for the given type and date.
+
+  ## Examples
+
+      iex> get_index_history_by_date(:icl, ~D[2026-02-01])
+      %IndexHistory{value: Decimal.new("150.5")}
+
+      iex> get_index_history_by_date(:icl, ~D[2020-01-01])
+      nil
+
+  """
+  def get_index_history_by_date(type, date) do
+    IndexHistory
+    |> where([ih], ih.type == ^type and ih.date == ^date)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets the latest index history record for a given type.
+
+  Returns nil if no records exist for the index type.
+
+  ## Examples
+
+      iex> get_latest_index_value(:icl)
+      %IndexHistory{date: ~D[2026-03-01], value: Decimal.new("155.2")}
+
+      iex> get_latest_index_value(:unknown)
+      nil
+
+  """
+  def get_latest_index_value(type, today \\ Date.utc_today()) do
+    IndexHistory
+    |> where([ih], ih.type == ^type)
+    |> where([ih], ih.date <= ^today)
+    |> order_by([ih], desc: ih.date)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc """
+  Computes the update factor for a given index type.
+
+  For IPC: Accumulates historic rates between last_update date and previous month end.
+
+  For ICL: Calculates the ratio between the latest value and the value at the last_update date.
+  Returns (latest_value / old_value) as decimal.
+
+  ## Examples
+
+      iex> compute_update_factor(:ipc, ~D[2026-01-01], ~D[2026-03-15])
+      Decimal.new("0.055")  # (1 + ipc_month1) * (1 + ipc_month2) * ... = 0.055
+
+      iex> compute_update_factor(:icl, ~D[2026-01-01])
+      Decimal.new("0.10")   # current_value / old_value
+
+  """
+  def compute_update_factor(type, last_update, today \\ Date.utc_today())
+
+  def compute_update_factor(:ipc, last_update, today) do
+    histories = get_index_history_by_date_range(:ipc, last_update, today)
+
+    if histories == [] do
+      Decimal.new(1)
+    else
+      Enum.reduce(histories, Decimal.new(1), fn history, acc ->
+        rate_as_decimal = Decimal.div(history.value, 100)
+
+        Decimal.add(1, rate_as_decimal)
+        |> Decimal.mult(acc)
+      end)
+    end
+  end
+
+  def compute_update_factor(:icl, last_update, today) do
+    old_history = get_index_history_by_date(:icl, last_update)
+    new_history = get_latest_index_value(:icl, today)
+
+    if is_nil(old_history) do
+      raise ArgumentError,
+            "No ICL history found for date #{inspect(last_update)}, cannot compute update factor"
+    end
+
+    if is_nil(new_history) do
+      raise ArgumentError,
+            "No latest ICL history found for date #{inspect(today)}, cannot compute update factor"
+    end
+
+    Decimal.div(new_history.value, old_history.value)
+  end
+
+  def compute_update_factor(type, _last_update, _today) do
+    raise ArgumentError, "Unsupported index type: #{type}"
+  end
 end
