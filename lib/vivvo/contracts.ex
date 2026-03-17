@@ -472,24 +472,31 @@ defmodule Vivvo.Contracts do
   @doc """
   Calculate the current payment number based on months since start_date.
   Returns 0 if the contract hasn't started yet.
+  Caps the result at the contract's total expected number of payments.
 
   ## Examples
 
-      iex> get_current_payment_number(%Contract{start_date: ~D[2026-01-01]})
+      iex> get_current_payment_number(%Contract{start_date: ~D[2026-01-01], end_date: ~D[2026-12-31]})
       5  # if today is May 2026
 
-      iex> get_current_payment_number(%Contract{start_date: ~D[2026-12-01]})
+      iex> get_current_payment_number(%Contract{start_date: ~D[2026-12-01], end_date: ~D[2027-12-31]})
       0  # if today is earlier than December 2026
 
+      iex> get_current_payment_number(%Contract{start_date: ~D[2025-01-01], end_date: ~D[2025-03-31]})
+      3  # expired contract returns total payments, not inflated number
+
   """
-  def get_current_payment_number(%Contract{start_date: start_date}) do
+  def get_current_payment_number(%Contract{} = contract) do
     today = Date.utc_today()
+    start_date = contract.start_date
 
     if Date.compare(today, start_date) == :lt do
       0
     else
       months_diff = (today.year - start_date.year) * 12 + (today.month - start_date.month)
-      months_diff + 1
+      current = months_diff + 1
+      total = contract_duration_months(contract)
+      min(current, total)
     end
   end
 
@@ -1248,6 +1255,9 @@ defmodule Vivvo.Contracts do
   @doc """
   Creates a rent period. Used by system jobs only (no scope validation).
 
+  Uses `ON CONFLICT DO NOTHING` to handle race conditions gracefully when
+  multiple workers attempt to create the same rent period concurrently.
+
   ## Examples
 
       iex> create_rent_period(%{field: value})
@@ -1256,11 +1266,31 @@ defmodule Vivvo.Contracts do
       iex> create_rent_period(%{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
+      iex> create_rent_period(attrs)  # when period already exists
+      {:ok, :already_exists}
+
   """
   def create_rent_period(attrs) do
     %RentPeriod{}
     |> RentPeriod.changeset(attrs)
-    |> Repo.insert()
+    |> Repo.insert(
+      on_conflict: :nothing,
+      conflict_target: [:contract_id, :start_date]
+    )
+    |> handle_rent_period_insert_result(attrs)
+  end
+
+  defp handle_rent_period_insert_result({:ok, %RentPeriod{id: nil} = _struct}, _attrs) do
+    # ON CONFLICT :nothing was triggered - period already exists
+    {:ok, :already_exists}
+  end
+
+  defp handle_rent_period_insert_result({:ok, %RentPeriod{} = rent_period}, _attrs) do
+    {:ok, rent_period}
+  end
+
+  defp handle_rent_period_insert_result({:error, changeset}, _attrs) do
+    {:error, changeset}
   end
 
   @doc """
