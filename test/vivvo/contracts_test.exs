@@ -318,7 +318,7 @@ defmodule Vivvo.ContractsTest do
       assert {:error, %Ecto.Changeset{}} = Contracts.create_contract(scope, @invalid_attrs)
     end
 
-    test "returns overlapping_contract error when new contract overlaps at start" do
+    test "returns error changeset when new contract overlaps at start" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
@@ -334,7 +334,7 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:ok, %Contract{} = existing_contract} =
+      assert {:ok, %Contract{} = _existing_contract} =
                Contracts.create_contract(scope, existing_attrs)
 
       # Try to create overlapping contract: 2 months later to 12 months later (overlaps at start)
@@ -347,13 +347,13 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:error, :overlapping_contract, returned_contract} =
+      assert {:error, %Ecto.Changeset{} = changeset} =
                Contracts.create_contract(scope, overlapping_attrs)
 
-      assert returned_contract.id == existing_contract.id
+      assert "overlaps with existing contract" in errors_on(changeset).start_date
     end
 
-    test "returns overlapping_contract error when new contract overlaps at end" do
+    test "returns error changeset when new contract overlaps at end" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
@@ -369,7 +369,7 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:ok, %Contract{} = existing_contract} =
+      assert {:ok, %Contract{} = _existing_contract} =
                Contracts.create_contract(scope, existing_attrs)
 
       # Try to create overlapping contract: today to 8 months later (overlaps at end)
@@ -382,13 +382,13 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:error, :overlapping_contract, returned_contract} =
+      assert {:error, %Ecto.Changeset{} = changeset} =
                Contracts.create_contract(scope, overlapping_attrs)
 
-      assert returned_contract.id == existing_contract.id
+      assert "overlaps with existing contract" in errors_on(changeset).start_date
     end
 
-    test "returns overlapping_contract error when new contract completely contains existing" do
+    test "returns error changeset when new contract completely contains existing" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
@@ -404,7 +404,7 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:ok, %Contract{} = existing_contract} =
+      assert {:ok, %Contract{} = _existing_contract} =
                Contracts.create_contract(scope, existing_attrs)
 
       # Try to create overlapping contract: today to 12 months later (completely contains existing)
@@ -417,10 +417,10 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:error, :overlapping_contract, returned_contract} =
+      assert {:error, %Ecto.Changeset{} = changeset} =
                Contracts.create_contract(scope, overlapping_attrs)
 
-      assert returned_contract.id == existing_contract.id
+      assert "overlaps with existing contract" in errors_on(changeset).start_date
     end
 
     test "allows creating contract when no overlap exists" do
@@ -460,7 +460,7 @@ defmodule Vivvo.ContractsTest do
       assert new_contract.end_date == Date.add(today, 365)
     end
 
-    test "returns past_start_date error when start_date is in the past" do
+    test "returns error changeset when start_date is in the past" do
       scope = user_scope_fixture()
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       property = property_fixture(scope)
@@ -476,8 +476,8 @@ defmodule Vivvo.ContractsTest do
         tenant_id: tenant.id
       }
 
-      assert {:error, {:past_start_date, returned_date}} = Contracts.create_contract(scope, attrs)
-      assert returned_date == past_date
+      assert {:error, %Ecto.Changeset{} = changeset} = Contracts.create_contract(scope, attrs)
+      assert "cannot be in the past" in errors_on(changeset).start_date
     end
 
     test "raises ArgumentError when only past_start_date? option is provided" do

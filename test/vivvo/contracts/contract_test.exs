@@ -113,6 +113,7 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
+        rent: "100.00",
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-02-10]}]
       }
 
@@ -141,6 +142,7 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
+        rent: "100.00",
         rent_period_duration: 12,
         index_type: :ipc,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
@@ -158,6 +160,7 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
+        rent: "100.00",
         index_type: :ipc,
         rent_period_duration: 12,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
@@ -175,6 +178,7 @@ defmodule Vivvo.Contracts.ContractTest do
         expiration_day: 5,
         property_id: 1,
         tenant_id: 1,
+        rent: "100.00",
         index_type: :icl,
         rent_period_duration: 6,
         rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
@@ -198,6 +202,65 @@ defmodule Vivvo.Contracts.ContractTest do
 
       changeset = Contract.changeset(%Contract{}, attrs, scope)
       assert %{rent_period_duration: ["must be greater than 0"]} = errors_on(changeset)
+    end
+
+    test "validates rent is required", %{scope: scope} do
+      attrs = %{
+        start_date: ~D[2026-02-05],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        property_id: 1,
+        tenant_id: 1,
+        rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
+      }
+
+      changeset = Contract.changeset(%Contract{}, attrs, scope)
+      assert %{rent: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "validates rent must be greater than 0", %{scope: scope} do
+      attrs = %{
+        start_date: ~D[2026-02-05],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        property_id: 1,
+        tenant_id: 1,
+        rent: "0",
+        rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
+      }
+
+      changeset = Contract.changeset(%Contract{}, attrs, scope)
+      assert %{rent: ["must be greater than 0"]} = errors_on(changeset)
+    end
+
+    test "validates rent rejects negative values", %{scope: scope} do
+      attrs = %{
+        start_date: ~D[2026-02-05],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        property_id: 1,
+        tenant_id: 1,
+        rent: "-100",
+        rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
+      }
+
+      changeset = Contract.changeset(%Contract{}, attrs, scope)
+      assert %{rent: ["must be greater than 0"]} = errors_on(changeset)
+    end
+
+    test "accepts valid rent value", %{scope: scope} do
+      attrs = %{
+        start_date: ~D[2026-02-05],
+        end_date: ~D[2026-12-31],
+        expiration_day: 5,
+        property_id: 1,
+        tenant_id: 1,
+        rent: "1000.00",
+        rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
+      }
+
+      changeset = Contract.changeset(%Contract{}, attrs, scope)
+      refute Map.has_key?(errors_on(changeset), :rent)
     end
 
     test "validates index_type and index_value must be set together with rent_period_duration", %{
