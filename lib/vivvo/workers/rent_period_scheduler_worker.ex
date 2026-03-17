@@ -33,28 +33,28 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
 
     # Update index histories BEFORE processing contracts
     # This ensures we have the latest index data from external APIs
-    update_index_histories(today)
+    with {:ok, _} <- update_index_histories(today) do
+      # Query all contracts needing rent period updates (all filtering done in database)
+      contracts = Contracts.contracts_needing_update(today)
 
-    # Query all contracts needing rent period updates (all filtering done in database)
-    contracts = Contracts.contracts_needing_update(today)
+      # Schedule creation worker for each contract
+      # Each worker will compute its own update factor based on contract's index type
+      Enum.map(contracts, fn contract ->
+        today_string = Date.to_iso8601(today)
 
-    # Schedule creation worker for each contract
-    # Each worker will compute its own update factor based on contract's index type
-    Enum.each(contracts, fn contract ->
-      today_string = Date.to_iso8601(today)
+        %{
+          contract_id: contract.id,
+          today: today_string
+        }
+        |> RentPeriodCreationWorker.new(
+          unique: [period: :infinity, keys: [:contract_id, :today]],
+          queue: :rent_periods
+        )
+      end)
+      |> Oban.insert_all()
 
-      %{
-        contract_id: contract.id,
-        today: today_string
-      }
-      |> RentPeriodCreationWorker.new(
-        unique: [period: :infinity, keys: [:contract_id, :today]],
-        queue: :rent_periods
-      )
-      |> Oban.insert()
-    end)
-
-    {:ok, %{scheduled_count: length(contracts)}}
+      {:ok, %{scheduled_count: length(contracts)}}
+    end
   end
 
   @impl Oban.Worker
@@ -73,13 +73,16 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
     require Logger
 
     with {:ok, missing_histories} <- fetch_missing_histories(today),
-         {:ok, _count} <- Indexes.create_index_histories(missing_histories) do
+         {:ok, count} <- Indexes.create_index_histories(missing_histories) do
       Logger.info(
         "Successfully updated index histories with #{length(missing_histories)} new entries"
       )
+
+      {:ok, count}
     else
       {:error, reason} ->
         Logger.error("Failed to update index histories: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
