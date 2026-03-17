@@ -276,8 +276,7 @@ defmodule Vivvo.Contracts do
   defp compute_rent_value(initial_rent, _update_factor, 0), do: initial_rent
 
   defp compute_rent_value(initial_rent, update_factor, period_idx) do
-    base = Decimal.add(1, update_factor)
-    multiplier = decimal_pow(base, period_idx)
+    multiplier = decimal_pow(update_factor, period_idx)
     Decimal.mult(initial_rent, multiplier)
   end
 
