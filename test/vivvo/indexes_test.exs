@@ -183,4 +183,247 @@ defmodule Vivvo.IndexesTest do
       assert result == nil
     end
   end
+
+  describe "decimal precision edge cases" do
+    test "IPC: very large accumulated rates maintains precision" do
+      # Create 12 months of IPC rates at 5% each
+      # (1.05)^12 should maintain high precision
+      base_date = ~D[2025-01-01]
+
+      for i <- 0..11 do
+        date = Date.shift(base_date, month: i)
+
+        Indexes.create_index_history(%{
+          type: :ipc,
+          value: Decimal.new("5.0"),
+          date: date
+        })
+      end
+
+      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2025-12-31])
+
+      # Verify result is approximately 1.795856 (1.05^12)
+      # Allow for small floating point differences
+      lower = Decimal.new("1.795")
+      upper = Decimal.new("1.80")
+
+      assert Decimal.gt?(result, lower), "Result #{result} should be > #{lower}"
+      assert Decimal.lt?(result, upper), "Result #{result} should be < #{upper}"
+    end
+
+    test "ICL: ratio approximately 1.0 when values are equal" do
+      Indexes.create_index_history(%{
+        type: :icl,
+        value: Decimal.new("100.0"),
+        date: ~D[2026-01-01]
+      })
+
+      Indexes.create_index_history(%{
+        type: :icl,
+        value: Decimal.new("100.0"),
+        date: ~D[2026-03-01]
+      })
+
+      result = Indexes.compute_update_factor(:icl, ~D[2026-01-01], ~D[2026-03-15])
+
+      # Should be approximately 1.0 when old and new values are equal
+      assert Decimal.gt?(result, Decimal.new("0.999"))
+      assert Decimal.lt?(result, Decimal.new("1.001"))
+    end
+
+    test "compound calculation with high precision decimals" do
+      # Use 6 decimal places
+      base_date = ~D[2025-01-01]
+
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("3.141592"),
+        date: base_date
+      })
+
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("2.718281"),
+        date: Date.shift(base_date, month: 1)
+      })
+
+      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2025-03-15])
+
+      # Verify result is approximately 1.059 (1.03141592 * 1.02718281)
+      lower = Decimal.new("1.059")
+      upper = Decimal.new("1.060")
+
+      assert Decimal.gt?(result, lower), "Result #{result} should be > #{lower}"
+      assert Decimal.lt?(result, upper), "Result #{result} should be < #{upper}"
+    end
+
+    test "small factor: 0.001% IPC rate" do
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("0.001"),
+        date: ~D[2026-01-01]
+      })
+
+      result = Indexes.compute_update_factor(:ipc, ~D[2026-01-01], ~D[2026-02-15])
+
+      # 1 + 0.00001 = 1.00001
+      expected = Decimal.new("1.00001")
+      assert Decimal.eq?(result, expected)
+    end
+
+    test "large rent multiplied by small factor" do
+      # Create index history
+      Indexes.create_index_history(%{
+        type: :icl,
+        value: Decimal.new("1000.0"),
+        date: ~D[2026-01-01]
+      })
+
+      Indexes.create_index_history(%{
+        type: :icl,
+        value: Decimal.new("1000.01"),
+        date: ~D[2026-03-01]
+      })
+
+      result = Indexes.compute_update_factor(:icl, ~D[2026-01-01], ~D[2026-03-15])
+
+      # Factor should be approximately 1.00001 (1000.01 / 1000.0)
+      assert Decimal.gt?(result, Decimal.new("1.00000"))
+      assert Decimal.lt?(result, Decimal.new("1.00002"))
+
+      # Simulate large rent calculation: $10,000,000 * ~1.00001 factor
+      large_rent = Decimal.new("10000000")
+      new_rent = Decimal.mult(large_rent, result)
+      # Result should be approximately $10,000,100
+      assert Decimal.gt?(new_rent, Decimal.new("10000000"))
+      assert Decimal.lt?(new_rent, Decimal.new("10000110"))
+    end
+
+    test "multiple compound periods: 12 periods of 2.5% each" do
+      base_date = ~D[2025-01-01]
+
+      for i <- 0..11 do
+        date = Date.shift(base_date, month: i)
+
+        Indexes.create_index_history(%{
+          type: :ipc,
+          value: Decimal.new("2.5"),
+          date: date
+        })
+      end
+
+      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2025-12-31])
+
+      # Verify result is approximately 1.345 (1.025^12)
+      lower = Decimal.new("1.34")
+      upper = Decimal.new("1.35")
+
+      assert Decimal.gt?(result, lower), "Result #{result} should be > #{lower}"
+      assert Decimal.lt?(result, upper), "Result #{result} should be < #{upper}"
+    end
+  end
+
+  describe "get_missing_date_range/2 edge cases" do
+    test "returns yesterday+1 to today when latest date is yesterday" do
+      today = ~D[2026-03-15]
+      yesterday = Date.add(today, -1)
+
+      # Create a record for yesterday
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("2.5"),
+        date: yesterday
+      })
+
+      {from_date, to_date} = Indexes.get_missing_date_range(:ipc, today)
+
+      # Should start from today (yesterday + 1)
+      assert from_date == today
+      assert to_date == today
+    end
+
+    test "returns 2-year default range when no records exist" do
+      today = ~D[2026-03-15]
+
+      {from_date, to_date} = Indexes.get_missing_date_range(:ipc, today)
+
+      # Should default to 2 years ago
+      expected_from = ~D[2024-03-15]
+      assert from_date == expected_from
+      assert to_date == today
+    end
+  end
+
+  describe "create_index_histories/1 edge cases" do
+    test "handles duplicate records with on_conflict: :nothing" do
+      # Create initial record
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("2.5"),
+        date: ~D[2026-01-01]
+      })
+
+      # Try to create duplicate
+      {:ok, count} =
+        Indexes.create_index_histories([
+          %{type: :ipc, value: Decimal.new("3.0"), date: ~D[2026-01-01]}
+        ])
+
+      # Count should be 0 since duplicate was ignored
+      assert count == 0
+
+      # Original value should remain
+      record = Indexes.get_index_history_by_date(:ipc, ~D[2026-01-01])
+      assert Decimal.eq?(record.value, Decimal.new("2.5"))
+    end
+
+    test "inserts mixed types (IPC and ICL) together" do
+      {:ok, count} =
+        Indexes.create_index_histories([
+          %{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]},
+          %{type: :icl, value: Decimal.new("100.0"), date: ~D[2026-01-01]},
+          %{type: :ipc, value: Decimal.new("3.0"), date: ~D[2026-02-01]},
+          %{type: :icl, value: Decimal.new("110.0"), date: ~D[2026-02-01]}
+        ])
+
+      assert count == 4
+
+      # Verify all records exist
+      assert Indexes.get_index_history_by_date(:ipc, ~D[2026-01-01]) != nil
+      assert Indexes.get_index_history_by_date(:icl, ~D[2026-01-01]) != nil
+      assert Indexes.get_index_history_by_date(:ipc, ~D[2026-02-01]) != nil
+      assert Indexes.get_index_history_by_date(:icl, ~D[2026-02-01]) != nil
+    end
+  end
+
+  describe "get_latest_date/1 edge cases" do
+    test "returns nil when no records exist" do
+      # Use :icl which has no records in this test context
+      result = Indexes.get_latest_date(:icl)
+      assert result == nil
+    end
+
+    test "returns actual latest date when records exist" do
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("2.5"),
+        date: ~D[2026-01-01]
+      })
+
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("3.0"),
+        date: ~D[2026-03-01]
+      })
+
+      Indexes.create_index_history(%{
+        type: :ipc,
+        value: Decimal.new("2.8"),
+        date: ~D[2026-02-01]
+      })
+
+      result = Indexes.get_latest_date(:ipc)
+      assert result == ~D[2026-03-01]
+    end
+  end
 end

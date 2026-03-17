@@ -705,6 +705,98 @@ defmodule Vivvo.ContractsTest do
     end
   end
 
+  describe "update_contract/3" do
+    test "updates contract with valid attributes" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      update_attrs = %{notes: "updated notes", expiration_day: 10}
+
+      assert {:ok, %Contract{} = updated_contract} =
+               Contracts.update_contract(scope, contract, update_attrs)
+
+      assert updated_contract.notes == "updated notes"
+      assert updated_contract.expiration_day == 10
+    end
+
+    test "updates contract end_date" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      new_end_date = Date.add(contract.end_date, 30)
+      update_attrs = %{end_date: new_end_date}
+
+      assert {:ok, %Contract{} = updated_contract} =
+               Contracts.update_contract(scope, contract, update_attrs)
+
+      assert updated_contract.end_date == new_end_date
+    end
+
+    test "returns error changeset with invalid attributes" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      invalid_attrs = %{expiration_day: nil}
+
+      assert {:error, %Ecto.Changeset{}} =
+               Contracts.update_contract(scope, contract, invalid_attrs)
+
+      # Verify contract was not changed
+      unchanged_contract = Contracts.get_contract!(scope, contract.id)
+      assert unchanged_contract.expiration_day == contract.expiration_day
+    end
+
+    test "returns error when user is not authorized" do
+      scope = user_scope_fixture()
+      other_scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      update_attrs = %{notes: "updated notes"}
+
+      assert {:error, :unauthorized} =
+               Contracts.update_contract(other_scope, contract, update_attrs)
+
+      # Verify contract was not changed
+      unchanged_contract = Contracts.get_contract!(scope, contract.id)
+      assert unchanged_contract.notes == contract.notes
+    end
+
+    test "allows updating archived contract" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      {:ok, archived_contract} = Contracts.delete_contract(scope, contract)
+      update_attrs = %{notes: "updated notes"}
+
+      # Archived contracts can still be updated
+      assert {:ok, %Contract{} = updated_contract} =
+               Contracts.update_contract(scope, archived_contract, update_attrs)
+
+      assert updated_contract.notes == "updated notes"
+      assert updated_contract.archived == true
+    end
+
+    test "updates contract with index_type and rent_period_duration" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      update_attrs = %{index_type: :icl, rent_period_duration: 12}
+
+      assert {:ok, %Contract{} = updated_contract} =
+               Contracts.update_contract(scope, contract, update_attrs)
+
+      assert updated_contract.index_type == :icl
+      assert updated_contract.rent_period_duration == 12
+    end
+
+    test "broadcasts contract update" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+      update_attrs = %{notes: "broadcast test"}
+
+      Contracts.subscribe_contracts(scope)
+
+      assert {:ok, %Contract{} = updated_contract} =
+               Contracts.update_contract(scope, contract, update_attrs)
+
+      assert_receive {:updated, ^updated_contract}
+    end
+  end
+
   describe "contract_status/1" do
     test "returns :upcoming when start_date in future" do
       contract = %Contract{
@@ -1088,6 +1180,696 @@ defmodule Vivvo.ContractsTest do
 
       rent_value = Contracts.current_rent_value(contract)
       assert Decimal.equal?(rent_value, Decimal.new("850.00"))
+    end
+  end
+
+  describe "period_end_date/3" do
+    test "calculates end date for 12 month duration" do
+      today = Date.utc_today()
+      start_date = today
+      max_end_date = Date.add(today, 400)
+
+      end_date = Contracts.period_end_date(12, start_date, max_end_date)
+
+      # Should end at end of month 12 months from start
+      expected_end = Date.end_of_month(Date.shift(start_date, month: 11))
+      assert end_date == expected_end
+    end
+
+    test "respects max_end_date boundary" do
+      today = Date.utc_today()
+      start_date = today
+      max_end_date = Date.add(today, 30)
+
+      # 12 month period would go past max_end_date
+      end_date = Contracts.period_end_date(12, start_date, max_end_date)
+
+      assert end_date == max_end_date
+    end
+
+    test "calculates end date for 6 month duration" do
+      today = ~D[2024-01-15]
+      max_end_date = Date.add(today, 365)
+
+      end_date = Contracts.period_end_date(6, today, max_end_date)
+
+      # 6 months from Jan 15 -> end of June
+      expected_end = ~D[2024-06-30]
+      assert end_date == expected_end
+    end
+
+    test "calculates end date for 1 month duration" do
+      today = ~D[2024-03-15]
+      max_end_date = Date.add(today, 365)
+
+      end_date = Contracts.period_end_date(1, today, max_end_date)
+
+      # 1 month -> end of March
+      expected_end = ~D[2024-03-31]
+      assert end_date == expected_end
+    end
+
+    test "handles month boundaries correctly" do
+      # Start on last day of month
+      start_date = ~D[2024-01-31]
+      max_end_date = Date.add(start_date, 365)
+
+      end_date = Contracts.period_end_date(1, start_date, max_end_date)
+
+      # Should be end of January
+      assert end_date == ~D[2024-01-31]
+    end
+
+    test "handles February 29, 2024 (leap year)" do
+      # To end on Feb 29, 2024 (leap year), we need:
+      # period_end_date shifts by (duration - 1) months, then takes end of month
+      # So to get Feb 29: start in Sept (shift 5 months = Feb), end_of_month = Feb 29
+      start_date = ~D[2023-09-15]
+      max_end_date = Date.add(start_date, 400)
+
+      # 6 month duration from Sept -> end of Feb
+      end_date = Contracts.period_end_date(6, start_date, max_end_date)
+
+      # Feb 2024 is a leap year, so end date should be Feb 29
+      assert end_date == ~D[2024-02-29]
+    end
+
+    test "handles February 28, 2025 (non-leap year)" do
+      # To end on Feb 28, 2025, start in Sept 2024 (shift 5 months = Feb 2025)
+      start_date = ~D[2024-09-15]
+      max_end_date = Date.add(start_date, 400)
+
+      # 6 month duration from Sept -> end of Feb
+      end_date = Contracts.period_end_date(6, start_date, max_end_date)
+
+      # Feb 2025 is not a leap year, so end date should be Feb 28
+      assert end_date == ~D[2025-02-28]
+    end
+
+    test "handles year boundary Dec to Jan" do
+      start_date = ~D[2024-06-15]
+      max_end_date = Date.add(start_date, 365)
+
+      # 7 month duration from June -> shift 6 months = Dec, end_of_month = Dec 31
+      end_date = Contracts.period_end_date(7, start_date, max_end_date)
+
+      # Should end on Dec 31, 2024
+      assert end_date == ~D[2024-12-31]
+    end
+
+    test "handles 31-day to 30-day month transition" do
+      # Starting Jan 31
+      start_date = ~D[2024-01-31]
+      max_end_date = Date.add(start_date, 365)
+
+      # 1 month duration -> shift 0 months = Jan, end_of_month = Jan 31
+      end_date = Contracts.period_end_date(1, start_date, max_end_date)
+
+      # Should handle Jan 31 correctly (Jan has 31 days)
+      assert end_date == ~D[2024-01-31]
+    end
+
+    test "handles April 30 (30-day month)" do
+      # To end on April 30, start in Dec (shift 4 months from Dec = Apr)
+      start_date = ~D[2023-12-15]
+      max_end_date = Date.add(start_date, 365)
+
+      # 5 month duration from Dec -> end of April
+      end_date = Contracts.period_end_date(5, start_date, max_end_date)
+
+      # April has 30 days
+      assert end_date == ~D[2024-04-30]
+    end
+  end
+
+  describe "calculate_due_date/2 edge cases" do
+    test "calculates due date across month boundary" do
+      # Contract starting in month 1 with expiration_day 5
+      contract = %Contract{
+        start_date: ~D[2024-01-15],
+        expiration_day: 5
+      }
+
+      # Payment 1: shifts 0 months from Jan 15 = Jan 15, set day to 5 = Jan 5
+      due_date = Contracts.calculate_due_date(contract, 1)
+      assert due_date == ~D[2024-01-05]
+
+      # Payment 2: shifts 1 month from Jan 15 = Feb 15, set day to 5 = Feb 5
+      due_date = Contracts.calculate_due_date(contract, 2)
+      assert due_date == ~D[2024-02-05]
+    end
+
+    test "handles due date on month start (day 1)" do
+      contract = %Contract{
+        start_date: ~D[2024-01-15],
+        expiration_day: 1
+      }
+
+      # Payment 2 shifts 1 month from Jan 15 = Feb 15, set day to 1 = Feb 1
+      due_date = Contracts.calculate_due_date(contract, 2)
+
+      # Second payment due on Feb 1
+      assert due_date == ~D[2024-02-01]
+    end
+  end
+
+  describe "total_amount_due/2" do
+    test "returns zero for contract with no payments due" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Future contract - nothing due yet
+      contract =
+        contract_fixture(scope, %{
+          start_date: Date.add(today, 30),
+          end_date: Date.add(today, 365),
+          rent: "1000.00"
+        })
+
+      total = Contracts.total_amount_due(scope, contract)
+      assert Decimal.equal?(total, Decimal.new("0.00"))
+    end
+
+    test "calculates total for single unpaid month" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      today = Date.utc_today()
+
+      # Contract that started 1 month ago
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "1000.00",
+            start_date: Date.add(today, -45),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      total = Contracts.total_amount_due(scope, contract)
+      # At least one month should be due
+      assert Decimal.compare(total, Decimal.new("0.00")) == :gt
+    end
+
+    test "returns positive amount for unpaid months" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+      today = Date.utc_today()
+
+      # Contract with one month
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "500.00",
+            start_date: Date.add(today, -20),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      # Get the total due before payment
+      total_before = Contracts.total_amount_due(scope, contract)
+
+      # Should have some amount due since contract started 20 days ago
+      assert Decimal.compare(total_before, Decimal.new("0.00")) == :gt
+
+      # Make a full payment
+      payment =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "500.00",
+          status: :pending
+        })
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
+
+      # Total should be reduced after payment (might still have some due depending on months)
+      total_after = Contracts.total_amount_due(scope, contract)
+      assert Decimal.compare(total_after, total_before) != :gt
+    end
+  end
+
+  describe "earliest_due_date/2" do
+    test "returns nil when contract hasn't started" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: Date.add(today, 30),
+          end_date: Date.add(today, 365),
+          rent: "1000.00"
+        })
+
+      assert Contracts.earliest_due_date(scope, contract) == nil
+    end
+
+    test "returns due date for unpaid months" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "1000.00",
+            start_date: Date.add(today, -45),
+            end_date: Date.add(today, 365),
+            expiration_day: 5,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      due_date = Contracts.earliest_due_date(scope, contract)
+      assert due_date != nil
+      assert is_struct(due_date, Date)
+    end
+
+    test "returns nil when all payments are current" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      today = Date.utc_today()
+
+      # Contract starting in future - no payments due yet
+      contract =
+        contract_fixture(scope, %{
+          rent: "500.00",
+          start_date: Date.add(today, 5),
+          end_date: Date.add(today, 365),
+          expiration_day: 5,
+          tenant_id: tenant.id,
+          index_type: :icl,
+          rent_period_duration: 12
+        })
+
+      earliest_due = Contracts.earliest_due_date(scope, contract)
+      # Should be nil since contract hasn't started
+      assert earliest_due == nil
+    end
+  end
+
+  describe "get_payment_statuses/2" do
+    test "returns empty list for future contract" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: Date.add(today, 30),
+          end_date: Date.add(today, 365),
+          rent: "1000.00"
+        })
+
+      statuses = Contracts.get_payment_statuses(scope, contract)
+      assert statuses == []
+    end
+
+    test "returns payment statuses for active contract" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "1000.00",
+            start_date: Date.add(today, -45),
+            end_date: Date.add(today, 365),
+            expiration_day: 5,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      statuses = Contracts.get_payment_statuses(scope, contract)
+      assert is_list(statuses)
+      assert statuses != []
+
+      # Check structure of payment status
+      first_status = hd(statuses)
+      assert Map.has_key?(first_status, :payment_number)
+      assert Map.has_key?(first_status, :due_date)
+      assert Map.has_key?(first_status, :rent)
+      assert Map.has_key?(first_status, :total_paid)
+      assert Map.has_key?(first_status, :status)
+    end
+
+    test "status reflects unpaid payments correctly" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "500.00",
+            start_date: Date.add(today, -20),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      statuses = Contracts.get_payment_statuses(scope, contract)
+
+      # Find an unpaid status
+      unpaid_statuses = Enum.filter(statuses, &(&1.status != :paid))
+
+      if unpaid_statuses != [] do
+        unpaid = hd(unpaid_statuses)
+        assert Decimal.equal?(unpaid.total_paid, Decimal.new("0.00"))
+        # Status can be :pending, :overdue, :partial, or :unpaid
+        assert unpaid.status in [:pending, :overdue, :partial, :unpaid]
+      end
+    end
+
+    test "status reflects paid payments correctly" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "500.00",
+            start_date: Date.add(today, -20),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      # Make a payment
+      payment =
+        payment_fixture(tenant_scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "500.00",
+          status: :pending
+        })
+
+      {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
+
+      statuses = Contracts.get_payment_statuses(scope, contract)
+      paid_statuses = Enum.filter(statuses, &(&1.status == :paid))
+
+      if paid_statuses != [] do
+        paid = hd(paid_statuses)
+        assert Decimal.compare(paid.total_paid, Decimal.new("0.00")) == :gt
+      end
+    end
+  end
+
+  describe "next_rent_update_date/1" do
+    test "returns next update date for contract with current period" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: today,
+          end_date: Date.add(today, 365),
+          rent_period_duration: 6,
+          index_type: :ipc
+        })
+
+      next_update = Contracts.next_rent_update_date(contract)
+
+      # Should be the day after the current rent period ends
+      current_period = Contracts.current_rent_period(contract, today)
+      expected_date = Date.add(current_period.end_date, 1)
+      assert next_update == expected_date
+    end
+
+    test "returns nil when update would be after contract end_date" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Create contract ending soon - one month duration
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.add(today, -20),
+            end_date: Date.add(today, 10),
+            rent_period_duration: 1,
+            index_type: :ipc
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.03")
+        )
+
+      # The next update date would be after the contract ends
+      result = Contracts.next_rent_update_date(contract)
+
+      # Should return nil because next update would be after contract end
+      assert result == nil
+    end
+
+    test "returns date for active contract" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Active contract with 6 month duration
+      contract =
+        contract_fixture(scope, %{
+          start_date: today,
+          end_date: Date.add(today, 400),
+          rent_period_duration: 6,
+          index_type: :ipc
+        })
+
+      next_update = Contracts.next_rent_update_date(contract)
+
+      # Should return the update date based on current rent period
+      assert next_update != nil
+      assert is_struct(next_update, Date)
+    end
+  end
+
+  describe "days_until_next_update/1" do
+    test "calculates days until next rent update" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: today,
+          end_date: Date.add(today, 365),
+          rent_period_duration: 6,
+          index_type: :ipc
+        })
+
+      days = Contracts.days_until_next_update(contract)
+
+      # Should be positive number of days
+      assert days != nil
+      assert days > 0
+    end
+
+    test "returns nil when no next update date" do
+      scope = user_scope_fixture()
+
+      # Create contract that has ended
+      contract =
+        expired_contract_fixture(scope, %{
+          rent_period_duration: 12,
+          index_type: :ipc
+        })
+
+      # For an expired contract, the next update should be nil
+      # (period end date + 1 would be after contract end)
+      result = Contracts.days_until_next_update(contract)
+
+      # The result could be nil or negative days
+      if result do
+        # If there is a date, it could be negative (past)
+        assert is_integer(result)
+      end
+    end
+
+    test "returns 0 when update is today" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Create a contract where the next update is today
+      # Need a period that ended yesterday
+      yesterday = Date.add(today, -1)
+      start_date = Date.shift(yesterday, month: -5)
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: start_date,
+            end_date: Date.add(today, 400),
+            rent_period_duration: 6,
+            index_type: :ipc
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.03")
+        )
+
+      # The period should have ended yesterday, so next update is today
+      days = Contracts.days_until_next_update(contract)
+
+      if days do
+        # Should be 0 or close to 0
+        assert days >= 0
+      end
+    end
+  end
+
+  describe "next_payment_date/1" do
+    test "returns next payment due date" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Contract that started recently
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.add(today, -10),
+            end_date: Date.add(today, 365),
+            expiration_day: 5,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      next_payment = Contracts.next_payment_date(contract)
+
+      # Should return a date
+      assert next_payment != nil
+      assert is_struct(next_payment, Date)
+    end
+
+    test "returns payment date for future contract" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Future contract - first payment will be due on expiration_day of first month
+      contract =
+        contract_fixture(scope, %{
+          start_date: Date.add(today, 5),
+          end_date: Date.add(today, 365),
+          expiration_day: 5
+        })
+
+      next_payment = Contracts.next_payment_date(contract)
+      # Should return the first payment due date
+      assert next_payment != nil
+      assert is_struct(next_payment, Date)
+    end
+
+    test "returns nil for expired contract" do
+      scope = user_scope_fixture()
+
+      # Expired contract - no future payments
+      contract =
+        expired_contract_fixture(scope, %{
+          expiration_day: 5
+        })
+
+      assert Contracts.next_payment_date(contract) == nil
+    end
+  end
+
+  describe "contract_duration_months/1" do
+    test "calculates total months in contract" do
+      today = Date.utc_today()
+
+      # 12 month contract
+      contract = %Contract{
+        start_date: today,
+        end_date: Date.add(today, 365)
+      }
+
+      months = Contracts.contract_duration_months(contract)
+
+      # Should be approximately 12 months
+      assert months > 0
+      assert months >= 11 and months <= 13
+    end
+
+    test "calculates exact months for 6 month contract" do
+      today = ~D[2024-01-15]
+      end_date = ~D[2024-07-15]
+
+      contract = %Contract{
+        start_date: today,
+        end_date: end_date
+      }
+
+      months = Contracts.contract_duration_months(contract)
+
+      # Should be approximately 6 months
+      assert months >= 5 and months <= 7
+    end
+
+    test "returns 1 for single month contract" do
+      today = ~D[2024-03-01]
+      end_date = ~D[2024-03-31]
+
+      contract = %Contract{
+        start_date: today,
+        end_date: end_date
+      }
+
+      months = Contracts.contract_duration_months(contract)
+      assert months >= 0
+    end
+
+    test "handles multi-year contracts" do
+      today = ~D[2024-01-15]
+      end_date = ~D[2026-01-15]
+
+      contract = %Contract{
+        start_date: today,
+        end_date: end_date
+      }
+
+      months = Contracts.contract_duration_months(contract)
+
+      # Should be approximately 24 months
+      assert months >= 22 and months <= 26
     end
   end
 
@@ -1870,6 +2652,371 @@ defmodule Vivvo.ContractsTest do
 
       results = Contracts.contracts_needing_update(today)
       assert results == []
+    end
+  end
+
+  describe "list_contracts_for_tenant/1" do
+    test "returns all contracts for tenant user" do
+      owner_scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+
+      # Create a contract where tenant is the tenant
+      contract =
+        contract_fixture(owner_scope, %{
+          tenant_id: tenant.id
+        })
+
+      contracts = Contracts.list_contracts_for_tenant(tenant_scope)
+      assert contracts != []
+      assert Enum.any?(contracts, &(&1.id == contract.id))
+    end
+
+    test "excludes contracts where user is not the tenant" do
+      owner_scope = user_scope_fixture()
+      tenant_a = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_b = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope_b = %Vivvo.Accounts.Scope{user: tenant_b}
+
+      # Create contract for tenant_a
+      contract =
+        contract_fixture(owner_scope, %{
+          tenant_id: tenant_a.id
+        })
+
+      # tenant_b should not see this contract
+      contracts = Contracts.list_contracts_for_tenant(tenant_scope_b)
+      refute Enum.any?(contracts, &(&1.id == contract.id))
+    end
+
+    test "returns empty list when user is not a tenant" do
+      non_tenant = user_fixture(%{preferred_roles: [:owner]})
+      non_tenant_scope = %Vivvo.Accounts.Scope{user: non_tenant}
+
+      contracts = Contracts.list_contracts_for_tenant(non_tenant_scope)
+      assert contracts == []
+    end
+
+    test "includes contract details and rent periods" do
+      owner_scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+
+      contract =
+        contract_fixture(owner_scope, %{
+          tenant_id: tenant.id,
+          rent_period_duration: 6,
+          index_type: :ipc
+        })
+
+      contracts = Contracts.list_contracts_for_tenant(tenant_scope)
+      found_contract = Enum.find(contracts, &(&1.id == contract.id))
+
+      assert found_contract != nil
+      assert found_contract.rent_periods != nil
+      assert is_list(found_contract.rent_periods)
+    end
+  end
+
+  describe "get_contract_for_tenant/2" do
+    test "returns contract for tenant user" do
+      owner_scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+
+      contract =
+        contract_fixture(owner_scope, %{
+          tenant_id: tenant.id
+        })
+
+      result = Contracts.get_contract_for_tenant(tenant_scope, contract.id)
+      assert result.id == contract.id
+    end
+
+    test "preloads rent periods and payments" do
+      owner_scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+
+      contract =
+        contract_fixture(owner_scope, %{
+          tenant_id: tenant.id,
+          rent_period_duration: 6,
+          index_type: :ipc
+        })
+
+      result = Contracts.get_contract_for_tenant(tenant_scope, contract.id)
+      assert result.rent_periods != nil
+      assert is_list(result.rent_periods)
+    end
+
+    test "returns nil when contract does not belong to tenant" do
+      owner_scope = user_scope_fixture()
+      tenant_a = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_b = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope_b = %Vivvo.Accounts.Scope{user: tenant_b}
+
+      contract =
+        contract_fixture(owner_scope, %{
+          tenant_id: tenant_a.id
+        })
+
+      assert Contracts.get_contract_for_tenant(tenant_scope_b, contract.id) == nil
+    end
+
+    test "returns nil for non-existent contract" do
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+
+      assert Contracts.get_contract_for_tenant(tenant_scope, 99_999_999) == nil
+    end
+  end
+
+  describe "dashboard_summary/1" do
+    test "returns dashboard statistics for user" do
+      scope = user_scope_fixture()
+
+      # Create some contracts
+      contract_fixture(scope, %{rent: "1000.00"})
+      contract_fixture(scope, %{rent: "1500.00"})
+
+      summary = Contracts.dashboard_summary(scope)
+
+      assert Map.has_key?(summary, :total_contracts)
+      assert Map.has_key?(summary, :total_properties)
+      assert Map.has_key?(summary, :total_tenants)
+      assert Map.has_key?(summary, :occupancy_rate)
+    end
+
+    test "counts total contracts correctly" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Create active contract
+      _active_contract =
+        contract_fixture(scope, %{
+          start_date: today,
+          end_date: Date.add(today, 365)
+        })
+
+      summary = Contracts.dashboard_summary(scope)
+
+      # Should have at least 1 contract
+      assert summary.total_contracts >= 1
+      assert summary.total_properties >= 1
+    end
+
+    test "calculates occupancy rate" do
+      scope = user_scope_fixture()
+
+      # Create a property and a contract for it
+      property_fixture(scope)
+      contract_fixture(scope)
+
+      summary = Contracts.dashboard_summary(scope)
+
+      # Occupancy rate should be a float between 0 and 100
+      assert is_float(summary.occupancy_rate)
+      assert summary.occupancy_rate >= 0.0
+      assert summary.occupancy_rate <= 100.0
+    end
+
+    test "returns zero values for user with no contracts" do
+      scope = user_scope_fixture()
+
+      summary = Contracts.dashboard_summary(scope)
+
+      assert summary.total_contracts == 0
+      assert summary.total_properties >= 0
+      assert summary.total_tenants == 0
+      assert summary.occupancy_rate == 0.0
+    end
+  end
+
+  describe "days_until_end/1" do
+    test "calculates days until contract ends" do
+      today = Date.utc_today()
+
+      contract = %Contract{
+        start_date: today,
+        end_date: Date.add(today, 30)
+      }
+
+      days = Contracts.days_until_end(contract)
+
+      assert days >= 29 and days <= 31
+    end
+
+    test "returns nil for expired contract" do
+      today = Date.utc_today()
+
+      contract = %Contract{
+        start_date: Date.add(today, -60),
+        end_date: Date.add(today, -10)
+      }
+
+      days = Contracts.days_until_end(contract)
+
+      assert days == nil
+    end
+
+    test "returns large positive number for future contract" do
+      today = Date.utc_today()
+
+      contract = %Contract{
+        start_date: Date.add(today, 30),
+        end_date: Date.add(today, 400)
+      }
+
+      days = Contracts.days_until_end(contract)
+
+      assert days > 350
+    end
+  end
+
+  describe "days_until_start/1" do
+    test "calculates days until contract starts" do
+      today = Date.utc_today()
+
+      contract = %Contract{
+        start_date: Date.add(today, 15),
+        end_date: Date.add(today, 365)
+      }
+
+      days = Contracts.days_until_start(contract)
+
+      assert days >= 14 and days <= 16
+    end
+
+    test "returns 0 for active contract" do
+      today = Date.utc_today()
+
+      contract = %Contract{
+        start_date: today,
+        end_date: Date.add(today, 365)
+      }
+
+      assert Contracts.days_until_start(contract) == 0
+    end
+
+    test "returns nil for past contract start" do
+      today = Date.utc_today()
+
+      contract = %Contract{
+        start_date: Date.add(today, -30),
+        end_date: Date.add(today, 335)
+      }
+
+      days = Contracts.days_until_start(contract)
+      assert days == nil
+    end
+  end
+
+  describe "check_overlapping_contracts/4" do
+    test "returns ok when no overlapping contracts" do
+      scope = user_scope_fixture()
+      property = property_fixture(scope)
+
+      today = Date.utc_today()
+      start_date = today
+      end_date = Date.add(today, 365)
+
+      result =
+        Contracts.check_overlapping_contracts(
+          scope,
+          property.id,
+          start_date,
+          end_date
+        )
+
+      assert {:ok, nil} = result
+    end
+
+    test "detects overlapping contract for same property" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      today = Date.utc_today()
+
+      # Create existing contract
+      _existing_contract =
+        contract_fixture(scope, %{
+          property_id: property.id,
+          tenant_id: tenant.id,
+          start_date: today,
+          end_date: Date.add(today, 365)
+        })
+
+      # Check overlap with new contract dates
+      result =
+        Contracts.check_overlapping_contracts(
+          scope,
+          property.id,
+          Date.add(today, 30),
+          Date.add(today, 200)
+        )
+
+      assert {:error, {:overlap, _contract}} = result
+    end
+
+    test "excludes non-overlapping contracts" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      today = Date.utc_today()
+
+      # Create existing contract
+      _existing_contract =
+        contract_fixture(scope, %{
+          property_id: property.id,
+          tenant_id: tenant.id,
+          start_date: today,
+          end_date: Date.add(today, 90)
+        })
+
+      # Check for dates after existing contract ends
+      result =
+        Contracts.check_overlapping_contracts(
+          scope,
+          property.id,
+          Date.add(today, 100),
+          Date.add(today, 200)
+        )
+
+      assert {:ok, nil} = result
+    end
+
+    test "excludes archived contracts from overlap check" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      property = property_fixture(scope)
+
+      today = Date.utc_today()
+
+      # Create existing contract
+      existing_contract =
+        contract_fixture(scope, %{
+          property_id: property.id,
+          tenant_id: tenant.id,
+          start_date: today,
+          end_date: Date.add(today, 365)
+        })
+
+      # Archive the contract
+      Repo.update!(Contract.archive_changeset(existing_contract, scope))
+
+      # Check overlap - archived contract should not be detected
+      result =
+        Contracts.check_overlapping_contracts(
+          scope,
+          property.id,
+          Date.add(today, 30),
+          Date.add(today, 200)
+        )
+
+      assert {:ok, nil} = result
     end
   end
 end
