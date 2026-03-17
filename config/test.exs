@@ -45,3 +45,6 @@ config :phoenix,
 
 # To prevent Oban from running jobs and plugins during test runs
 config :vivvo, Oban, testing: :manual
+
+# Disable retries for IndexService during testing to speed up tests
+config :vivvo, Vivvo.IndexService, req_options: [retry: false]

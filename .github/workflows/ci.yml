@@ -73,7 +73,7 @@ jobs:
           mix ecto.migrate
 
       - name: Run tests
-        run: mix test
+        run: mix test --exclude external
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
