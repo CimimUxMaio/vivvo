@@ -99,13 +99,22 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
     end
   end
 
-  defp handle_create_result({:ok, rent_period}, _attrs) do
+  defp handle_create_result({:ok, %Vivvo.Contracts.RentPeriod{} = rent_period}, _attrs) do
     Logger.info(
       "RentPeriodCreationWorker: Created rent period #{rent_period.id} for contract #{rent_period.contract_id} " <>
         "(#{rent_period.start_date} to #{rent_period.end_date}, rent: #{rent_period.value})"
     )
 
     {:ok, rent_period}
+  end
+
+  defp handle_create_result({:ok, :already_exists}, attrs) do
+    Logger.warning(
+      "RentPeriodCreationWorker: Rent period already exists for contract #{attrs.contract_id} " <>
+        "starting at #{attrs.start_date}, skipping due to unique constraint"
+    )
+
+    {:ok, :already_exists}
   end
 
   defp handle_create_result({:error, changeset}, attrs) do
