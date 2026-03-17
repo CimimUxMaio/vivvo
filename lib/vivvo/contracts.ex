@@ -103,9 +103,10 @@ defmodule Vivvo.Contracts do
       creating contracts with start dates in the past. Used for testing/seeding.
     * `:update_factor` - The index value (as Decimal or float) used to calculate
       rent increases for each subsequent rent period when `:past_start_date?` is true.
+    * `:today` - The reference date to use for determining "today". Defaults to
+      `Date.utc_today()`. Useful for testing date-dependent behavior.
 
-  Both options must be provided together for past date support. If only one is
-  provided, an ArgumentError is raised.
+  Both `:past_start_date?` and `:update_factor` must be provided together for past date support.
 
   ## Examples
 
@@ -129,11 +130,9 @@ defmodule Vivvo.Contracts do
     # Validate options first
     past_start_date? = Keyword.get(opts, :past_start_date?, false)
     update_factor = Keyword.get(opts, :update_factor)
+    today = Keyword.get(opts, :today, Date.utc_today())
 
     validate_opts(past_start_date?, update_factor)
-
-    # Proceed with contract creation logic
-    today = Date.utc_today()
 
     attrs = normalize_attrs(attrs)
 
