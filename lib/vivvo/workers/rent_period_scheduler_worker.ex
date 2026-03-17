@@ -24,8 +24,12 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
   @max_backoff_seconds 43_200
 
   @impl Oban.Worker
-  def perform(_job) do
-    today = Date.utc_today()
+  def perform(job) do
+    today =
+      case job.args do
+        %{"today" => today_string} -> Date.from_iso8601!(today_string)
+        _ -> Date.utc_today()
+      end
 
     # Update index histories BEFORE processing contracts
     # This ensures we have the latest index data from external APIs
