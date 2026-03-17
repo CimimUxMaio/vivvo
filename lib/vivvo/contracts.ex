@@ -116,12 +116,6 @@ defmodule Vivvo.Contracts do
       iex> create_contract(scope, %{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
-      iex> create_contract(scope, %{field: overlapping_dates})
-      {:error, :overlapping_contract, %Contract{}}
-
-      iex> create_contract(scope, %{field: value, start_date: past_date})
-      {:error, :past_start_date, ~D[2025-01-01]}
-
       iex> create_contract(scope, attrs, past_start_date?: true, update_factor: 0.05)
       {:ok, %Contract{}}  # Creates contract with multiple historical rent periods
 
@@ -134,29 +128,18 @@ defmodule Vivvo.Contracts do
 
     validate_opts(past_start_date?, update_factor)
 
-    attrs = normalize_attrs(attrs)
-
-    property_id = attrs["property_id"]
-    start_date = parse_date(attrs["start_date"])
-    end_date = parse_date(attrs["end_date"])
-
     # Use Ecto.Multi to handle the sequential operations and roll back if any step fails
     multi =
       Ecto.Multi.new()
-      |> Ecto.Multi.run(:check_start_date, fn _repo, _changes ->
-        if past_start_date? do
-          {:ok, nil}
-        else
-          check_past_start_date(start_date, today)
-        end
-      end)
-      |> Ecto.Multi.run(:check_overlap, fn _repo, _changes ->
-        check_overlapping_contracts(scope, property_id, start_date, end_date)
-      end)
-      |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
+      |> Ecto.Multi.insert(
+        :contract,
+        Contract.creation_changeset(%Contract{}, attrs, scope,
+          past_start_date?: past_start_date?,
+          today: today
+        )
+      )
       |> Ecto.Multi.run(:rent_periods, fn repo, %{contract: contract} ->
-        initial_rent = Decimal.new(attrs["rent"])
-        insert_historical_rent_periods(repo, contract, initial_rent, update_factor, today)
+        insert_historical_rent_periods(repo, contract, contract.rent, update_factor, today)
       end)
 
     # Execute the multi and handle results
@@ -168,22 +151,11 @@ defmodule Vivvo.Contracts do
         broadcast_contract(scope, {:created, contract})
         {:ok, contract}
 
-      {:error, :check_past_start_date, {:past_start_date, past_start_date}, _changes} ->
-        {:error, :past_start_date, past_start_date}
-
-      {:error, :check_overlap, {:overlap, existing_contract}, _changes} ->
-        {:error, :overlapping_contract, existing_contract}
+      {:error, :rent_periods, error, _changes} ->
+        {:error, :rent_periods, error}
 
       {:error, _name, changeset, _changes} ->
         {:error, changeset}
-    end
-  end
-
-  defp check_past_start_date(start_date, today) do
-    if Date.compare(start_date, today) == :lt do
-      {:error, {:past_start_date, start_date}}
-    else
-      {:ok, nil}
     end
   end
 
@@ -295,9 +267,30 @@ defmodule Vivvo.Contracts do
     end
   end
 
-  defp parse_date(%Date{} = date), do: date
-  defp parse_date(date_str) when is_binary(date_str), do: Date.from_iso8601!(date_str)
-  defp parse_date(_), do: nil
+  @doc """
+  Finds any overlapping contract for the given property and date range.
+
+  Returns the overlapping contract struct if found, or nil if no overlap exists.
+
+  ## Examples
+
+      iex> find_overlapping_contract(scope, 123, ~D[2026-01-01], ~D[2026-12-31])
+      nil
+
+      iex> find_overlapping_contract(scope, 123, ~D[2026-01-01], ~D[2026-12-31])
+      %Contract{}
+
+  """
+  def find_overlapping_contract(%Scope{} = scope, property_id, start_date, end_date) do
+    Contract
+    |> where([c], c.property_id == ^property_id)
+    |> where([c], c.user_id == ^scope.user.id)
+    |> where([c], c.archived == false)
+    |> where([c], c.start_date <= ^end_date)
+    |> where([c], c.end_date >= ^start_date)
+    |> limit(1)
+    |> Repo.one()
+  end
 
   @doc """
   Checks if there are any non-archived contracts for the given property
@@ -315,17 +308,7 @@ defmodule Vivvo.Contracts do
 
   """
   def check_overlapping_contracts(%Scope{} = scope, property_id, start_date, end_date) do
-    overlapping_contract =
-      Contract
-      |> where([c], c.property_id == ^property_id)
-      |> where([c], c.user_id == ^scope.user.id)
-      |> where([c], c.archived == false)
-      |> where([c], c.start_date <= ^end_date)
-      |> where([c], c.end_date >= ^start_date)
-      |> limit(1)
-      |> Repo.one()
-
-    case overlapping_contract do
+    case find_overlapping_contract(scope, property_id, start_date, end_date) do
       nil -> {:ok, nil}
       contract -> {:error, {:overlap, contract}}
     end
@@ -1127,13 +1110,6 @@ defmodule Vivvo.Contracts do
   @spec contract_duration_months(Contract.t()) :: integer()
   def contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
     (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
-  end
-
-  # Normalizes attribute keys to strings for consistent access.
-  defp normalize_attrs(attrs) do
-    Enum.reduce(attrs, %{}, fn {key, value}, acc ->
-      Map.put(acc, to_string(key), value)
-    end)
   end
 
   @doc """
