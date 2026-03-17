@@ -4,13 +4,14 @@ defmodule Vivvo.Contracts do
   """
 
   import Ecto.Query, warn: false
-  alias Vivvo.Repo
+  require Logger
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts.Contract
   alias Vivvo.Contracts.RentPeriod
   alias Vivvo.Payments
   alias Vivvo.Properties.Property
+  alias Vivvo.Repo
 
   @doc """
   Subscribes to scoped notifications about any contract changes.
@@ -1132,7 +1133,20 @@ defmodule Vivvo.Contracts do
       %RentPeriod{}  # Returns earliest period for future contracts
 
   """
-  def current_rent_period(%Contract{rent_periods: periods} = contract, date \\ Date.utc_today()) do
+  def current_rent_period(%Contract{} = contract, date \\ Date.utc_today()) do
+    contract =
+      if Ecto.assoc_loaded?(contract.rent_periods) do
+        contract
+      else
+        Logger.warning(
+          "Rent periods not preloaded for contract #{contract.id} in current_rent_period. Preloading now, but consider preloading in calling function for efficiency."
+        )
+
+        Repo.preload(contract, :rent_periods)
+      end
+
+    periods = contract.rent_periods
+
     date_match =
       Enum.find(periods, fn rp ->
         Date.compare(rp.start_date, date) != :gt and
