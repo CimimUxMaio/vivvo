@@ -37,11 +37,12 @@ defmodule Vivvo.IndexService do
       iex> IndexService.latest(:ipc)
       {:ok, %{date: ~D[2026-02-01], value: Decimal.new("2.9")}}
   """
-  @spec latest(index_type()) :: {:ok, map()} | {:error, term()}
-  def latest(index_type) do
+  @spec latest(index_type(), keyword()) :: {:ok, map()} | {:error, term()}
+  def latest(index_type, req_opts \\ []) do
     endpoint = endpoint_for_type(index_type)
+    req_opts = Keyword.merge(default_req_options(), req_opts)
 
-    case Req.get(@base_url <> endpoint) do
+    case Req.get(@base_url <> endpoint, req_opts) do
       {:ok, %{status: 200, body: body}} ->
         parse_response(index_type, body)
 
@@ -82,13 +83,16 @@ defmodule Vivvo.IndexService do
   def history(_index_type, from, to) when is_nil(from) or is_nil(to),
     do: {:error, "From and To dates cannot be nil"}
 
-  def history(index_type, from, to) do
+  @spec history(index_type(), Date.t(), Date.t(), keyword()) ::
+          {:ok, list(map())} | {:error, term()}
+  def history(index_type, from, to, req_opts \\ []) do
     endpoint = endpoint_for_type(index_type)
     from_str = format_date_for_api(index_type, from)
     to_str = format_date_for_api(index_type, to)
     url = "#{@base_url}#{endpoint}/range?desde=#{from_str}&hasta=#{to_str}"
+    req_opts = Keyword.merge(default_req_options(), req_opts)
 
-    case Req.get(url) do
+    case Req.get(url, req_opts) do
       {:ok, %{status: 200, body: body}} ->
         parse_response(index_type, body)
 
@@ -101,6 +105,10 @@ defmodule Vivvo.IndexService do
   end
 
   # Private functions
+
+  defp default_req_options do
+    Application.get_env(:vivvo, Vivvo.IndexService, [])[:req_options] || []
+  end
 
   defp endpoint_for_type(:ipc), do: "/ipc"
   defp endpoint_for_type(:icl), do: "/icl"
