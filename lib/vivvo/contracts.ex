@@ -259,16 +259,19 @@ defmodule Vivvo.Contracts do
       |> Date.shift(month: (num - 1) * duration)
       |> then(&Enum.max([&1, contract.start_date], Date))
 
-    period_end =
-      period_start
-      |> Date.shift(month: duration - 1)
-      |> Date.end_of_month()
-      |> then(&Enum.min([&1, contract.end_date], Date))
+    period_end = period_end_date(contract.rent_period_duration, period_start, contract.end_date)
 
     %{
       start_date: period_start,
       end_date: period_end
     }
+  end
+
+  def period_end_date(duration, start_date, max_end_date) do
+    start_date
+    |> Date.shift(month: duration - 1)
+    |> Date.end_of_month()
+    |> then(&Enum.min([&1, max_end_date], Date))
   end
 
   defp compute_rent_value(initial_rent, _update_factor, 0), do: initial_rent
