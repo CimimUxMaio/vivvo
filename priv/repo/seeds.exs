@@ -182,7 +182,7 @@ contract1_end = Date.add(today, 180)
       rent_period_duration: 6
     },
     past_start_date?: true,
-    update_factor: Decimal.new("0.03")
+    update_factor: Decimal.new("1.03")
   )
 
 IO.puts("Created Contract 1 (Active: Sunset Apts → Tenant1)")
@@ -325,7 +325,7 @@ contract2_end = Date.add(today, 270)
       rent_period_duration: 12
     },
     past_start_date?: true,
-    update_factor: Decimal.new("0.025")
+    update_factor: Decimal.new("1.025")
   )
 
 IO.puts("Created Contract 2 (Active: Downtown Loft → Tenant2)")
@@ -445,7 +445,7 @@ contract3_end = Date.add(today, 60)
       rent_period_duration: 3
     },
     past_start_date?: true,
-    update_factor: Decimal.new("0.04")
+    update_factor: Decimal.new("1.04")
   )
 
 IO.puts("Created Contract 3 (Ending Soon: Garden Villa → Demo User)")
@@ -544,7 +544,7 @@ contract4_end = Date.add(today, -90)
       rent_period_duration: 12
     },
     past_start_date?: true,
-    update_factor: Decimal.new("0.02")
+    update_factor: Decimal.new("1.02")
   )
 
 IO.puts("Created Contract 4 (Expired: City Penthouse → Tenant2)")
@@ -623,7 +623,7 @@ contract5_end = Date.add(today, 300)
       rent_period_duration: 6
     },
     past_start_date?: true,
-    update_factor: Decimal.new("0.035")
+    update_factor: Decimal.new("1.035")
   )
 
 IO.puts("Created Contract 5 (Active: Cozy Studio → Tenant3)")

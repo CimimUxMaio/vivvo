@@ -31,7 +31,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
@@ -95,7 +95,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Run scheduler - should schedule one job
@@ -147,7 +147,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Insert first job manually to test Oban's unique constraint
@@ -205,7 +205,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       contract_b =
@@ -325,7 +325,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Run scheduler - should still succeed even if ICL fetch fails
@@ -375,7 +375,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       contract_b =
@@ -388,7 +388,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       assert {:ok, %{scheduled_count: 2}} = perform_job(RentPeriodSchedulerWorker, %{})
@@ -424,7 +424,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Create ICL contract
@@ -438,7 +438,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       assert {:ok, %{scheduled_count: 2}} = perform_job(RentPeriodSchedulerWorker, %{})
@@ -473,7 +473,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # The contract ends on the last day of month, so no new period should be scheduled
@@ -498,7 +498,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03"),
+          update_factor: Decimal.new("1.03"),
           today: feb_28_2023
         )
 
@@ -530,7 +530,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03"),
+          update_factor: Decimal.new("1.03"),
           today: apr_30_2023
         )
 
@@ -561,7 +561,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03"),
+          update_factor: Decimal.new("1.03"),
           today: mar_31_2023
         )
 
@@ -596,7 +596,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Contract ends this month, so no new period should be scheduled
@@ -623,7 +623,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # First scheduler run creates a RentPeriodCreationWorker job
@@ -674,7 +674,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Create ICL contract
@@ -688,7 +688,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       assert {:ok, %{scheduled_count: 2}} = perform_job(RentPeriodSchedulerWorker, %{})
@@ -721,7 +721,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Create contract without rent_period_duration (valid but won't be scheduled)
@@ -735,7 +735,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
             index_type: nil
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Only valid_contract should be scheduled

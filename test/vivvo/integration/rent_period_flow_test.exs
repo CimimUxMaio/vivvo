@@ -45,7 +45,7 @@ defmodule Vivvo.Integration.RentPeriodFlowTest do
             rent: "1000.00"
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       initial_period_count = length(contract.rent_periods)
@@ -112,7 +112,7 @@ defmodule Vivvo.Integration.RentPeriodFlowTest do
             rent: "1000.00"
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       _initial_period_count = length(contract.rent_periods)
@@ -141,7 +141,7 @@ defmodule Vivvo.Integration.RentPeriodFlowTest do
           end_date: Date.end_of_month(today),
           value: Decimal.new("1030.00"),
           index_type: :ipc,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         })
 
       today_string = Date.to_iso8601(today)
@@ -198,7 +198,7 @@ defmodule Vivvo.Integration.RentPeriodFlowTest do
             rent: "1000.00"
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.025")
+          update_factor: Decimal.new("1.025")
         )
 
       # Manually set up periods for IPC contract so one ends this month
@@ -222,7 +222,7 @@ defmodule Vivvo.Integration.RentPeriodFlowTest do
           end_date: Date.end_of_month(today),
           value: Decimal.new("1025.00"),
           index_type: :ipc,
-          update_factor: Decimal.new("0.025")
+          update_factor: Decimal.new("1.025")
         })
 
       today_string = Date.to_iso8601(today)
@@ -278,7 +278,7 @@ defmodule Vivvo.Integration.RentPeriodFlowTest do
             rent: "1000.00"
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.025")
+          update_factor: Decimal.new("1.025")
         )
 
       # Should have multiple periods already created

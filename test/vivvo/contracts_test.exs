@@ -524,7 +524,7 @@ defmodule Vivvo.ContractsTest do
       assert {:ok, %Contract{} = contract} =
                Contracts.create_contract(scope, attrs,
                  past_start_date?: true,
-                 update_factor: Decimal.new("0.05")
+                 update_factor: Decimal.new("1.05")
                )
 
       # Should have multiple rent periods (at least 2, probably 3)
@@ -542,7 +542,7 @@ defmodule Vivvo.ContractsTest do
       |> Enum.with_index()
       |> Enum.reduce(nil, fn {period, index}, prev_rent ->
         assert period.index_type == :icl
-        assert period.update_factor == ((index > 0 && Decimal.new("0.05")) || nil)
+        assert period.update_factor == ((index > 0 && Decimal.new("1.05")) || nil)
 
         if index > 0 do
           expected_rent = Decimal.mult(prev_rent, Decimal.new("1.05"))
@@ -922,7 +922,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       result = Contracts.get_past_payment_numbers(contract, today)
@@ -1032,7 +1032,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       # Manually create a contract struct with rent periods that don't cover today
@@ -1369,7 +1369,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       total = Contracts.total_amount_due(scope, contract)
@@ -1397,7 +1397,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       # Get the total due before payment
@@ -1456,7 +1456,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       due_date = Contracts.earliest_due_date(scope, contract)
@@ -1521,7 +1521,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       statuses = Contracts.get_payment_statuses(scope, contract)
@@ -1555,7 +1555,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       statuses = Contracts.get_payment_statuses(scope, contract)
@@ -1590,7 +1590,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       # Make a payment
@@ -1650,7 +1650,7 @@ defmodule Vivvo.ContractsTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # The next update date would be after the contract ends
@@ -1741,7 +1741,7 @@ defmodule Vivvo.ContractsTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # The period should have ended yesterday, so next update is today
@@ -1771,7 +1771,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       next_payment = Contracts.next_payment_date(contract)
@@ -1900,7 +1900,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       property_id = contract.property_id
@@ -1994,7 +1994,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       property_id = contract.property_id
@@ -2078,7 +2078,7 @@ defmodule Vivvo.ContractsTest do
           rent_period_duration: 12
         },
         past_start_date?: true,
-        update_factor: Decimal.new("0.0")
+        update_factor: Decimal.new("1.0")
       )
     end
 
@@ -2204,7 +2204,7 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       # Verify we have exactly 3 past payment periods
@@ -2417,7 +2417,7 @@ defmodule Vivvo.ContractsTest do
         end_date: ~D[2026-06-30],
         value: Decimal.new("1200.00"),
         index_type: :icl,
-        update_factor: Decimal.new("0.03")
+        update_factor: Decimal.new("1.03")
       }
 
       assert {:ok, %Vivvo.Contracts.RentPeriod{} = rent_period} =
@@ -2498,7 +2498,7 @@ defmodule Vivvo.ContractsTest do
           end_date: end_of_this_month,
           value: Decimal.new("1000.00"),
           index_type: :ipc,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         })
 
       results = Contracts.contracts_needing_update(today)
@@ -2528,7 +2528,7 @@ defmodule Vivvo.ContractsTest do
           end_date: Date.end_of_month(Date.add(today, 30)),
           value: Decimal.new("1000.00"),
           index_type: :icl,
-          update_factor: Decimal.new("0.05")
+          update_factor: Decimal.new("1.05")
         })
 
       results = Contracts.contracts_needing_update(today)
@@ -2557,7 +2557,7 @@ defmodule Vivvo.ContractsTest do
           end_date: end_of_this_month,
           value: Decimal.new("1000.00"),
           index_type: :ipc,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         })
 
       # Archive the contract
@@ -2611,7 +2611,7 @@ defmodule Vivvo.ContractsTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Delete auto-generated periods and create our own
@@ -2627,7 +2627,7 @@ defmodule Vivvo.ContractsTest do
           end_date: end_of_this_month,
           value: Decimal.new("1000.00"),
           index_type: :ipc,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         })
 
       results = Contracts.contracts_needing_update(today)

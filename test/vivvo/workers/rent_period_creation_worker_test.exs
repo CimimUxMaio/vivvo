@@ -33,7 +33,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Find the period ending this month
@@ -80,7 +80,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       initial_count = length(Contracts.get_contract!(scope, contract.id).rent_periods)
@@ -126,7 +126,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       today_string = Date.to_iso8601(today)
@@ -210,7 +210,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       target_period =
@@ -268,7 +268,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       Repo.update!(Contract.archive_changeset(contract, scope))
@@ -317,7 +317,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       target_period =
@@ -374,7 +374,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       # Should raise ArgumentError when historical ICL is missing
@@ -429,7 +429,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.025")
+          update_factor: Decimal.new("1.025")
         )
 
       # Create ICL contract
@@ -443,7 +443,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.0")
+          update_factor: Decimal.new("1.0")
         )
 
       # Get IPC update factor
@@ -499,7 +499,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       assert {:ok, %RentPeriod{} = rent_period} =
@@ -533,7 +533,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       assert {:ok, %RentPeriod{} = rent_period} =
@@ -574,7 +574,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Find the period ending this month
@@ -625,7 +625,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Get initial count of periods (could be more than 1 due to historical generation)
@@ -676,7 +676,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # First run creates the period
@@ -714,7 +714,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       target_period =
@@ -763,7 +763,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.03")
+          update_factor: Decimal.new("1.03")
         )
 
       # Simulate a job that was previously attempted
