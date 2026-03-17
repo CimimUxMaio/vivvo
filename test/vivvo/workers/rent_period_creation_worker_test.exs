@@ -739,8 +739,8 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
           today: today_string
         })
 
-      # Should return :already_exists or similar
-      assert match?({:ok, _}, result)
+      # Should return :already_exists due to unique constraint
+      assert {:ok, :already_exists} = result
     end
 
     test "oban retry succeeds after failure" do

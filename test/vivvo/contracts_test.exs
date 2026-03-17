@@ -887,6 +887,68 @@ defmodule Vivvo.ContractsTest do
     end
   end
 
+  describe "get_current_payment_number/1" do
+    test "returns 0 when contract hasn't started yet" do
+      future_date = Date.add(Date.utc_today(), 30)
+
+      contract = %Contract{
+        start_date: future_date,
+        end_date: Date.add(future_date, 365)
+      }
+
+      assert Contracts.get_current_payment_number(contract) == 0
+    end
+
+    test "returns correct payment number for active contract" do
+      today = Date.utc_today()
+      # Contract started 2 months ago
+      start_date = Date.add(today, -60)
+
+      contract = %Contract{
+        start_date: start_date,
+        end_date: Date.add(today, 365)
+      }
+
+      # Should be around month 3 (2 months ago + 1)
+      result = Contracts.get_current_payment_number(contract)
+      assert result >= 2
+    end
+
+    test "caps payment number at contract duration for expired contracts" do
+      today = Date.utc_today()
+      # Contract ended 6 months ago (3 month contract)
+      start_date = Date.add(today, -365)
+      end_date = Date.add(today, -180)
+
+      contract = %Contract{
+        start_date: start_date,
+        end_date: end_date
+      }
+
+      # Total months should be capped at contract duration, not inflated
+      result = Contracts.get_current_payment_number(contract)
+      total_months = Contracts.contract_duration_months(contract)
+
+      assert result == total_months
+      # Should be around 7-8 months, not 12+
+      assert result <= 12
+    end
+
+    test "returns total payments for fully expired contract" do
+      # Fixed date test for determinism
+      contract = %Contract{
+        start_date: ~D[2024-01-01],
+        end_date: ~D[2024-03-31]
+      }
+
+      result = Contracts.get_current_payment_number(contract)
+      total_payments = Contracts.contract_duration_months(contract)
+
+      assert result == total_payments
+      assert result == 3
+    end
+  end
+
   describe "get_past_payment_numbers/2" do
     test "returns empty range when contract hasn't started yet" do
       scope = user_scope_fixture()
@@ -2436,6 +2498,52 @@ defmodule Vivvo.ContractsTest do
       }
 
       assert {:error, %Ecto.Changeset{}} = Contracts.create_rent_period(attrs)
+    end
+
+    test "returns :already_exists when rent period with same contract_id and start_date exists" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+
+      attrs = %{
+        contract_id: contract.id,
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        value: Decimal.new("1200.00"),
+        index_type: :icl,
+        update_factor: Decimal.new("1.03")
+      }
+
+      # Create first rent period successfully
+      assert {:ok, %Vivvo.Contracts.RentPeriod{}} = Contracts.create_rent_period(attrs)
+
+      # Second attempt with same contract_id and start_date should return :already_exists
+      assert {:ok, :already_exists} = Contracts.create_rent_period(attrs)
+    end
+
+    test "allows different start_dates for same contract" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope)
+
+      attrs1 = %{
+        contract_id: contract.id,
+        start_date: ~D[2026-01-01],
+        end_date: ~D[2026-06-30],
+        value: Decimal.new("1200.00"),
+        index_type: :icl,
+        update_factor: Decimal.new("1.03")
+      }
+
+      attrs2 = %{
+        contract_id: contract.id,
+        start_date: ~D[2026-07-01],
+        end_date: ~D[2026-12-31],
+        value: Decimal.new("1236.00"),
+        index_type: :icl,
+        update_factor: Decimal.new("1.03")
+      }
+
+      assert {:ok, %Vivvo.Contracts.RentPeriod{}} = Contracts.create_rent_period(attrs1)
+      assert {:ok, %Vivvo.Contracts.RentPeriod{}} = Contracts.create_rent_period(attrs2)
     end
   end
 
