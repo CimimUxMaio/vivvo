@@ -98,6 +98,9 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
 
       {:ok, _}, {:error, reason} ->
         {:halt, {:error, reason}}
+
+      {:error, reason}, _acc ->
+        {:halt, {:error, reason}}
     end)
   end
 end
