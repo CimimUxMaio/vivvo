@@ -2,9 +2,11 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
   @moduledoc """
   Worker that creates a new rent period for a specific contract.
 
-  Receives pre-computed index value from scheduler to avoid redundant
-  IndexService calls. Performs idempotency checks to prevent duplicate
-  rent periods.
+  Computes the update factor based on the contract's index type:
+  - IPC: Accumulates historic rates between last update and previous month
+  - ICL: Calculates ratio between latest value and value at last update date
+
+  Performs idempotency checks to prevent duplicate rent periods.
 
   The worker uses the scheduler's year and month to identify which period
   ended in that month, then creates the next period. This ensures true
@@ -19,6 +21,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
   use Oban.Worker, queue: :rent_periods, max_attempts: 3
 
   alias Vivvo.Contracts
+  alias Vivvo.Indexes
 
   require Logger
 
@@ -26,22 +29,25 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
   def perform(%{
         args: %{
           "contract_id" => contract_id,
-          "update_factor" => update_factor,
-          "year" => year,
-          "month" => month
+          "today" => today_string
         }
       }) do
+    today = Date.from_iso8601!(today_string)
+
     case Contracts.get_system_contract(contract_id) do
       nil ->
         Logger.warning("RentPeriodCreationWorker: Contract #{contract_id} not found, skipping")
         {:ok, :contract_not_found}
 
       contract ->
-        create_rent_period_for_contract(contract, update_factor, year, month)
+        create_rent_period_for_contract(contract, today)
     end
   end
 
-  defp create_rent_period_for_contract(contract, update_factor, year, month) do
+  defp create_rent_period_for_contract(contract, today) do
+    year = today.year
+    month = today.month
+
     # Find the period ending in the scheduler's year/month
     target_period =
       Enum.find(contract.rent_periods, fn period ->
@@ -66,53 +72,45 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
 
           {:ok, :already_exists}
         else
-          do_create_rent_period(contract, update_factor, period, new_start_date)
+          new_end_date =
+            Contracts.period_end_date(
+              contract.rent_period_duration,
+              new_start_date,
+              contract.end_date
+            )
+
+          update_factor =
+            Indexes.compute_update_factor(contract.index_type, period.start_date, today)
+
+          new_rent = Decimal.mult(period.value, update_factor)
+
+          attrs = %{
+            contract_id: contract.id,
+            start_date: new_start_date,
+            end_date: new_end_date,
+            value: new_rent,
+            index_type: contract.index_type,
+            update_factor: update_factor
+          }
+
+          Contracts.create_rent_period(attrs)
+          |> handle_create_result(attrs)
         end
     end
   end
 
-  defp do_create_rent_period(contract, update_factor, previous_period, new_start_date) do
-    new_end_date =
-      calculate_period_end(new_start_date, contract.rent_period_duration, contract.end_date)
-
-    new_rent = calculate_new_rent(previous_period.value, update_factor)
-
-    attrs = %{
-      contract_id: contract.id,
-      start_date: new_start_date,
-      end_date: new_end_date,
-      value: new_rent,
-      index_type: contract.index_type,
-      update_factor: update_factor
-    }
-
-    Contracts.create_rent_period(attrs)
-    |> handle_create_result(
-      contract.id,
-      new_start_date,
-      new_end_date,
-      new_rent
-    )
-  end
-
-  defp handle_create_result(
-         {:ok, rent_period},
-         contract_id,
-         new_start_date,
-         new_end_date,
-         new_rent
-       ) do
+  defp handle_create_result({:ok, rent_period}, _attrs) do
     Logger.info(
-      "RentPeriodCreationWorker: Created rent period #{rent_period.id} for contract #{contract_id} " <>
-        "(#{new_start_date} to #{new_end_date}, rent: #{new_rent})"
+      "RentPeriodCreationWorker: Created rent period #{rent_period.id} for contract #{rent_period.contract_id} " <>
+        "(#{rent_period.start_date} to #{rent_period.end_date}, rent: #{rent_period.value})"
     )
 
     {:ok, rent_period}
   end
 
-  defp handle_create_result({:error, changeset}, contract_id, _start_date, _end_date, _rent) do
+  defp handle_create_result({:error, changeset}, attrs) do
     Logger.error(
-      "RentPeriodCreationWorker: Failed to create rent period for contract #{contract_id}: #{inspect(changeset.errors)}"
+      "RentPeriodCreationWorker: Failed to create rent period for contract #{attrs.contract_id}: #{inspect(changeset.errors)}"
     )
 
     {:error, changeset}
@@ -122,17 +120,5 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
     Enum.any?(rent_periods, fn period ->
       Date.compare(period.start_date, new_start_date) == :eq
     end)
-  end
-
-  defp calculate_period_end(start_date, duration, contract_end_date) do
-    start_date
-    |> Date.shift(month: duration - 1)
-    |> Date.end_of_month()
-    |> then(&Enum.min([&1, contract_end_date], Date))
-  end
-
-  defp calculate_new_rent(previous_value, update_factor) do
-    multiplier = Decimal.add(1, update_factor)
-    Decimal.mult(previous_value, multiplier)
   end
 end
