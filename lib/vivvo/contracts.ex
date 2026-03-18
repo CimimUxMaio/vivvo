@@ -679,7 +679,7 @@ defmodule Vivvo.Contracts do
       property: property,
       total_income: Decimal.new(0),
       collection_rate: 0.0,
-      avg_delay_days: 0,
+      avg_delay_days: 0.0,
       state: :vacant,
       total_expected: Decimal.new(0)
     }
@@ -707,7 +707,7 @@ defmodule Vivvo.Contracts do
           property: property,
           total_income: Decimal.new(0),
           collection_rate: 0.0,
-          avg_delay_days: 0,
+          avg_delay_days: 0.0,
           state: :vacant,
           total_expected: Decimal.new(0)
         }
@@ -1058,30 +1058,54 @@ defmodule Vivvo.Contracts do
     else
       # Fetch all payments for the contract with files preloaded
       contract_payments = Payments.list_payments_for_contract(scope, contract.id)
+      totals_by_month = calculate_totals_by_month(contract_payments)
 
-      Enum.map(1..current_payment_num, fn payment_num ->
-        due_date = calculate_due_date(contract, payment_num)
-        total_paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
-        month_status = Payments.get_month_status(scope, contract, payment_num)
-        rent = current_rent_value(contract, due_date)
-
-        # Get payments for this month from the preloaded list
-        month_payments =
-          Enum.filter(contract_payments, &(&1.payment_number == payment_num))
-          |> Enum.sort_by(& &1.inserted_at, :desc)
-
-        %{
-          payment_number: payment_num,
-          due_date: due_date,
-          rent: rent,
-          total_paid: total_paid,
-          status: month_status,
-          is_overdue: month_overdue?(contract, payment_num, today) and month_status != :paid,
-          days_until_due: Date.diff(due_date, today),
-          payments: month_payments
-        }
-      end)
+      Enum.map(
+        1..current_payment_num,
+        &build_payment_status(&1, contract, contract_payments, totals_by_month, today)
+      )
     end
+  end
+
+  defp calculate_totals_by_month(contract_payments) do
+    contract_payments
+    |> Enum.filter(&(&1.status == :accepted))
+    |> Enum.group_by(& &1.payment_number)
+    |> Map.new(fn {num, payments} ->
+      {num, Enum.reduce(payments, Decimal.new(0), &Decimal.add(&2, &1.amount))}
+    end)
+  end
+
+  defp build_payment_status(payment_num, contract, contract_payments, totals_by_month, today) do
+    due_date = calculate_due_date(contract, payment_num)
+    rent = current_rent_value(contract, due_date)
+    total_paid = Map.get(totals_by_month, payment_num, Decimal.new(0))
+    month_status = determine_month_status(total_paid, rent)
+
+    %{
+      payment_number: payment_num,
+      due_date: due_date,
+      rent: rent,
+      total_paid: total_paid,
+      status: month_status,
+      is_overdue: month_overdue?(contract, payment_num, today) and month_status != :paid,
+      days_until_due: Date.diff(due_date, today),
+      payments: get_month_payments(contract_payments, payment_num)
+    }
+  end
+
+  defp determine_month_status(total_paid, rent) do
+    cond do
+      Decimal.compare(total_paid, rent) != :lt -> :paid
+      Decimal.compare(total_paid, Decimal.new(0)) == :gt -> :partial
+      true -> :unpaid
+    end
+  end
+
+  defp get_month_payments(contract_payments, payment_num) do
+    contract_payments
+    |> Enum.filter(&(&1.payment_number == payment_num))
+    |> Enum.sort_by(& &1.inserted_at, :desc)
   end
 
   @doc """

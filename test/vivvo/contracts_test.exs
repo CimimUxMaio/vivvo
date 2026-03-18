@@ -1674,6 +1674,76 @@ defmodule Vivvo.ContractsTest do
         assert Decimal.compare(paid.total_paid, Decimal.new("0.00")) == :gt
       end
     end
+
+    test "calculates totals from preloaded payments without additional queries" do
+      require Decimal
+
+      # Owner creates the contract
+      scope = user_scope_fixture()
+      # Tenant is associated with the contract
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
+      today = Date.utc_today()
+
+      # Create a contract that spans 6 months (will have 6 payment months)
+      # Owner is scope.user, tenant is the tenant
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            rent: "1000.00",
+            start_date: Date.add(today, -150),
+            end_date: Date.add(today, 365),
+            expiration_day: 1,
+            tenant_id: tenant.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
+
+      # Tenant creates accepted payments for multiple months
+      for payment_num <- 1..3 do
+        {:ok, _payment} =
+          Vivvo.Payments.create_payment(tenant_scope, %{
+            contract_id: contract.id,
+            payment_number: payment_num,
+            amount: "500.00",
+            status: :accepted
+          })
+
+        # Add a second payment for month 1 to test aggregation
+        if payment_num == 1 do
+          {:ok, _payment2} =
+            Vivvo.Payments.create_payment(tenant_scope, %{
+              contract_id: contract.id,
+              payment_number: 1,
+              amount: "500.00",
+              status: :accepted
+            })
+        end
+      end
+
+      # Query with tenant's scope since payments are filtered by creator (user_id)
+      statuses = Contracts.get_payment_statuses(tenant_scope, contract)
+
+      # Verify payment totals are correctly aggregated from preloaded data
+      month1_status = Enum.find(statuses, &(&1.payment_number == 1))
+      assert month1_status != nil
+      assert Decimal.eq?(month1_status.total_paid, Decimal.new("1000.00"))
+      assert month1_status.status == :paid
+
+      month2_status = Enum.find(statuses, &(&1.payment_number == 2))
+      assert month2_status != nil
+      assert Decimal.eq?(month2_status.total_paid, Decimal.new("500.00"))
+      assert month2_status.status == :partial
+
+      month4_status = Enum.find(statuses, &(&1.payment_number == 4))
+      assert month4_status != nil
+      assert Decimal.eq?(month4_status.total_paid, Decimal.new("0.00"))
+      assert month4_status.status == :unpaid
+    end
   end
 
   describe "next_rent_update_date/1" do
@@ -3125,6 +3195,83 @@ defmodule Vivvo.ContractsTest do
         )
 
       assert {:ok, nil} = result
+    end
+  end
+
+  describe "property_performance_metrics/1 return structure" do
+    test "returns consistent avg_delay_days type for all contract states" do
+      scope = user_scope_fixture()
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      today = Date.utc_today()
+
+      # Test vacant state (property with no contract)
+      vacant_property = property_fixture(scope)
+
+      vacant_metrics = Contracts.property_performance_metrics(scope)
+      vacant_result = Enum.find(vacant_metrics, &(&1.property.id == vacant_property.id))
+      assert is_float(vacant_result.avg_delay_days)
+      assert vacant_result.avg_delay_days == 0.0
+
+      # Test upcoming state (property with future contract)
+      upcoming_property = property_fixture(scope)
+
+      _upcoming_contract =
+        contract_fixture(scope, %{
+          property_id: upcoming_property.id,
+          tenant_id: tenant.id,
+          start_date: Date.add(today, 30),
+          end_date: Date.add(today, 365),
+          rent: "1000.00"
+        })
+
+      upcoming_metrics = Contracts.property_performance_metrics(scope)
+      upcoming_result = Enum.find(upcoming_metrics, &(&1.property.id == upcoming_property.id))
+      assert is_float(upcoming_result.avg_delay_days)
+      assert upcoming_result.avg_delay_days == 0.0
+
+      # Test expired state (property with ended contract)
+      expired_property = property_fixture(scope)
+
+      _expired_contract =
+        contract_fixture(
+          scope,
+          %{
+            property_id: expired_property.id,
+            tenant_id: tenant.id,
+            start_date: Date.add(today, -400),
+            end_date: Date.add(today, -30),
+            rent: "1000.00"
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
+
+      expired_metrics = Contracts.property_performance_metrics(scope)
+      expired_result = Enum.find(expired_metrics, &(&1.property.id == expired_property.id))
+      assert is_float(expired_result.avg_delay_days)
+      assert expired_result.avg_delay_days == 0.0
+
+      # Test active state (property with active contract)
+      active_property = property_fixture(scope)
+
+      _active_contract =
+        contract_fixture(
+          scope,
+          %{
+            property_id: active_property.id,
+            tenant_id: tenant.id,
+            start_date: Date.add(today, -60),
+            end_date: Date.add(today, 365),
+            rent: "1000.00",
+            expiration_day: 1
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
+
+      active_metrics = Contracts.property_performance_metrics(scope)
+      active_result = Enum.find(active_metrics, &(&1.property.id == active_property.id))
+      assert is_float(active_result.avg_delay_days)
     end
   end
 end
