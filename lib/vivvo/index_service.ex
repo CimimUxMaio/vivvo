@@ -166,7 +166,14 @@ defmodule Vivvo.IndexService do
 
   defp parse_decimal(val) when is_float(val), do: {:ok, Decimal.from_float(val)}
   defp parse_decimal(val) when is_integer(val), do: {:ok, Decimal.new(val)}
-  defp parse_decimal(val) when is_binary(val), do: {:ok, Decimal.new(val)}
+
+  defp parse_decimal(val) when is_binary(val) do
+    case Decimal.parse(val) do
+      {decimal, ""} -> {:ok, decimal}
+      :error -> {:error, "Invalid decimal string: #{inspect(val)}"}
+    end
+  end
+
   defp parse_decimal(val), do: {:error, "Invalid decimal: #{inspect(val)}"}
 
   defp parse_date(val) when is_binary(val) do
@@ -193,7 +200,7 @@ defmodule Vivvo.IndexService do
 
     case result do
       {:error, _} = error -> error
-      list -> {:ok, list}
+      list -> {:ok, Enum.reverse(list)}
     end
   end
 
