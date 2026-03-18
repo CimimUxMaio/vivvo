@@ -1,6 +1,6 @@
 defmodule VivvoWeb.ContractLive.Form do
   @moduledoc """
-  LiveView for creating and editing rental contracts.
+  LiveView for creating rental contracts.
 
   Handles contract creation with tenant selection, date ranges, rent amount,
   and payment due dates.
