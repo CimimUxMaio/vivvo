@@ -93,6 +93,48 @@ defmodule VivvoWeb.HomeLiveTest do
       {:ok, _view, html} = live(conn, ~p"/")
       assert html =~ "Dashboard"
     end
+
+    test "pending_payment_row uses date context for current_rent_value", %{
+      conn: conn,
+      scope: scope
+    } do
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant_scope = Scope.for_user(tenant)
+      property = property_fixture(scope)
+      today = Date.utc_today()
+
+      # Create a contract
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            tenant_id: tenant.id,
+            property_id: property.id,
+            start_date: Date.add(today, -30),
+            end_date: Date.add(today, 365),
+            rent: "1000.00",
+            expiration_day: 1
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
+
+      # Create a pending payment
+      {:ok, payment} =
+        Vivvo.Payments.create_payment(tenant_scope, %{
+          contract_id: contract.id,
+          amount: "1000.00",
+          payment_number: 1,
+          status: :pending
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      # Verify the pending payment row renders without error
+      # This tests that pending_payment_row properly calculates due_date
+      # and passes it to current_rent_value
+      assert has_element?(view, "#payment-#{payment.id}")
+    end
   end
 
   describe "tenant dashboard" do

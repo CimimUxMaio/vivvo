@@ -1035,7 +1035,8 @@ defmodule VivvoWeb.HomeLive do
     tenant = contract.tenant
     property = contract.property
 
-    expected_amount = Contracts.current_rent_value(contract)
+    due_date = Contracts.calculate_due_date(contract, assigns.payment.payment_number)
+    expected_amount = Contracts.current_rent_value(contract, due_date)
     paid_amount = assigns.payment.amount
 
     payment_status =
