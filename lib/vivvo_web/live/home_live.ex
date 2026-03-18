@@ -203,15 +203,10 @@ defmodule VivvoWeb.HomeLive do
     if contract do
       {month_num, _} = Integer.parse(month)
 
-      # Calculate payment totals for display and validation
-      accepted_total = Payments.total_accepted_for_month(scope, contract.id, month_num)
-      pending_total = Payments.total_pending_for_month(scope, contract.id, month_num)
-      due_date = Contracts.calculate_due_date(contract, month_num)
-      rent = Contracts.current_rent_value(contract, due_date)
-      remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
+      summary = calculate_payment_summary(scope, contract, month_num)
 
       # Pre-populate with minimum of rent or remaining allowance
-      initial_amount = Decimal.min(rent, remaining)
+      initial_amount = Decimal.min(summary.rent, summary.remaining)
       initial_attrs = %{"amount" => initial_amount}
 
       changeset =
@@ -219,19 +214,14 @@ defmodule VivvoWeb.HomeLive do
           scope,
           %Vivvo.Payments.Payment{},
           initial_attrs,
-          remaining_allowance: remaining
+          remaining_allowance: summary.remaining
         )
 
       {:noreply,
        socket
        |> assign(:submitting_payment, {contract, month_num})
        |> assign(:payment_form, to_form(changeset))
-       |> assign(:payment_summary, %{
-         rent: rent,
-         accepted_total: accepted_total,
-         pending_total: pending_total,
-         remaining: remaining
-       })}
+       |> assign(:payment_summary, summary)}
     else
       {:noreply, put_flash(socket, :error, "Contract not found")}
     end
@@ -259,31 +249,21 @@ defmodule VivvoWeb.HomeLive do
     scope = socket.assigns.current_scope
     {contract, month} = socket.assigns.submitting_payment
 
-    # Get payment totals for display (updated in real-time)
-    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
-    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
-    due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.current_rent_value(contract, due_date)
-    remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
+    summary = calculate_payment_summary(scope, contract, month)
 
     changeset =
       Payments.change_payment(
         scope,
         %Vivvo.Payments.Payment{},
         params,
-        remaining_allowance: remaining
+        remaining_allowance: summary.remaining
       )
       |> Map.put(:action, :validate)
 
     {:noreply,
      socket
      |> assign(payment_form: to_form(changeset))
-     |> assign(:payment_summary, %{
-       rent: rent,
-       accepted_total: accepted_total,
-       pending_total: pending_total,
-       remaining: remaining
-     })}
+     |> assign(:payment_summary, summary)}
   end
 
   @impl true
@@ -296,12 +276,7 @@ defmodule VivvoWeb.HomeLive do
     scope = socket.assigns.current_scope
     {contract, month} = socket.assigns.submitting_payment
 
-    # Re-calculate totals before submission to prevent race conditions
-    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
-    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
-    due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.current_rent_value(contract, due_date)
-    remaining_allowance = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
+    summary = calculate_payment_summary(scope, contract, month)
 
     attrs =
       params
@@ -313,7 +288,7 @@ defmodule VivvoWeb.HomeLive do
       consume_uploaded_entries(socket, :files, &process_upload_entry/2)
 
     case Payments.create_payment(scope, attrs, uploaded_files,
-           remaining_allowance: remaining_allowance
+           remaining_allowance: summary.remaining
          ) do
       {:ok, _payment} ->
         clear_upload_files(uploaded_files)
@@ -2432,4 +2407,20 @@ defmodule VivvoWeb.HomeLive do
   defp rent_period_duration_label(1), do: "Monthly"
   defp rent_period_duration_label(12), do: "Yearly"
   defp rent_period_duration_label(months) when months > 0, do: "Every #{months} months"
+
+  defp calculate_payment_summary(scope, contract, month) do
+    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
+    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
+    due_date = Contracts.calculate_due_date(contract, month)
+    rent = Contracts.current_rent_value(contract, due_date)
+    remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
+
+    %{
+      rent: rent,
+      accepted_total: accepted_total,
+      pending_total: pending_total,
+      remaining: remaining,
+      due_date: due_date
+    }
+  end
 end
