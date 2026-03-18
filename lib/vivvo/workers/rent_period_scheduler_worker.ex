@@ -11,6 +11,8 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
   even if the server crashes and restarts.
   """
 
+  require Logger
+
   use Oban.Worker,
     queue: :default,
     unique: [period: :infinity, keys: [:year, :month]],
@@ -35,15 +37,15 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
     # This ensures we have the latest index data from external APIs
     with {:ok, _} <- update_index_histories(today) do
       # Query all contracts needing rent period updates (all filtering done in database)
-      contracts = Contracts.contracts_needing_update(today)
+      contract_ids = Contracts.contracts_needing_update(today)
 
       # Schedule creation worker for each contract
       # Each worker will compute its own update factor based on contract's index type
-      Enum.map(contracts, fn contract ->
+      Enum.map(contract_ids, fn contract_id ->
         today_string = Date.to_iso8601(today)
 
         %{
-          contract_id: contract.id,
+          contract_id: contract_id,
           today: today_string
         }
         |> RentPeriodCreationWorker.new(
@@ -53,7 +55,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
       end)
       |> Oban.insert_all()
 
-      {:ok, %{scheduled_count: length(contracts)}}
+      {:ok, %{scheduled_count: length(contract_ids)}}
     end
   end
 
@@ -70,8 +72,6 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
   # for values between the latest date in the database and today.
   # This should be done BEFORE processing contracts to ensure we have fresh data.
   defp update_index_histories(today) do
-    require Logger
-
     with {:ok, missing_histories} <- fetch_missing_histories(today),
          {:ok, count} <- Indexes.create_index_histories(missing_histories) do
       Logger.info(

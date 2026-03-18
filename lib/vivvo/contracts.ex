@@ -1351,7 +1351,7 @@ defmodule Vivvo.Contracts do
   ## Examples
 
       iex> contracts_needing_update(~D[2026-05-25])
-      [%Contract{}, ...]
+      [1, 2, 3, ...]
 
   """
   def contracts_needing_update(%Date{} = today) do
@@ -1378,6 +1378,7 @@ defmodule Vivvo.Contracts do
       # Contract extends beyond the latest period's end date
       where: c.end_date > latest.latest_end_date
     )
+    |> select([c], c.id)
     |> Repo.all()
   end
 end

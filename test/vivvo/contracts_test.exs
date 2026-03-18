@@ -2681,7 +2681,7 @@ defmodule Vivvo.ContractsTest do
 
       results = Contracts.contracts_needing_update(today)
       assert length(results) == 1
-      assert hd(results).id == contract.id
+      assert hd(results) == contract.id
     end
 
     test "excludes contracts with rent period ending in different month" do
