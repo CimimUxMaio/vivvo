@@ -13,19 +13,6 @@ defmodule Vivvo.Indexes do
   alias Vivvo.Repo
 
   @doc """
-  Returns the list of all index histories.
-
-  ## Examples
-
-      iex> list_index_histories()
-      [%IndexHistory{}, ...]
-
-  """
-  def list_index_histories do
-    Repo.all(IndexHistory)
-  end
-
-  @doc """
   Returns the list of index histories filtered by index type.
 
   ## Examples
@@ -145,22 +132,6 @@ defmodule Vivvo.Indexes do
 
     {from_date, end_date}
   end
-
-  @doc """
-  Gets a single index history by ID.
-
-  Raises `Ecto.NoResultsError` if the IndexHistory does not exist.
-
-  ## Examples
-
-      iex> get_index_history!(123)
-      %IndexHistory{}
-
-      iex> get_index_history!(456)
-      ** (Ecto.NoResultsError)
-
-  """
-  def get_index_history!(id), do: Repo.get!(IndexHistory, id)
 
   @doc """
   Returns index histories for a given type within a date range (inclusive).
