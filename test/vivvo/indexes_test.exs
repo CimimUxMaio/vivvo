@@ -92,6 +92,70 @@ defmodule Vivvo.IndexesTest do
       result = Indexes.compute_update_factor(:ipc, ~D[2026-01-01])
       assert %Decimal{} = result
     end
+
+    test "IPC: includes last_update month when day <= 15" do
+      # Last update on Jan 1 (typical rent period start) - include January
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]})
+
+      result = Indexes.compute_update_factor(:ipc, ~D[2026-01-01], ~D[2026-02-15])
+      # Should include Jan: (1 + 0.025) = 1.025
+      assert Decimal.eq?(result, Decimal.new("1.025"))
+    end
+
+    test "IPC: skips last_update month when day > 15 (first month grace period)" do
+      # Last update on Jan 16 - skip January entirely
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]})
+
+      result = Indexes.compute_update_factor(:ipc, ~D[2026-01-16], ~D[2026-02-15])
+      # Should skip Jan (grace period) and exclude Feb (current month) = 1.0
+      assert Decimal.eq?(result, Decimal.new(1))
+    end
+
+    test "IPC: excludes today's month rate" do
+      # Today is March 15, exclude March rate
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]})
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("3.0"), date: ~D[2026-02-01]})
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("4.0"), date: ~D[2026-03-01]})
+
+      result = Indexes.compute_update_factor(:ipc, ~D[2026-01-01], ~D[2026-03-15])
+      # Should include Jan and Feb, exclude March: (1.025) * (1.03) = 1.05575
+      assert Decimal.eq?(result, Decimal.new("1.05575"))
+    end
+
+    test "IPC: returns 1.0 when last_update is in same month as today and day > 15" do
+      # Both dates in January, last_update on Jan 20 (skip), today Jan 25
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]})
+
+      result = Indexes.compute_update_factor(:ipc, ~D[2026-01-20], ~D[2026-01-25])
+      # Skip Jan (grace period), no previous months = 1.0
+      assert Decimal.eq?(result, Decimal.new(1))
+    end
+
+    test "IPC: accumulates multiple months correctly for consecutive updates" do
+      # First update: Jan 1 to Feb 1 - should include Jan
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]})
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("3.0"), date: ~D[2026-02-01]})
+
+      result1 = Indexes.compute_update_factor(:ipc, ~D[2026-01-01], ~D[2026-02-01])
+      # Include Jan only: 1.025
+      assert Decimal.eq?(result1, Decimal.new("1.025"))
+
+      # Second update: Feb 1 to Mar 1 - should include Feb only (not Jan again)
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("3.5"), date: ~D[2026-03-01]})
+
+      result2 = Indexes.compute_update_factor(:ipc, ~D[2026-02-01], ~D[2026-03-01])
+      # Include Feb only: 1.03
+      assert Decimal.eq?(result2, Decimal.new("1.03"))
+    end
+
+    test "IPC: includes last_update month when day is 15" do
+      # Last update on Jan 15 - include January (boundary case)
+      Indexes.create_index_history(%{type: :ipc, value: Decimal.new("2.5"), date: ~D[2026-01-01]})
+
+      result = Indexes.compute_update_factor(:ipc, ~D[2026-01-15], ~D[2026-02-15])
+      # Should include Jan: (1 + 0.025) = 1.025
+      assert Decimal.eq?(result, Decimal.new("1.025"))
+    end
   end
 
   describe "get_index_history_by_date_range/3" do
@@ -200,7 +264,9 @@ defmodule Vivvo.IndexesTest do
         })
       end
 
-      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2025-12-31])
+      # Use Jan 1, 2026 as today - this will include all 12 months (Jan-Dec 2025)
+      # because Jan 2026 is excluded as the current month
+      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2026-01-01])
 
       # Verify result is approximately 1.795856 (1.05^12)
       # Allow for small floating point differences
@@ -312,7 +378,9 @@ defmodule Vivvo.IndexesTest do
         })
       end
 
-      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2025-12-31])
+      # Use Jan 1, 2026 as today - this will include all 12 months (Jan-Dec 2025)
+      # because Jan 2026 is excluded as the current month
+      result = Indexes.compute_update_factor(:ipc, base_date, ~D[2026-01-01])
 
       # Verify result is approximately 1.345 (1.025^12)
       lower = Decimal.new("1.34")

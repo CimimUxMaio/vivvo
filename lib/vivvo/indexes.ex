@@ -245,17 +245,28 @@ defmodule Vivvo.Indexes do
   def compute_update_factor(type, last_update, today \\ Date.utc_today())
 
   def compute_update_factor(:ipc, last_update, today) do
-    histories = get_index_history_by_date_range(:ipc, last_update, today)
+    # Day 1-15: Include the month (typical for rent period start on 1st)
+    # Day 16-31: Skip the month (first month grace period)
+    start_date =
+      if last_update.day <= 15 do
+        Date.beginning_of_month(last_update)
+      else
+        last_update
+        |> Date.beginning_of_month()
+        |> Date.shift(month: 1)
+      end
 
-    if histories == [] do
+    # Always exclude today's month (current month rate is not yet finalized)
+    end_date =
+      today
+      |> Date.beginning_of_month()
+      |> Date.add(-1)
+
+    if Date.compare(end_date, start_date) == :lt do
       Decimal.new(1)
     else
-      Enum.reduce(histories, Decimal.new(1), fn history, acc ->
-        rate_as_decimal = Decimal.div(history.value, 100)
-
-        Decimal.add(1, rate_as_decimal)
-        |> Decimal.mult(acc)
-      end)
+      histories = get_index_history_by_date_range(:ipc, start_date, end_date)
+      accumulate_rates(histories)
     end
   end
 
@@ -278,5 +289,16 @@ defmodule Vivvo.Indexes do
 
   def compute_update_factor(type, _last_update, _today) do
     raise ArgumentError, "Unsupported index type: #{type}"
+  end
+
+  defp accumulate_rates([]), do: Decimal.new(1)
+
+  defp accumulate_rates(histories) do
+    Enum.reduce(histories, Decimal.new(1), fn history, acc ->
+      rate_as_decimal = Decimal.div(history.value, 100)
+
+      Decimal.add(1, rate_as_decimal)
+      |> Decimal.mult(acc)
+    end)
   end
 end
