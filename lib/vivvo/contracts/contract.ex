@@ -69,6 +69,7 @@ defmodule Vivvo.Contracts.Contract do
       message: "must be greater than 0"
     )
     |> validate_number(:rent, greater_than: 0)
+    |> validate_rent_decimal_places()
     |> validate_index_fields()
     |> validate_end_date_after_start_date()
     |> put_change(:user_id, user_scope.user.id)
@@ -164,6 +165,26 @@ defmodule Vivvo.Contracts.Contract do
 
       true ->
         changeset
+    end
+  end
+
+  defp validate_rent_decimal_places(changeset) do
+    rent = get_field(changeset, :rent)
+
+    if rent && decimal_places(rent) > 2 do
+      add_error(changeset, :rent, "must have at most 2 decimal places")
+    else
+      changeset
+    end
+  end
+
+  defp decimal_places(rent) do
+    rent
+    |> Decimal.to_string(:normal)
+    |> String.split(".")
+    |> case do
+      [_whole] -> 0
+      [_whole, fraction] -> String.length(fraction)
     end
   end
 

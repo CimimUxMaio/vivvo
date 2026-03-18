@@ -250,7 +250,9 @@ defmodule Vivvo.Contracts do
 
   defp compute_rent_value(initial_rent, update_factor, period_idx) do
     multiplier = decimal_pow(update_factor, period_idx)
+
     Decimal.mult(initial_rent, multiplier)
+    |> Decimal.round(2)
   end
 
   # Calculates base^exp using pure Decimal arithmetic for precision
