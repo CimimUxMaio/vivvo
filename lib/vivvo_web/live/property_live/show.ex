@@ -45,12 +45,6 @@ defmodule VivvoWeb.PropertyLive.Show do
               <.button phx-click="show_contract_modal">
                 <.icon name="hero-eye" /> View Details
               </.button>
-              <.button
-                variant="primary"
-                navigate={~p"/properties/#{@property}/contracts/#{@contract}/edit"}
-              >
-                <.icon name="hero-pencil-square" /> Edit Contract
-              </.button>
             <% else %>
               <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
                 <.icon name="hero-plus" /> Create Contract
@@ -65,7 +59,7 @@ defmodule VivvoWeb.PropertyLive.Show do
               {@contract.tenant.first_name} {@contract.tenant.last_name}
             </:item>
             <:item title="Monthly Rent">
-              {format_currency(@contract.rent)}
+              {format_currency(Contracts.current_rent_value(@contract))}
             </:item>
             <:item title="Status">
               <.contract_status_badge status={Contracts.contract_status(@contract)} />
@@ -144,13 +138,12 @@ defmodule VivvoWeb.PropertyLive.Show do
 
     total_paid = Payments.total_accepted_for_month(scope, contract.id, month)
     due_date = Contracts.calculate_due_date(contract, month)
-
-    rent_decimal = Decimal.new(to_string(contract.rent))
+    rent = Contracts.current_rent_value(contract, due_date)
 
     progress_pct =
-      if Decimal.gt?(rent_decimal, Decimal.new(0)) do
+      if Decimal.gt?(rent, Decimal.new(0)) do
         total_paid
-        |> Decimal.div(rent_decimal)
+        |> Decimal.div(rent)
         |> Decimal.mult(100)
         |> Decimal.round(0)
         |> Decimal.to_integer()
@@ -165,6 +158,7 @@ defmodule VivvoWeb.PropertyLive.Show do
       assign(assigns,
         total_paid: total_paid,
         due_date: due_date,
+        rent: rent,
         progress_pct: progress_pct,
         month_status: month_status
       )
@@ -184,7 +178,7 @@ defmodule VivvoWeb.PropertyLive.Show do
             <p class="text-sm">
               <span class="font-medium">{format_currency(@total_paid)}</span>
               <span class="text-base-content/60"> of </span>
-              <span class="font-medium">{format_currency(@contract.rent)}</span>
+              <span class="font-medium">{format_currency(@rent)}</span>
             </p>
           </div>
         </div>
@@ -258,7 +252,7 @@ defmodule VivvoWeb.PropertyLive.Show do
 
     scope = socket.assigns.current_scope
     property = Properties.get_property!(scope, id)
-    contract = Contracts.get_contract_for_property(scope, property.id)
+    contract = Contracts.current_contract_for_property(scope, property.id)
 
     months = if contract, do: Contracts.get_months_up_to_current(contract), else: []
 
@@ -346,7 +340,7 @@ defmodule VivvoWeb.PropertyLive.Show do
         socket
       )
       when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments])
+    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
 
     months = Contracts.get_months_up_to_current(contract)
 
@@ -361,7 +355,7 @@ defmodule VivvoWeb.PropertyLive.Show do
         socket
       )
       when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments])
+    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
 
     months = Contracts.get_months_up_to_current(contract)
 
@@ -420,10 +414,9 @@ defmodule VivvoWeb.PropertyLive.Show do
 
   defp refresh_contract_data(socket) do
     scope = socket.assigns.current_scope
-    contract = Contracts.get_contract_for_property(scope, socket.assigns.property.id)
+    contract = Contracts.current_contract_for_property(scope, socket.assigns.property.id)
 
     if contract do
-      contract = Vivvo.Repo.preload(contract, [:tenant, :payments])
       months = Contracts.get_months_up_to_current(contract)
 
       socket

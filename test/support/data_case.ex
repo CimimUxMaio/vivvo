@@ -22,6 +22,8 @@ defmodule Vivvo.DataCase do
     quote do
       alias Vivvo.Repo
 
+      use Oban.Testing, repo: Vivvo.Repo
+
       import Ecto
       import Ecto.Changeset
       import Ecto.Query

@@ -1,9 +1,9 @@
 defmodule VivvoWeb.ContractLive.Form do
   @moduledoc """
-  LiveView for creating and editing rental contracts.
+  LiveView for creating rental contracts.
 
   Handles contract creation with tenant selection, date ranges, rent amount,
-  and payment due dates. Warns when replacing existing contracts.
+  and payment due dates.
   """
   use VivvoWeb, :live_view
 
@@ -17,35 +17,13 @@ defmodule VivvoWeb.ContractLive.Form do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.header>
-        {if @live_action == :new, do: "New Contract for", else: "Edit Contract for"} {@property.name}
+        New Contract for {@property.name}
         <:actions>
           <.button navigate={~p"/properties/#{@property}"}>
             <.icon name="hero-arrow-left" /> Back
           </.button>
         </:actions>
       </.header>
-
-      <%!-- Warning if replacing existing contract --%>
-      <%= if @live_action == :new && @existing_contract do %>
-        <div class="rounded-md bg-yellow-50 p-4 mb-6">
-          <div class="flex">
-            <div class="flex-shrink-0">
-              <.icon name="hero-exclamation-triangle" class="h-5 w-5 text-yellow-400" />
-            </div>
-            <div class="ml-3">
-              <h3 class="text-sm font-medium text-yellow-800">
-                Warning: Replacing existing contract
-              </h3>
-              <div class="mt-2 text-sm text-yellow-700">
-                <p>
-                  This will replace the current active contract for this property.
-                  The existing contract will be archived.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      <% end %>
 
       <%= if @tenant_users == [] do %>
         <div class="rounded-md bg-red-50 p-4 mb-6">
@@ -97,7 +75,13 @@ defmodule VivvoWeb.ContractLive.Form do
         />
 
         <%!-- Date fields --%>
-        <.input field={@form[:start_date]} type="date" label="Start Date" required />
+        <.input
+          field={@form[:start_date]}
+          type="date"
+          label="Start Date"
+          required
+          min={Date.utc_today()}
+        />
         <.input field={@form[:end_date]} type="date" label="End Date" required />
 
         <%!-- Expiration day --%>
@@ -121,6 +105,29 @@ defmodule VivvoWeb.ContractLive.Form do
           required
         />
 
+        <%!-- Index Type --%>
+        <.input
+          field={@form[:index_type]}
+          type="select"
+          label="Index Type"
+          prompt="None"
+          options={[
+            {"IPC", :ipc},
+            {"ICL", :icl}
+          ]}
+        />
+
+        <%!-- Rent Period Duration (only shown when index_type is selected) --%>
+        <%= unless @form[:index_type].value in ["", nil] do %>
+          <.input
+            field={@form[:rent_period_duration]}
+            type="number"
+            label="Rent Update Period (months)"
+            placeholder="Leave empty for no periodic updates"
+            min="1"
+          />
+        <% end %>
+
         <%!-- Notes --%>
         <.input field={@form[:notes]} type="textarea" label="Notes (Optional)" />
 
@@ -132,7 +139,7 @@ defmodule VivvoWeb.ContractLive.Form do
             phx-disable-with="Saving..."
             disabled={@tenant_users == []}
           >
-            {if @live_action == :new, do: "Create Contract", else: "Update Contract"}
+            Create Contract
           </.button>
           <.button navigate={~p"/properties/#{@property}"}>Cancel</.button>
         </footer>
@@ -147,14 +154,10 @@ defmodule VivvoWeb.ContractLive.Form do
     property = Properties.get_property!(socket.assigns.current_scope, property_id)
     tenant_users = Accounts.list_users_with_tenant_role(socket.assigns.current_scope)
 
-    existing_contract =
-      Contracts.get_contract_for_property(socket.assigns.current_scope, property.id)
-
     {:ok,
      socket
      |> assign(:property, property)
      |> assign(:tenant_users, tenant_users)
-     |> assign(:existing_contract, existing_contract)
      |> apply_action(socket.assigns.live_action, params)}
   end
 
@@ -163,15 +166,6 @@ defmodule VivvoWeb.ContractLive.Form do
 
     socket
     |> assign(:page_title, "New Contract")
-    |> assign(:contract, contract)
-    |> assign(:form, to_form(Contracts.change_contract(socket.assigns.current_scope, contract)))
-  end
-
-  defp apply_action(socket, :edit, %{"id" => id}) do
-    contract = Contracts.get_contract!(socket.assigns.current_scope, id)
-
-    socket
-    |> assign(:page_title, "Edit Contract")
     |> assign(:contract, contract)
     |> assign(:form, to_form(Contracts.change_contract(socket.assigns.current_scope, contract)))
   end
@@ -200,22 +194,20 @@ defmodule VivvoWeb.ContractLive.Form do
          |> put_flash(:info, "Contract created successfully")
          |> push_navigate(to: ~p"/properties/#{socket.assigns.property}")}
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
-    end
-  end
-
-  defp save_contract(socket, :edit, contract_params) do
-    case Contracts.update_contract(
-           socket.assigns.current_scope,
-           socket.assigns.contract,
-           contract_params
-         ) do
-      {:ok, _contract} ->
+      {:error, :rent_periods, _error} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Contract updated successfully")
-         |> push_navigate(to: ~p"/properties/#{socket.assigns.property}")}
+         |> put_flash(:error, "An error occurred while creating the contract. Please try again.")
+         |> assign(
+           form:
+             to_form(
+               Contracts.change_contract(
+                 socket.assigns.current_scope,
+                 socket.assigns.contract,
+                 contract_params
+               )
+             )
+         )}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}

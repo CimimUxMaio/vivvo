@@ -10,7 +10,7 @@ defmodule Vivvo.ContractsFixtures do
   @doc """
   Generate a contract.
   """
-  def contract_fixture(scope, attrs \\ %{}) do
+  def contract_fixture(scope, attrs \\ %{}, opts \\ []) do
     # Create tenant and property if not provided
     tenant =
       if Map.has_key?(attrs, :tenant_id) do
@@ -29,7 +29,8 @@ defmodule Vivvo.ContractsFixtures do
     today = Date.utc_today()
 
     default_attrs = %{
-      start_date: Date.add(today, 1),
+      # Start from today to ensure the contract covers the current date
+      start_date: today,
       end_date: Date.add(today, 30),
       expiration_day: 5,
       notes: "some notes",
@@ -44,7 +45,53 @@ defmodule Vivvo.ContractsFixtures do
 
     attrs = Enum.into(attrs, default_attrs)
 
-    {:ok, contract} = Vivvo.Contracts.create_contract(scope, attrs)
+    {:ok, contract} = Vivvo.Contracts.create_contract(scope, attrs, opts)
     contract
+  end
+
+  @doc """
+  Generate an expired contract (end_date in the past).
+  """
+  def expired_contract_fixture(scope, attrs \\ %{}) do
+    today = Date.utc_today()
+
+    merged_attrs =
+      Map.merge(
+        %{
+          start_date: Date.add(today, -60),
+          end_date: Date.add(today, -1),
+          index_type: :icl,
+          rent_period_duration: 12
+        },
+        attrs
+      )
+
+    contract_fixture(
+      scope,
+      merged_attrs,
+      past_start_date?: true,
+      update_factor: Decimal.new("0.0")
+    )
+  end
+
+  @doc """
+  Generate a rent period for a contract.
+  """
+  def rent_period_fixture(contract, attrs \\ %{}) do
+    today = Date.utc_today()
+
+    default_attrs = %{
+      contract_id: contract.id,
+      start_date: Date.add(today, -30),
+      end_date: today,
+      value: Decimal.new("1000.00"),
+      index_type: contract.index_type,
+      update_factor: nil
+    }
+
+    attrs = Enum.into(attrs, default_attrs)
+
+    {:ok, rent_period} = Vivvo.Contracts.create_rent_period(attrs)
+    rent_period
   end
 end

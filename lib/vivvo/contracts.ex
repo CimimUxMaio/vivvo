@@ -4,15 +4,14 @@ defmodule Vivvo.Contracts do
   """
 
   import Ecto.Query, warn: false
-  alias Vivvo.Repo
+  require Logger
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts.Contract
+  alias Vivvo.Contracts.RentPeriod
   alias Vivvo.Payments
   alias Vivvo.Properties.Property
-
-  # Threshold (in days) for considering a contract as "ending soon"
-  @ending_soon_threshold_days 60
+  alias Vivvo.Repo
 
   @doc """
   Subscribes to scoped notifications about any contract changes.
@@ -64,33 +63,51 @@ defmodule Vivvo.Contracts do
 
   """
   def get_contract!(%Scope{} = scope, id) do
-    Repo.get_by!(Contract, id: id, user_id: scope.user.id, archived: false)
+    Contract
+    |> where([c], c.id == ^id and c.user_id == ^scope.user.id and c.archived == false)
+    |> preload([:tenant, :property, :rent_periods])
+    |> Repo.one!()
   end
 
   @doc """
-  Gets the active contract for a specific property.
+  Gets the current active contract for a specific property as of the given date.
 
-  Returns nil if no active contract exists, or the contract struct with tenant preloaded.
+  Returns nil if no active contract exists for the date, or the contract struct with tenant preloaded.
 
   ## Examples
 
-      iex> get_contract_for_property(scope, 123)
+      iex> current_contract_for_property(scope, 123, ~D[2026-03-15])
       %Contract{tenant: %User{}}
 
-      iex> get_contract_for_property(scope, 456)
+      iex> current_contract_for_property(scope, 456, ~D[2026-03-15])
       nil
   """
-  def get_contract_for_property(%Scope{} = scope, property_id) do
+  def current_contract_for_property(%Scope{} = scope, property_id, today \\ Date.utc_today()) do
     from(c in Contract,
       where:
-        c.property_id == ^property_id and c.user_id == ^scope.user.id and c.archived == false,
-      preload: [:tenant, :payments]
+        c.property_id == ^property_id and
+          c.user_id == ^scope.user.id and
+          c.archived == false and
+          c.start_date <= ^today and
+          c.end_date >= ^today,
+      preload: [:tenant, :payments, :rent_periods]
     )
     |> Repo.one()
   end
 
   @doc """
   Creates a contract.
+
+  ## Options
+
+    * `:past_start_date?` - When set to `true` along with `:update_factor`, allows
+      creating contracts with start dates in the past. Used for testing/seeding.
+    * `:update_factor` - The index value (as Decimal or float) used to calculate
+      rent increases for each subsequent rent period when `:past_start_date?` is true.
+    * `:today` - The reference date to use for determining "today". Defaults to
+      `Date.utc_today()`. Useful for testing date-dependent behavior.
+
+  Both `:past_start_date?` and `:update_factor` must be provided together for past date support.
 
   ## Examples
 
@@ -100,54 +117,209 @@ defmodule Vivvo.Contracts do
       iex> create_contract(scope, %{field: bad_value})
       {:error, %Ecto.Changeset{}}
 
+      iex> create_contract(scope, attrs, past_start_date?: true, update_factor: 0.05)
+      {:ok, %Contract{}}  # Creates contract with multiple historical rent periods
+
   """
-  def create_contract(%Scope{} = scope, attrs) do
-    property_id = get_property_id(attrs)
-    old_contract = maybe_get_contract_for_property(scope, property_id)
+  def create_contract(%Scope{} = scope, attrs, opts \\ []) do
+    # Validate options first
+    past_start_date? = Keyword.get(opts, :past_start_date?, false)
+    update_factor = Keyword.get(opts, :update_factor)
+    today = Keyword.get(opts, :today, Date.utc_today())
 
-    result =
+    validate_opts(past_start_date?, update_factor)
+
+    # Use Ecto.Multi to handle the sequential operations and roll back if any step fails
+    multi =
       Ecto.Multi.new()
-      |> Ecto.Multi.run(:archive_old, maybe_archive_old_contract(scope, old_contract))
-      |> Ecto.Multi.insert(:contract, Contract.changeset(%Contract{}, attrs, scope))
-      |> Repo.transaction()
+      |> Ecto.Multi.insert(
+        :contract,
+        Contract.creation_changeset(%Contract{}, attrs, scope,
+          past_start_date?: past_start_date?,
+          today: today
+        )
+      )
+      |> Ecto.Multi.run(:rent_periods, fn repo, %{contract: contract} ->
+        insert_historical_rent_periods(repo, contract, contract.rent, update_factor, today)
+      end)
 
-    case result do
+    # Execute the multi and handle results
+    multi
+    |> Repo.transaction()
+    |> case do
       {:ok, %{contract: contract}} ->
+        contract = Repo.preload(contract, :rent_periods)
         broadcast_contract(scope, {:created, contract})
-
-        unless is_nil(old_contract) do
-          broadcast_contract(scope, {:deleted, old_contract})
-        end
-
         {:ok, contract}
+
+      {:error, :rent_periods, error, _changes} ->
+        {:error, :rent_periods, error}
 
       {:error, _name, changeset, _changes} ->
         {:error, changeset}
     end
   end
 
-  defp maybe_archive_old_contract(_scope, nil) do
-    fn _repo, _changes ->
-      {:ok, :no_existing_contract}
+  defp validate_opts(past_start_date?, update_factor) do
+    if past_start_date? and is_nil(update_factor) do
+      raise ArgumentError, "update_factor option must be provided when past_start_date? is true"
+    end
+
+    :ok
+  end
+
+  defp insert_historical_rent_periods(repo, contract, initial_rent, update_factor, today) do
+    rent_periods =
+      generate_historical_rent_periods(contract, initial_rent, update_factor, today)
+      |> Enum.map(fn period ->
+        now =
+          DateTime.utc_now()
+          |> DateTime.truncate(:second)
+
+        period
+        |> Map.put(:inserted_at, now)
+        |> Map.put(:updated_at, now)
+      end)
+
+    repo.insert_all(RentPeriod, rent_periods)
+    {:ok, rent_periods}
+  end
+
+  defp generate_historical_rent_periods(
+         contract,
+         initial_rent,
+         update_factor,
+         today
+       ) do
+    generate_contract_period_dates(contract, today)
+    |> Enum.with_index()
+    |> Enum.map(fn {period, idx} ->
+      rent_value = compute_rent_value(initial_rent, update_factor, idx)
+
+      period
+      |> Map.put(:contract_id, contract.id)
+      |> Map.put(:index_type, contract.index_type)
+      # If idx = 0 set index value to nil
+      |> Map.put(:update_factor, (idx > 0 && update_factor) || nil)
+      |> Map.put(:value, rent_value)
+    end)
+  end
+
+  defp generate_contract_period_dates(%Contract{rent_period_duration: nil} = contract, _today) do
+    [
+      %{
+        start_date: contract.start_date,
+        end_date: contract.end_date
+      }
+    ]
+  end
+
+  defp generate_contract_period_dates(contract, today) do
+    first_period = contract_period_date(contract, 1)
+
+    additional_periods =
+      Stream.iterate(2, &(&1 + 1))
+      |> Stream.map(&contract_period_date(contract, &1))
+      |> Stream.take_while(fn period ->
+        # Before or equal to today
+        Date.compare(period.start_date, today) != :gt
+      end)
+      |> Enum.to_list()
+
+    [first_period | additional_periods]
+  end
+
+  defp contract_period_date(%Contract{rent_period_duration: duration} = contract, num) do
+    period_start =
+      contract.start_date
+      |> Date.beginning_of_month()
+      |> Date.shift(month: (num - 1) * duration)
+      |> then(&Enum.max([&1, contract.start_date], Date))
+
+    period_end = period_end_date(contract.rent_period_duration, period_start, contract.end_date)
+
+    %{
+      start_date: period_start,
+      end_date: period_end
+    }
+  end
+
+  def period_end_date(duration, start_date, max_end_date) do
+    start_date
+    |> Date.shift(month: duration - 1)
+    |> Date.end_of_month()
+    |> then(&Enum.min([&1, max_end_date], Date))
+  end
+
+  defp compute_rent_value(initial_rent, _update_factor, 0), do: initial_rent
+
+  defp compute_rent_value(initial_rent, update_factor, period_idx) do
+    multiplier = decimal_pow(update_factor, period_idx)
+
+    Decimal.mult(initial_rent, multiplier)
+    |> Decimal.round(2)
+  end
+
+  # Calculates base^exp using pure Decimal arithmetic for precision
+  defp decimal_pow(_base, 0), do: Decimal.new(1)
+  defp decimal_pow(base, 1), do: base
+
+  defp decimal_pow(base, exp) when exp > 1 do
+    half = decimal_pow(base, div(exp, 2))
+    result = Decimal.mult(half, half)
+
+    if rem(exp, 2) == 0 do
+      result
+    else
+      Decimal.mult(result, base)
     end
   end
 
-  defp maybe_archive_old_contract(%Scope{} = scope, %Contract{} = old_contract) do
-    fn repo, _changes ->
-      old_contract
-      |> Contract.archive_changeset(scope)
-      |> repo.update()
+  @doc """
+  Finds any overlapping contract for the given property and date range.
+
+  Returns the overlapping contract struct if found, or nil if no overlap exists.
+
+  ## Examples
+
+      iex> find_overlapping_contract(scope, 123, ~D[2026-01-01], ~D[2026-12-31])
+      nil
+
+      iex> find_overlapping_contract(scope, 123, ~D[2026-01-01], ~D[2026-12-31])
+      %Contract{}
+
+  """
+  def find_overlapping_contract(%Scope{} = scope, property_id, start_date, end_date) do
+    Contract
+    |> where([c], c.property_id == ^property_id)
+    |> where([c], c.user_id == ^scope.user.id)
+    |> where([c], c.archived == false)
+    |> where([c], c.start_date <= ^end_date)
+    |> where([c], c.end_date >= ^start_date)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc """
+  Checks if there are any non-archived contracts for the given property
+  that overlap with the specified date range.
+
+  Returns {:ok, nil} if no overlap found, or {:error, {:overlap, contract}} if overlap exists.
+
+  ## Examples
+
+      iex> check_overlapping_contracts(scope, 123, ~D[2026-01-01], ~D[2026-12-31])
+      {:ok, nil}
+
+      iex> check_overlapping_contracts(scope, 123, ~D[2026-01-01], ~D[2026-12-31])
+      {:error, {:overlap, %Contract{}}}
+
+  """
+  def check_overlapping_contracts(%Scope{} = scope, property_id, start_date, end_date) do
+    case find_overlapping_contract(scope, property_id, start_date, end_date) do
+      nil -> {:ok, nil}
+      contract -> {:error, {:overlap, contract}}
     end
-  end
-
-  defp get_property_id(attrs) do
-    Map.get(attrs, "property_id") || Map.get(attrs, :property_id)
-  end
-
-  defp maybe_get_contract_for_property(_scope, nil), do: nil
-
-  defp maybe_get_contract_for_property(%Scope{} = scope, property_id) do
-    get_contract_for_property(scope, property_id)
   end
 
   @doc """
@@ -163,16 +335,13 @@ defmodule Vivvo.Contracts do
 
   """
   def update_contract(%Scope{} = scope, %Contract{} = contract, attrs) do
-    if contract.user_id != scope.user.id do
-      {:error, :unauthorized}
-    else
-      with {:ok, contract = %Contract{}} <-
-             contract
-             |> Contract.changeset(attrs, scope)
-             |> Repo.update() do
-        broadcast_contract(scope, {:updated, contract})
-        {:ok, contract}
-      end
+    with :ok <- authorize_contract(contract, scope),
+         {:ok, contract = %Contract{}} <-
+           contract
+           |> Contract.changeset(attrs, scope)
+           |> Repo.update() do
+      broadcast_contract(scope, {:updated, contract})
+      {:ok, contract}
     end
   end
 
@@ -189,16 +358,13 @@ defmodule Vivvo.Contracts do
 
   """
   def delete_contract(%Scope{} = scope, %Contract{} = contract) do
-    if contract.user_id != scope.user.id do
-      {:error, :unauthorized}
-    else
-      with {:ok, contract = %Contract{}} <-
-             contract
-             |> Contract.archive_changeset(scope)
-             |> Repo.update() do
-        broadcast_contract(scope, {:deleted, contract})
-        {:ok, contract}
-      end
+    with :ok <- authorize_contract(contract, scope),
+         {:ok, contract = %Contract{}} <-
+           contract
+           |> Contract.archive_changeset(scope)
+           |> Repo.update() do
+      broadcast_contract(scope, {:deleted, contract})
+      {:ok, contract}
     end
   end
 
@@ -212,12 +378,16 @@ defmodule Vivvo.Contracts do
 
   """
   def change_contract(%Scope{} = scope, %Contract{} = contract, attrs \\ %{}) do
-    # Only check authorization if the contract already has an owner
-    if contract.user_id && contract.user_id != scope.user.id do
-      raise "Unauthorized"
-    end
-
     Contract.changeset(contract, attrs, scope)
+  end
+
+  # Authorizes that the contract belongs to the scope user
+  defp authorize_contract(%Contract{user_id: user_id}, %Scope{user: %{id: scope_user_id}}) do
+    if user_id == scope_user_id do
+      :ok
+    else
+      {:error, :unauthorized}
+    end
   end
 
   @doc """
@@ -279,7 +449,7 @@ defmodule Vivvo.Contracts do
     Contract
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, payments: [:files]])
+    |> preload([:property, :rent_periods, payments: [:files]])
     |> Repo.all()
   end
 
@@ -302,31 +472,38 @@ defmodule Vivvo.Contracts do
     |> where([c], c.id == ^contract_id)
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, payments: [:files]])
+    |> preload([:property, :rent_periods, payments: [:files]])
     |> Repo.one()
   end
 
   @doc """
   Calculate the current payment number based on months since start_date.
   Returns 0 if the contract hasn't started yet.
+  Caps the result at the contract's total expected number of payments.
 
   ## Examples
 
-      iex> get_current_payment_number(%Contract{start_date: ~D[2026-01-01]})
+      iex> get_current_payment_number(%Contract{start_date: ~D[2026-01-01], end_date: ~D[2026-12-31]})
       5  # if today is May 2026
 
-      iex> get_current_payment_number(%Contract{start_date: ~D[2026-12-01]})
+      iex> get_current_payment_number(%Contract{start_date: ~D[2026-12-01], end_date: ~D[2027-12-31]})
       0  # if today is earlier than December 2026
 
+      iex> get_current_payment_number(%Contract{start_date: ~D[2025-01-01], end_date: ~D[2025-03-31]})
+      3  # expired contract returns total payments, not inflated number
+
   """
-  def get_current_payment_number(%Contract{start_date: start_date}) do
+  def get_current_payment_number(%Contract{} = contract) do
     today = Date.utc_today()
+    start_date = contract.start_date
 
     if Date.compare(today, start_date) == :lt do
       0
     else
       months_diff = (today.year - start_date.year) * 12 + (today.month - start_date.month)
-      months_diff + 1
+      current = months_diff + 1
+      total = contract_duration_months(contract)
+      min(current, total)
     end
   end
 
@@ -363,7 +540,7 @@ defmodule Vivvo.Contracts do
       1..2  # if payment periods 1 and 2 have passed
 
       iex> get_past_payment_numbers(contract, ~D[2026-01-01])
-      1..0  # empty range - no due dates in the past yet
+      []  # empty range - no due dates in the past yet
 
   """
   def get_past_payment_numbers(%Contract{} = contract, today) do
@@ -371,12 +548,15 @@ defmodule Vivvo.Contracts do
     current_due_date = calculate_due_date(contract, current)
 
     last =
-      if Date.compare(current_due_date, today) == :lt,
+      if Date.compare(current_due_date, today) in [:lt, :eq],
         do: current,
         else: current - 1
 
-    Range.new(1, last, 1)
-    |> Enum.to_list()
+    if last >= 1 do
+      Enum.to_list(1..last)
+    else
+      []
+    end
   end
 
   @doc """
@@ -389,13 +569,11 @@ defmodule Vivvo.Contracts do
 
   """
   def calculate_due_date(%Contract{start_date: start_date, expiration_day: exp_day}, payment_num) do
-    month_offset = payment_num - 1
-    year = start_date.year + div(start_date.month + month_offset - 1, 12)
-    month = rem(start_date.month + month_offset - 1, 12) + 1
-    last_day = Calendar.ISO.days_in_month(year, month)
+    shifted_date = Date.shift(start_date, month: payment_num - 1)
+    last_day = Date.days_in_month(shifted_date)
     day = min(exp_day, last_day)
 
-    Date.new!(year, month, day)
+    %{shifted_date | day: day}
   end
 
   @doc """
@@ -473,7 +651,7 @@ defmodule Vivvo.Contracts do
     |> where([c], c.archived == false)
     |> where([c], c.start_date <= ^today)
     |> where([c], c.end_date >= ^today)
-    |> preload([:property, :tenant, :payments])
+    |> preload([:property, :tenant, :rent_periods, :payments])
     |> order_by([c], asc: c.start_date)
     |> Repo.all()
   end
@@ -498,7 +676,7 @@ defmodule Vivvo.Contracts do
     |> where([p], p.user_id == ^scope.user.id)
     |> where([p], p.archived == false)
     |> order_by([p], asc: p.name)
-    |> preload(contract: [:tenant, :payments])
+    |> preload(contract: [:tenant, :rent_periods, :payments])
     |> Repo.all()
     |> Enum.map(&calculate_property_metrics(&1, &1.contract, scope))
   end
@@ -508,7 +686,7 @@ defmodule Vivvo.Contracts do
       property: property,
       total_income: Decimal.new(0),
       collection_rate: 0.0,
-      avg_delay_days: 0,
+      avg_delay_days: 0.0,
       state: :vacant,
       total_expected: Decimal.new(0)
     }
@@ -536,7 +714,7 @@ defmodule Vivvo.Contracts do
           property: property,
           total_income: Decimal.new(0),
           collection_rate: 0.0,
-          avg_delay_days: 0,
+          avg_delay_days: 0.0,
           state: :vacant,
           total_expected: Decimal.new(0)
         }
@@ -549,9 +727,14 @@ defmodule Vivvo.Contracts do
   defp calculate_active_property_metrics(property, %Contract{} = contract, scope) do
     today = Date.utc_today()
     past_payment_numbers = get_past_payment_numbers(contract, today)
-
     periods_count = Enum.count(past_payment_numbers)
-    total_expected = Decimal.mult(contract.rent, Decimal.new(periods_count))
+
+    total_expected =
+      Enum.reduce(past_payment_numbers, Decimal.new(0), fn payment_num, acc ->
+        due_date = calculate_due_date(contract, payment_num)
+        rent = current_rent_value(contract, due_date)
+        Decimal.add(acc, rent)
+      end)
 
     total_received = Payments.total_rent_collected(scope, contract, today)
 
@@ -622,15 +805,16 @@ defmodule Vivvo.Contracts do
   defp calculate_month_delay(contract, payments_by_month, payment_number, today) do
     due_date = calculate_due_date(contract, payment_number)
     month_payments = Map.get(payments_by_month, payment_number)
+    rent = current_rent_value(contract, due_date)
 
     cond do
       is_nil(month_payments) ->
         # No payments at all for this month
         max(0, Date.diff(today, due_date))
 
-      month_fully_paid?(month_payments, contract.rent) ->
+      month_fully_paid?(month_payments, rent) ->
         # Fully paid - find completion payment and calculate delay
-        calculate_completion_delay(month_payments, contract.rent, due_date)
+        calculate_completion_delay(month_payments, rent, due_date)
 
       true ->
         # Partially paid - use today as completion date
@@ -736,13 +920,7 @@ defmodule Vivvo.Contracts do
 
   """
   def days_until_end(%Contract{end_date: end_date}) do
-    today = Date.utc_today()
-
-    case Date.compare(end_date, today) do
-      :gt -> Date.diff(end_date, today)
-      :eq -> 0
-      :lt -> nil
-    end
+    days_from_today(end_date)
   end
 
   @doc """
@@ -760,48 +938,17 @@ defmodule Vivvo.Contracts do
 
   """
   def days_until_start(%Contract{start_date: start_date}) do
+    days_from_today(start_date)
+  end
+
+  # Shared helper for calculating days from today to a target date
+  defp days_from_today(date) do
     today = Date.utc_today()
 
-    case Date.compare(start_date, today) do
-      :gt -> Date.diff(start_date, today)
+    case Date.compare(date, today) do
+      :gt -> Date.diff(date, today)
       :eq -> 0
       :lt -> nil
-    end
-  end
-
-  @doc """
-  Check if contract is ending soon (within #{@ending_soon_threshold_days} days).
-
-  ## Examples
-
-      iex> ending_soon?(%Contract{end_date: ~D[2026-03-01]})
-      true  # if today is within #{@ending_soon_threshold_days} days of end_date
-
-  """
-  def ending_soon?(%Contract{} = contract) do
-    case days_until_end(contract) do
-      nil -> false
-      days -> days > 0 and days <= @ending_soon_threshold_days
-    end
-  end
-
-  @doc """
-  Get a human-readable label for contract status with context.
-
-  ## Examples
-
-      iex> contract_status_label(contract)
-      "Ending Soon"
-
-  """
-  def contract_status_label(%Contract{} = contract) do
-    status = contract_status(contract)
-
-    cond do
-      status == :expired -> "Expired"
-      ending_soon?(contract) -> "Ending Soon"
-      status == :upcoming -> "Upcoming"
-      true -> "Active"
     end
   end
 
@@ -843,7 +990,8 @@ defmodule Vivvo.Contracts do
   # Calculates outstanding amount for a month. Returns negative value
   # when total payments exceed rent (overpayment credit).
   defp calculate_and_add_outstanding(scope, contract, payment_num, acc) do
-    rent = contract.rent
+    due_date = calculate_due_date(contract, payment_num)
+    rent = current_rent_value(contract, due_date)
     paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
     outstanding = Decimal.sub(rent, paid)
     Decimal.add(acc, outstanding)
@@ -917,56 +1065,76 @@ defmodule Vivvo.Contracts do
     else
       # Fetch all payments for the contract with files preloaded
       contract_payments = Payments.list_payments_for_contract(scope, contract.id)
+      totals_by_month = calculate_totals_by_month(contract_payments)
 
-      Enum.map(1..current_payment_num, fn payment_num ->
-        due_date = calculate_due_date(contract, payment_num)
-        total_paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
-        month_status = Payments.get_month_status(scope, contract, payment_num)
-
-        # Get payments for this month from the preloaded list
-        month_payments =
-          Enum.filter(contract_payments, &(&1.payment_number == payment_num))
-          |> Enum.sort_by(& &1.inserted_at, :desc)
-
-        %{
-          payment_number: payment_num,
-          due_date: due_date,
-          rent: contract.rent,
-          total_paid: total_paid,
-          status: month_status,
-          is_overdue: month_overdue?(contract, payment_num, today) and month_status != :paid,
-          days_until_due: Date.diff(due_date, today),
-          payments: month_payments
-        }
-      end)
+      Enum.map(
+        1..current_payment_num,
+        &build_payment_status(&1, contract, contract_payments, totals_by_month, today)
+      )
     end
   end
 
-  @doc """
-  Get upcoming payments (future months within contract period).
+  defp calculate_totals_by_month(contract_payments) do
+    contract_payments
+    |> Enum.filter(&(&1.status == :accepted))
+    |> Enum.group_by(& &1.payment_number)
+    |> Map.new(fn {num, payments} ->
+      {num, Enum.reduce(payments, Decimal.new(0), &Decimal.add(&2, &1.amount))}
+    end)
+  end
 
-  Returns a list of maps with upcoming payment info.
+  defp build_payment_status(payment_num, contract, contract_payments, totals_by_month, today) do
+    due_date = calculate_due_date(contract, payment_num)
+    rent = current_rent_value(contract, due_date)
+    total_paid = Map.get(totals_by_month, payment_num, Decimal.new(0))
+    month_status = determine_month_status(total_paid, rent)
+
+    %{
+      payment_number: payment_num,
+      due_date: due_date,
+      rent: rent,
+      total_paid: total_paid,
+      status: month_status,
+      is_overdue: month_overdue?(contract, payment_num, today) and month_status != :paid,
+      days_until_due: Date.diff(due_date, today),
+      payments: get_month_payments(contract_payments, payment_num)
+    }
+  end
+
+  defp determine_month_status(total_paid, rent) do
+    cond do
+      Decimal.compare(total_paid, rent) != :lt -> :paid
+      Decimal.compare(total_paid, Decimal.new(0)) == :gt -> :partial
+      true -> :unpaid
+    end
+  end
+
+  defp get_month_payments(contract_payments, payment_num) do
+    contract_payments
+    |> Enum.filter(&(&1.payment_number == payment_num))
+    |> Enum.sort_by(& &1.inserted_at, :desc)
+  end
+
+  @doc """
+  Returns the due date of the next upcoming payment, or nil if contract has ended.
 
   ## Examples
 
-      iex> get_upcoming_payments(contract)
-      [%{payment_number: 6, due_date: ~D[2026-06-10], rent: Decimal.new("500.00")}]
+      iex> next_payment_date(contract)
+      ~D[2026-04-10]
+
+      iex> next_payment_date(ended_contract)
+      nil
 
   """
-  def get_upcoming_payments(%Contract{} = contract) do
-    current_payment_num = get_current_payment_number(contract)
-    total_months = contract_duration_months(contract)
+  def next_payment_date(%Contract{} = contract) do
+    current = get_current_payment_number(contract)
+    total = contract_duration_months(contract)
 
-    if current_payment_num >= total_months do
-      []
+    if current < total do
+      calculate_due_date(contract, current + 1)
     else
-      Enum.map((current_payment_num + 1)..total_months, fn payment_num ->
-        %{
-          payment_number: payment_num,
-          due_date: calculate_due_date(contract, payment_num),
-          rent: contract.rent
-        }
-      end)
+      nil
     end
   end
 
@@ -981,5 +1149,243 @@ defmodule Vivvo.Contracts do
   @spec contract_duration_months(Contract.t()) :: integer()
   def contract_duration_months(%Contract{start_date: start_date, end_date: end_date}) do
     (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month) + 1
+  end
+
+  @doc """
+  Returns the rent period that covers the given date for a contract.
+
+  ## Behavior
+
+  - If the date falls within a rent period's date range, returns that period
+  - If the contract is in the future (start_date > date), returns the earliest period
+  - If the contract is expired (end_date < date), returns the latest period
+  - If no period covers the date and contract is active, raises an error
+    (this indicates a bug in period generation)
+
+  ## Examples
+
+      iex> current_rent_period(contract_with_periods, ~D[2026-03-15])
+      %RentPeriod{start_date: ~D[2026-01-01], end_date: ~D[2026-03-31], value: Decimal.new("1200.00")}
+
+      iex> current_rent_period(future_contract, Date.utc_today())
+      %RentPeriod{}  # Returns earliest period for future contracts
+
+  """
+  def current_rent_period(%Contract{} = contract, date \\ Date.utc_today()) do
+    contract =
+      if Ecto.assoc_loaded?(contract.rent_periods) do
+        contract
+      else
+        Logger.warning(
+          "Rent periods not preloaded for contract #{contract.id} in current_rent_period. Preloading now, but consider preloading in calling function for efficiency."
+        )
+
+        Repo.preload(contract, :rent_periods)
+      end
+
+    periods = contract.rent_periods
+
+    date_match =
+      Enum.find(periods, fn rp ->
+        Date.compare(rp.start_date, date) != :gt and
+          Date.compare(rp.end_date, date) != :lt
+      end)
+
+    case date_match do
+      %RentPeriod{} = rp ->
+        rp
+
+      nil ->
+        handle_no_matching_period(contract, periods, date)
+    end
+  end
+
+  defp handle_no_matching_period(contract, periods, date) do
+    cond do
+      Date.compare(contract.start_date, date) == :gt ->
+        # Future contract -- use the initial (earliest) period
+        Enum.min_by(periods, & &1.start_date, Date, fn ->
+          raise "Contract #{contract.id} has no rent periods"
+        end)
+
+      Date.compare(contract.end_date, date) == :lt ->
+        # Expired contract -- use the latest period
+        Enum.max_by(periods, & &1.end_date, Date, fn ->
+          raise "Contract #{contract.id} has no rent periods"
+        end)
+
+      true ->
+        # Contract is active but no matching period -- bug in period generation
+        raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
+                "This indicates a bug in rent period generation."
+    end
+  end
+
+  @doc """
+  Returns the rent value for the given date from the appropriate rent period.
+
+  ## Examples
+
+      iex> current_rent_value(contract, ~D[2026-03-15])
+      Decimal.new("1200.00")
+
+  """
+  def current_rent_value(%Contract{} = contract, date \\ Date.utc_today()) do
+    current_rent_period(contract, date).value
+  end
+
+  @doc """
+  Returns the next rent update date based on the current rent period.
+
+  Returns nil if:
+  - The contract has no rent periods
+  - The contract has no indexing configured (no rent_period_duration or index_type)
+  - The contract has ended
+  - The next update would be after the contract's end date
+
+  ## Examples
+
+      iex> next_rent_update_date(contract)
+      ~D[2026-04-01]
+
+  """
+  def next_rent_update_date(%Contract{} = contract) do
+    today = Date.utc_today()
+    current_period = current_rent_period(contract, today)
+    update_date = Date.add(current_period.end_date, 1)
+
+    if Date.after?(update_date, contract.end_date) do
+      nil
+    else
+      update_date
+    end
+  end
+
+  @doc """
+  Calculate days until the next rent update.
+
+  Returns nil if there is no next update (contract has ended, no indexing configured, etc.)
+  Returns 0 if the update is today.
+
+  ## Examples
+
+      iex> days_until_next_update(contract)
+      15
+
+      iex> days_until_next_update(contract_without_indexing)
+      nil
+
+  """
+  def days_until_next_update(%Contract{} = contract) do
+    case next_rent_update_date(contract) do
+      nil -> nil
+      date -> Date.diff(date, Date.utc_today())
+    end
+  end
+
+  @doc """
+  Creates a rent period. Used by system jobs only (no scope validation).
+
+  Uses `ON CONFLICT DO NOTHING` to handle race conditions gracefully when
+  multiple workers attempt to create the same rent period concurrently.
+
+  ## Examples
+
+      iex> create_rent_period(%{field: value})
+      {:ok, %RentPeriod{}}
+
+      iex> create_rent_period(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+      iex> create_rent_period(attrs)  # when period already exists
+      {:ok, :already_exists}
+
+  """
+  def create_rent_period(attrs) do
+    %RentPeriod{}
+    |> RentPeriod.changeset(attrs)
+    |> Repo.insert(
+      on_conflict: :nothing,
+      conflict_target: [:contract_id, :start_date]
+    )
+    |> handle_rent_period_insert_result(attrs)
+  end
+
+  defp handle_rent_period_insert_result({:ok, %RentPeriod{id: nil} = _struct}, _attrs) do
+    # ON CONFLICT :nothing was triggered - period already exists
+    {:ok, :already_exists}
+  end
+
+  defp handle_rent_period_insert_result({:ok, %RentPeriod{} = rent_period}, _attrs) do
+    {:ok, rent_period}
+  end
+
+  defp handle_rent_period_insert_result({:error, changeset}, _attrs) do
+    {:error, changeset}
+  end
+
+  @doc """
+  Gets a single contract by ID without scope validation. Used by system jobs.
+
+  Returns nil if the Contract does not exist.
+
+  ## Examples
+
+      iex> get_system_contract(123)
+      %Contract{}
+
+      iex> get_system_contract(456)
+      nil
+
+  """
+  def get_system_contract(id) do
+    Contract
+    |> where([c], c.id == ^id and c.archived == false)
+    |> preload([:rent_periods])
+    |> Repo.one()
+  end
+
+  @doc """
+  Returns a list of contracts whose latest rent period ends in the given month
+  and need a new rent period created. Used by the monthly scheduler worker.
+
+  Filters for:
+  - Non-archived contracts that haven't ended
+  - Contracts with index_type and rent_period_duration configured
+  - Latest rent period ends in the current month
+  - Contract extends beyond the latest period's end date
+
+  ## Examples
+
+      iex> contracts_needing_update(~D[2026-05-25])
+      [1, 2, 3, ...]
+
+  """
+  def contracts_needing_update(%Date{} = today) do
+    # Subquery to get the latest rent period end_date for each contract
+    latest_periods_query =
+      from(rp in RentPeriod,
+        group_by: rp.contract_id,
+        select: %{
+          contract_id: rp.contract_id,
+          latest_end_date: max(rp.end_date)
+        }
+      )
+
+    from(c in Contract,
+      join: latest in subquery(latest_periods_query),
+      on: latest.contract_id == c.id,
+      where: c.archived == false,
+      where: c.end_date > ^today,
+      where: not is_nil(c.rent_period_duration),
+      where: not is_nil(c.index_type),
+      # Latest period ends in current month
+      where: fragment("EXTRACT(YEAR FROM ?) = ?", latest.latest_end_date, ^today.year),
+      where: fragment("EXTRACT(MONTH FROM ?) = ?", latest.latest_end_date, ^today.month),
+      # Contract extends beyond the latest period's end date
+      where: c.end_date > latest.latest_end_date
+    )
+    |> select([c], c.id)
+    |> Repo.all()
   end
 end

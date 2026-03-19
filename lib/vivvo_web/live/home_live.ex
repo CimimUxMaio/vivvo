@@ -203,13 +203,10 @@ defmodule VivvoWeb.HomeLive do
     if contract do
       {month_num, _} = Integer.parse(month)
 
-      # Calculate payment totals for display and validation
-      accepted_total = Payments.total_accepted_for_month(scope, contract.id, month_num)
-      pending_total = Payments.total_pending_for_month(scope, contract.id, month_num)
-      remaining = Decimal.sub(contract.rent, Decimal.add(accepted_total, pending_total))
+      summary = calculate_payment_summary(scope, contract, month_num)
 
       # Pre-populate with minimum of rent or remaining allowance
-      initial_amount = Decimal.min(contract.rent, remaining)
+      initial_amount = Decimal.min(summary.rent, summary.remaining)
       initial_attrs = %{"amount" => initial_amount}
 
       changeset =
@@ -217,19 +214,14 @@ defmodule VivvoWeb.HomeLive do
           scope,
           %Vivvo.Payments.Payment{},
           initial_attrs,
-          remaining_allowance: remaining
+          remaining_allowance: summary.remaining
         )
 
       {:noreply,
        socket
        |> assign(:submitting_payment, {contract, month_num})
        |> assign(:payment_form, to_form(changeset))
-       |> assign(:payment_summary, %{
-         rent: contract.rent,
-         accepted_total: accepted_total,
-         pending_total: pending_total,
-         remaining: remaining
-       })}
+       |> assign(:payment_summary, summary)}
     else
       {:noreply, put_flash(socket, :error, "Contract not found")}
     end
@@ -257,29 +249,21 @@ defmodule VivvoWeb.HomeLive do
     scope = socket.assigns.current_scope
     {contract, month} = socket.assigns.submitting_payment
 
-    # Get payment totals for display (updated in real-time)
-    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
-    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
-    remaining = Decimal.sub(contract.rent, Decimal.add(accepted_total, pending_total))
+    summary = calculate_payment_summary(scope, contract, month)
 
     changeset =
       Payments.change_payment(
         scope,
         %Vivvo.Payments.Payment{},
         params,
-        remaining_allowance: remaining
+        remaining_allowance: summary.remaining
       )
       |> Map.put(:action, :validate)
 
     {:noreply,
      socket
      |> assign(payment_form: to_form(changeset))
-     |> assign(:payment_summary, %{
-       rent: contract.rent,
-       accepted_total: accepted_total,
-       pending_total: pending_total,
-       remaining: remaining
-     })}
+     |> assign(:payment_summary, summary)}
   end
 
   @impl true
@@ -292,10 +276,7 @@ defmodule VivvoWeb.HomeLive do
     scope = socket.assigns.current_scope
     {contract, month} = socket.assigns.submitting_payment
 
-    # Re-calculate totals before submission to prevent race conditions
-    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
-    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
-    remaining_allowance = Decimal.sub(contract.rent, Decimal.add(accepted_total, pending_total))
+    summary = calculate_payment_summary(scope, contract, month)
 
     attrs =
       params
@@ -307,7 +288,7 @@ defmodule VivvoWeb.HomeLive do
       consume_uploaded_entries(socket, :files, &process_upload_entry/2)
 
     case Payments.create_payment(scope, attrs, uploaded_files,
-           remaining_allowance: remaining_allowance
+           remaining_allowance: summary.remaining
          ) do
       {:ok, _payment} ->
         clear_upload_files(uploaded_files)
@@ -866,7 +847,7 @@ defmodule VivvoWeb.HomeLive do
                   </td>
                   <td class="px-4 py-3 text-right font-medium">
                     <%= if metric.state in [:occupied, :upcoming] do %>
-                      {format_currency(metric.contract.rent)}
+                      {format_currency(Contracts.current_rent_value(metric.contract))}
                     <% else %>
                       <span class="text-base-content/30">-</span>
                     <% end %>
@@ -1029,7 +1010,8 @@ defmodule VivvoWeb.HomeLive do
     tenant = contract.tenant
     property = contract.property
 
-    expected_amount = contract.rent
+    due_date = Contracts.calculate_due_date(contract, assigns.payment.payment_number)
+    expected_amount = Contracts.current_rent_value(contract, due_date)
     paid_amount = assigns.payment.amount
 
     payment_status =
@@ -1308,8 +1290,7 @@ defmodule VivvoWeb.HomeLive do
         total_due = Contracts.total_amount_due(@current_scope, contract)
         earliest_due = Contracts.earliest_due_date(@current_scope, contract)
         payment_statuses = Contracts.get_payment_statuses(@current_scope, contract)
-        upcoming_payments = Contracts.get_upcoming_payments(contract)
-        next_payment = List.first(upcoming_payments) %>
+        next_due_date = Contracts.next_payment_date(contract) %>
 
         <%!-- A. Header: Current Situation Snapshot --%>
         <.situation_snapshot
@@ -1318,7 +1299,7 @@ defmodule VivvoWeb.HomeLive do
           payment_status={payment_status}
           total_due={total_due}
           earliest_due={earliest_due}
-          next_payment={next_payment}
+          next_due_date={next_due_date}
         />
 
         <%!-- B. Primary Action Zone --%>
@@ -1333,7 +1314,6 @@ defmodule VivvoWeb.HomeLive do
         <.payments_overview
           contract={contract}
           payment_statuses={payment_statuses}
-          upcoming_payments={upcoming_payments}
           scope={@current_scope}
           current_expanded={@current_expanded}
           history_expanded={@history_expanded}
@@ -1459,8 +1439,8 @@ defmodule VivvoWeb.HomeLive do
       end
 
     days_until_next =
-      if assigns.next_payment do
-        Date.diff(assigns.next_payment.due_date, Date.utc_today())
+      if assigns.next_due_date do
+        Date.diff(assigns.next_due_date, Date.utc_today())
       else
         nil
       end
@@ -1531,13 +1511,13 @@ defmodule VivvoWeb.HomeLive do
                 <span class="font-medium">All payments are up to date!</span>
               </div>
 
-              <%= if @next_payment do %>
+              <%= if @next_due_date do %>
                 <div
                   id="upcoming-payments"
                   class="flex items-center gap-2 text-sm text-base-content/70 sm:ml-4"
                 >
                   <.icon name="hero-calendar" class="w-4 h-4" />
-                  <span>Next due {format_date(@next_payment.due_date)}</span>
+                  <span>Next due {format_date(@next_due_date)}</span>
                   <span class="text-base-content/50">({format_time_until(@days_until_next)})</span>
                 </div>
               <% end %>
@@ -2162,48 +2142,174 @@ defmodule VivvoWeb.HomeLive do
         <.icon name="hero-document-text" class="w-5 h-5 text-primary" />
         <h2 class="text-lg font-semibold">Contract Details</h2>
       </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <%!-- Lease Period --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Lease Period</p>
-          <p class="font-medium">
-            {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
-          </p>
-        </div>
-
-        <%!-- Monthly Rent --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Monthly Rent</p>
-          <p class="font-medium text-primary">{format_currency(@contract.rent)}</p>
-        </div>
-
-        <%!-- Payment Due Date --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Payment Due</p>
-          <p class="font-medium">Day {@contract.expiration_day} of each month</p>
-        </div>
-
-        <%!-- Property Info --%>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Property</p>
-          <p class="font-medium">{@contract.property.name}</p>
-          <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
-        </div>
-      </div>
-
-      <%!-- Contract Timeline --%>
+      <.contract_basic_info_grid contract={@contract} />
       <div class="mt-6 pt-6 border-t border-base-200">
         <.contract_timeline contract={@contract} />
       </div>
+      <.contract_notes contract={@contract} />
+    </div>
+    """
+  end
 
-      <%= if @contract.notes && @contract.notes != "" do %>
-        <div class="mt-4 pt-4 border-t border-base-200">
-          <p class="text-sm text-base-content/60 mb-1">Notes</p>
-          <p class="text-sm text-base-content/80">{@contract.notes}</p>
-        </div>
+  # Contract Basic Info Grid - Contains lease period, rent, payment due, indexing info, and property
+  defp contract_basic_info_grid(assigns) do
+    has_indexing =
+      not is_nil(assigns.contract.rent_period_duration) and
+        not is_nil(assigns.contract.index_type)
+
+    assigns = assign(assigns, has_indexing: has_indexing)
+
+    ~H"""
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <.lease_period_item contract={@contract} />
+      <.current_rent_item contract={@contract} has_indexing={@has_indexing} />
+      <.payment_due_item contract={@contract} />
+      <.indexing_info_items :if={@has_indexing} contract={@contract} />
+      <.property_info_item contract={@contract} has_indexing={@has_indexing} />
+    </div>
+    """
+  end
+
+  # Lease Period Item
+  defp lease_period_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Lease Period</p>
+      <p class="font-medium">
+        {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
+      </p>
+    </div>
+    """
+  end
+
+  # Current Rent Item - Shows current rent with indexing indicator if applicable
+  defp current_rent_item(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    assigns = assign(assigns, next_update: next_update)
+
+    ~H"""
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <p class="text-sm text-base-content/60">Current Rent</p>
+        <%= if @has_indexing do %>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+            <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+          </span>
+        <% end %>
+      </div>
+      <p class="font-medium text-primary">
+        {format_currency(Contracts.current_rent_value(@contract))}
+      </p>
+      <%= if @has_indexing and @next_update do %>
+        <p class="text-xs text-base-content/50 mt-1">
+          Valid until {format_date(Date.add(@next_update, -1))}
+        </p>
       <% end %>
     </div>
+    """
+  end
+
+  # Payment Due Item
+  defp payment_due_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Payment Due</p>
+      <p class="font-medium">Day {@contract.expiration_day} of each month</p>
+    </div>
+    """
+  end
+
+  # Indexing Info Items - Group of three items: index type, frequency, next update
+  defp indexing_info_items(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    days_until_update = Contracts.days_until_next_update(assigns.contract)
+    index_label = index_type_label(assigns.contract.index_type)
+    duration_label = rent_period_duration_label(assigns.contract.rent_period_duration)
+
+    assigns =
+      assign(assigns,
+        next_update: next_update,
+        days_until_update: days_until_update,
+        index_label: index_label,
+        duration_label: duration_label
+      )
+
+    ~H"""
+    <.index_type_item label={@index_label} />
+    <.update_frequency_item label={@duration_label} />
+    <.next_update_item date={@next_update} days_until={@days_until_update} />
+    """
+  end
+
+  # Index Type Item
+  defp index_type_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Index Type</p>
+      <p class="font-medium">{@label}</p>
+    </div>
+    """
+  end
+
+  # Update Frequency Item
+  defp update_frequency_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Update Frequency</p>
+      <p class="font-medium">{@label}</p>
+    </div>
+    """
+  end
+
+  # Next Update Item
+  defp next_update_item(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60 mb-1">Next Rent Update</p>
+      <%= if @date do %>
+        <p class="font-medium">{format_date(@date)}</p>
+        <p class="text-xs mt-1">
+          <%= cond do %>
+            <% @days_until == 0 -> %>
+              <span class="text-warning font-medium">Today</span>
+            <% @days_until < 0 -> %>
+              <span class="text-error">Update overdue</span>
+            <% @days_until <= 30 -> %>
+              <span class="text-warning">In {@days_until} days</span>
+            <% true -> %>
+              <span class="text-base-content/50">In {@days_until} days</span>
+          <% end %>
+        </p>
+      <% else %>
+        <p class="font-medium text-base-content/50">-</p>
+      <% end %>
+    </div>
+    """
+  end
+
+  # Property Info Item
+  defp property_info_item(assigns) do
+    ~H"""
+    <div class={[
+      "sm:col-span-2 lg:col-span-1",
+      @has_indexing && "sm:col-span-2 lg:col-span-3"
+    ]}>
+      <p class="text-sm text-base-content/60 mb-1">Property</p>
+      <p class="font-medium">{@contract.property.name}</p>
+      <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
+    </div>
+    """
+  end
+
+  # Contract Notes Component
+  defp contract_notes(assigns) do
+    ~H"""
+    <%= if @contract.notes && @contract.notes != "" do %>
+      <div class="mt-6 pt-6 border-t border-base-200">
+        <p class="text-sm text-base-content/60 mb-1">Notes</p>
+        <p class="text-sm text-base-content/80">{@contract.notes}</p>
+      </div>
+    <% end %>
     """
   end
 
@@ -2286,6 +2392,35 @@ defmodule VivvoWeb.HomeLive do
       expected: expected,
       received: received,
       collection_pct: collection_pct
+    }
+  end
+
+  # Helper functions for contract indexing information
+
+  # Returns a human-readable label for the index type.
+  defp index_type_label(nil), do: nil
+  defp index_type_label(:ipc), do: "IPC (Índice de Precios al Consumidor)"
+  defp index_type_label(:icl), do: "ICL (Índice de Contratos de Locación)"
+
+  # Returns a human-readable label for the rent period duration.
+  defp rent_period_duration_label(nil), do: nil
+  defp rent_period_duration_label(1), do: "Monthly"
+  defp rent_period_duration_label(12), do: "Yearly"
+  defp rent_period_duration_label(months) when months > 0, do: "Every #{months} months"
+
+  defp calculate_payment_summary(scope, contract, month) do
+    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
+    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
+    due_date = Contracts.calculate_due_date(contract, month)
+    rent = Contracts.current_rent_value(contract, due_date)
+    remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
+
+    %{
+      rent: rent,
+      accepted_total: accepted_total,
+      pending_total: pending_total,
+      remaining: remaining,
+      due_date: due_date
     }
   end
 end

@@ -42,3 +42,9 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# To prevent Oban from running jobs and plugins during test runs
+config :vivvo, Oban, testing: :manual
+
+# Disable retries for IndexService during testing to speed up tests
+config :vivvo, Vivvo.IndexService, req_options: [retry: false]

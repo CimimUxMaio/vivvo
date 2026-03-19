@@ -4,7 +4,6 @@ defmodule VivvoWeb.ContractLive.FormTest do
   import Phoenix.LiveViewTest
   import Vivvo.AccountsFixtures
   import Vivvo.PropertiesFixtures
-  import Vivvo.ContractsFixtures
 
   alias Vivvo.Accounts
   alias Vivvo.Accounts.Scope
@@ -86,99 +85,65 @@ defmodule VivvoWeb.ContractLive.FormTest do
       assert html =~ "Notes"
     end
 
-    test "warning message when property has existing contract", %{conn: conn, scope: scope} do
+    test "index type field rendered", %{conn: conn, scope: scope} do
       property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      _contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
+      _tenant = user_fixture(%{preferred_roles: [:tenant]})
 
       {:ok, _view, html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
-      assert html =~ "Warning"
-      assert html =~ "replace the current active contract"
+      assert html =~ "Index Type"
     end
-  end
 
-  describe "edit contract page" do
-    setup [:register_and_log_in_user, :ensure_owner_role]
-
-    test "mount loads existing contract data", %{conn: conn, scope: scope} do
+    test "rent period duration field rendered when index_type selected", %{
+      conn: conn,
+      scope: scope
+    } do
       property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
+      _tenant = user_fixture(%{preferred_roles: [:tenant]})
 
-      contract =
-        contract_fixture(scope, %{
-          property_id: property.id,
-          tenant_id: tenant.id,
-          rent: "500.00",
-          notes: "Test notes"
-        })
+      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
-      {:ok, _view, html} = live(conn, ~p"/properties/#{property}/contracts/#{contract}/edit")
+      # Initially not visible
+      html = render(view)
+      refute html =~ "Rent Update Period"
 
-      assert html =~ "Edit Contract for"
-      assert html =~ property.name
-    end
+      # Select index type to show rent period duration
+      result =
+        view
+        |> form("#contract-form", contract: %{index_type: "ipc"})
+        |> render_change()
 
-    test "form pre-populated with contract data", %{conn: conn, scope: scope} do
-      property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-
-      contract =
-        contract_fixture(scope, %{
-          property_id: property.id,
-          tenant_id: tenant.id,
-          rent: "500.00",
-          expiration_day: 15,
-          notes: "Test notes"
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/#{contract}/edit")
-
-      # Check that form has the contract values
-      assert has_element?(view, "#contract-form")
-    end
-
-    test "cannot edit contract from different user", %{conn: conn} do
-      other_scope = user_scope_fixture()
-      property = property_fixture(other_scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      contract = contract_fixture(other_scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      assert_raise Ecto.NoResultsError, fn ->
-        live(conn, ~p"/properties/#{property}/contracts/#{contract}/edit")
-      end
-    end
-
-    test "cannot edit archived contract", %{conn: conn, scope: scope} do
-      property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      # Archive the contract
-      {:ok, _archived} = Vivvo.Contracts.delete_contract(scope, contract)
-
-      assert_raise Ecto.NoResultsError, fn ->
-        live(conn, ~p"/properties/#{property}/contracts/#{contract}/edit")
-      end
+      assert result =~ "Rent Update Period"
     end
   end
 
   describe "form validation" do
     setup [:register_and_log_in_user, :ensure_owner_role]
 
-    test "validates on change event", %{conn: conn, scope: scope} do
+    test "validates end date after start date on change event", %{conn: conn, scope: scope} do
       property = property_fixture(scope)
-      _tenant = user_fixture(%{preferred_roles: [:tenant]})
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
-      # Submit invalid data
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
+      # Submit invalid data with end_date before start_date
       result =
         view
-        |> form("#contract-form", contract: %{rent: "-100"})
+        |> form("#contract-form",
+          contract: %{
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
+            tenant_id: tenant.id
+          }
+        )
         |> render_change()
 
-      assert result =~ "must be greater than 0"
+      assert result =~ "must be after start date"
     end
 
     test "displays end_date error when before start_date", %{conn: conn, scope: scope} do
@@ -187,12 +152,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-10",
-            end_date: "2026-02-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5,
             rent: "100"
@@ -209,12 +179,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 10)
+      end_date = Date.add(today, 30)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-02-10",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 25,
             rent: "100"
@@ -225,39 +200,89 @@ defmodule VivvoWeb.ContractLive.FormTest do
       assert result =~ "must be less than or equal to 20"
     end
 
-    test "displays rent error when <= 0", %{conn: conn, scope: scope} do
+    test "displays required field errors on submit", %{conn: conn, scope: scope} do
+      property = property_fixture(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
+
+      # Use future dates for testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 10)
+      end_date = Date.add(today, 30)
+
+      # Submit with missing required fields to trigger validation
+      result =
+        view
+        |> form("#contract-form",
+          contract: %{
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date)
+          }
+        )
+        |> render_submit()
+
+      # Check that validation errors are displayed
+      assert result =~ "can&#39;t be blank"
+    end
+
+    test "displays end_date validation error", %{conn: conn, scope: scope} do
       property = property_fixture(scope)
       tenant = user_fixture(%{preferred_roles: [:tenant]})
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
+
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-02-10",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
+            tenant_id: tenant.id,
+            expiration_day: 5
+          }
+        )
+        |> render_submit()
+
+      assert result =~ "must be after start date"
+    end
+
+    test "validates rent_period_duration must be > 0 when present", %{conn: conn, scope: scope} do
+      property = property_fixture(scope)
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
+
+      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
+
+      # First select index_type to make rent_period_duration visible
+      view
+      |> form("#contract-form", contract: %{index_type: "ipc"})
+      |> render_change()
+
+      # Use future dates for testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 10)
+      end_date = Date.add(today, 365)
+
+      result =
+        view
+        |> form("#contract-form",
+          contract: %{
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5,
-            rent: "0"
+            rent: "1000",
+            index_type: "ipc",
+            rent_period_duration: "0"
           }
         )
         |> render_change()
 
       assert result =~ "must be greater than 0"
-    end
-
-    test "displays required field errors", %{conn: conn, scope: scope} do
-      property = property_fixture(scope)
-
-      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
-
-      result =
-        view
-        |> form("#contract-form", contract: %{})
-        |> render_change()
-
-      assert result =~ "can&#39;t be blank"
     end
   end
 
@@ -270,12 +295,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates to avoid past_start_date validation error
+      today = Date.utc_today()
+      start_date = Date.add(today, 5)
+      end_date = Date.add(today, 30)
+
       {:ok, _view, html} =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-03-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5,
             rent: "100.00",
@@ -288,29 +318,40 @@ defmodule VivvoWeb.ContractLive.FormTest do
       assert html =~ "Contract created successfully"
     end
 
-    test "successful contract update", %{conn: conn, scope: scope} do
+    test "successful contract creation with rent index settings", %{conn: conn, scope: scope} do
       property = property_fixture(scope)
       tenant = user_fixture(%{preferred_roles: [:tenant]})
-      contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
 
-      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/#{contract}/edit")
+      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
+
+      # First select index_type to make rent_period_duration visible
+      view
+      |> form("#contract-form", contract: %{index_type: "ipc"})
+      |> render_change()
+
+      # Use future dates to avoid past_start_date validation error
+      today = Date.utc_today()
+      start_date = Date.add(today, 5)
+      end_date = Date.add(today, 365)
 
       {:ok, _view, html} =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-03-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
-            expiration_day: 10,
-            rent: "200.00",
-            notes: "Updated notes"
+            expiration_day: 5,
+            rent: "1200.00",
+            rent_period_duration: "12",
+            index_type: "ipc",
+            notes: "Contract with CPI indexing"
           }
         )
         |> render_submit()
         |> follow_redirect(conn, ~p"/properties/#{property}")
 
-      assert html =~ "Contract updated successfully"
+      assert html =~ "Contract created successfully"
     end
 
     test "redirects to property show page on success", %{conn: conn, scope: scope} do
@@ -319,12 +360,17 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
 
+      # Use future dates to avoid past_start_date validation error
+      today = Date.utc_today()
+      start_date = Date.add(today, 5)
+      end_date = Date.add(today, 30)
+
       {:ok, _, html} =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-05",
-            end_date: "2026-03-05",
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
             tenant_id: tenant.id,
             expiration_day: 5,
             rent: "100.00"
@@ -338,47 +384,28 @@ defmodule VivvoWeb.ContractLive.FormTest do
 
     test "displays errors on validation failure", %{conn: conn, scope: scope} do
       property = property_fixture(scope)
+      tenant = user_fixture(%{preferred_roles: [:tenant]})
 
       {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
+
+      # Use future dates for validation testing
+      today = Date.utc_today()
+      start_date = Date.add(today, 30)
+      end_date = Date.add(today, 10)
 
       result =
         view
         |> form("#contract-form",
           contract: %{
-            start_date: "2026-02-10",
-            end_date: "2026-02-05",
-            rent: "-100"
+            start_date: Date.to_iso8601(start_date),
+            end_date: Date.to_iso8601(end_date),
+            tenant_id: tenant.id,
+            expiration_day: 5
           }
         )
         |> render_submit()
 
       assert result =~ "must be after start date"
-      assert result =~ "must be greater than 0"
-    end
-
-    test "archives existing contract when creating new one", %{conn: conn, scope: scope} do
-      property = property_fixture(scope)
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      old_contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      {:ok, view, _html} = live(conn, ~p"/properties/#{property}/contracts/new")
-
-      view
-      |> form("#contract-form",
-        contract: %{
-          start_date: "2026-03-01",
-          end_date: "2026-04-01",
-          tenant_id: tenant.id,
-          expiration_day: 10,
-          rent: "200.00"
-        }
-      )
-      |> render_submit()
-
-      # Old contract should be archived
-      assert_raise Ecto.NoResultsError, fn ->
-        Vivvo.Contracts.get_contract!(scope, old_contract.id)
-      end
     end
   end
 end

@@ -28,6 +28,7 @@ defmodule Vivvo.Payments do
   alias Vivvo.Repo
 
   alias Vivvo.Accounts.Scope
+  alias Vivvo.Contracts
   alias Vivvo.Contracts.Contract
   alias Vivvo.Files
   alias Vivvo.Payments.Payment
@@ -437,7 +438,7 @@ defmodule Vivvo.Payments do
       Decimal.new("1500.00")
   """
   def total_rent_collected(%Scope{} = scope, %Contract{} = contract, today \\ Date.utc_today()) do
-    payment_numbers = get_past_payment_numbers(contract, today)
+    payment_numbers = Contracts.get_past_payment_numbers(contract, today)
 
     if payment_numbers == [] do
       @decimal_zero
@@ -451,21 +452,6 @@ defmodule Vivvo.Payments do
       |> select([p], sum(p.amount))
       |> Repo.one() || @decimal_zero
     end
-  end
-
-  defp get_past_payment_numbers(%Contract{} = contract, today) do
-    current = Vivvo.Contracts.get_current_payment_number(contract)
-    current_due_date = Vivvo.Contracts.calculate_due_date(contract, current)
-
-    range =
-      cond do
-        Date.compare(current_due_date, today) in [:lt, :eq] -> 0..current
-        current - 1 >= 0 -> 0..(current - 1)
-        # No past payments
-        true -> []
-      end
-
-    Enum.to_list(range)
   end
 
   @doc """
@@ -498,7 +484,9 @@ defmodule Vivvo.Payments do
   """
   def month_fully_paid?(%Scope{} = scope, contract, payment_number) do
     total = total_accepted_for_month(scope, contract.id, payment_number)
-    Decimal.compare(total, contract.rent) != :lt
+    due_date = Vivvo.Contracts.calculate_due_date(contract, payment_number)
+    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    Decimal.compare(total, rent) != :lt
   end
 
   @doc """
@@ -512,7 +500,8 @@ defmodule Vivvo.Payments do
   """
   def get_month_status(%Scope{} = scope, contract, payment_number) do
     total = total_accepted_for_month(scope, contract.id, payment_number)
-    rent = contract.rent
+    due_date = Vivvo.Contracts.calculate_due_date(contract, payment_number)
+    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
 
     cond do
       Decimal.compare(total, rent) != :lt -> :paid
@@ -536,12 +525,16 @@ defmodule Vivvo.Payments do
     start_of_month = Date.beginning_of_month(date)
     end_of_month = Date.end_of_month(date)
 
-    Contract
-    |> where([c], c.user_id == ^scope.user.id)
-    |> where([c], c.archived == false)
-    |> where([c], c.start_date <= ^end_of_month)
-    |> where([c], c.end_date >= ^start_of_month)
-    |> select([c], sum(c.rent))
+    from(c in Contract,
+      join: rp in assoc(c, :rent_periods),
+      where: c.user_id == ^scope.user.id,
+      where: c.archived == false,
+      where: c.start_date <= ^end_of_month,
+      where: c.end_date >= ^start_of_month,
+      where: rp.start_date <= ^end_of_month,
+      where: rp.end_date >= ^start_of_month,
+      select: sum(rp.value)
+    )
     |> Repo.one() || @decimal_zero
   end
 
@@ -591,10 +584,14 @@ defmodule Vivvo.Payments do
     |> join(:inner, [p], c in assoc(p, :contract))
     |> join(:inner, [p, c], t in assoc(c, :tenant))
     |> join(:inner, [p, c], prop in assoc(c, :property))
+    |> join(:inner, [p, c], rp in assoc(c, :rent_periods))
     |> where([p, c], c.user_id == ^scope.user.id)
     |> where([p], p.status == :pending)
     |> order_by([p], desc: p.inserted_at)
-    |> preload([p, c, t, prop], contract: {c, tenant: t, property: prop}, files: [])
+    |> preload([p, c, t, prop, rp],
+      contract: {c, rent_periods: rp, tenant: t, property: prop},
+      files: []
+    )
     |> paginate(page, per_page)
     |> Repo.all()
   end
@@ -752,7 +749,7 @@ defmodule Vivvo.Payments do
       |> where([c], c.archived == false)
       |> where([c], c.start_date <= ^today)
       |> where([c], c.end_date >= ^today)
-      |> preload([:payments])
+      |> preload([:payments, :rent_periods])
       |> Repo.all()
 
     Enum.reduce(
@@ -782,9 +779,9 @@ defmodule Vivvo.Payments do
   end
 
   defp add_outstanding_to_bucket(scope, contract, payment_num, today, acc) do
-    rent = contract.rent
-    paid = total_accepted_for_month(scope, contract.id, payment_num)
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_num)
+    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    paid = total_accepted_for_month(scope, contract.id, payment_num)
     outstanding = Decimal.sub(rent, paid)
 
     case Decimal.compare(outstanding, @decimal_zero) do

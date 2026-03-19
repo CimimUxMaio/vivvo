@@ -333,61 +333,89 @@ defmodule Vivvo.PaymentsTest do
 
   describe "payment period calculations" do
     import Vivvo.AccountsFixtures, only: [user_scope_fixture: 0]
-    import Vivvo.ContractsFixtures, only: [contract_fixture: 2]
+    import Vivvo.ContractsFixtures, only: [contract_fixture: 2, contract_fixture: 3]
     import Vivvo.PaymentsFixtures
 
     test "payment_target_month/2 calculates correct month for payment_number 1" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Use a future month for testing
+      future_start = Date.add(today, 30)
 
       contract =
         contract_fixture(scope, %{
-          start_date: ~D[2026-01-15],
-          end_date: ~D[2026-12-15]
+          start_date: future_start,
+          end_date: Date.add(future_start, 365)
         })
 
-      assert Payments.payment_target_month(contract, 1) == ~D[2026-01-01]
+      assert Payments.payment_target_month(contract, 1) ==
+               Date.new!(future_start.year, future_start.month, 1)
     end
 
     test "payment_target_month/2 calculates correct month for payment_number 2" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Use a future month for testing - start 30 days from now
+      future_start = Date.add(today, 30)
+      # Get the first day of the month that's 30 days after the start month
+      next_month_date = Date.add(future_start, 31)
 
       contract =
         contract_fixture(scope, %{
-          start_date: ~D[2026-01-15],
-          end_date: ~D[2026-12-15]
+          start_date: future_start,
+          end_date: Date.add(future_start, 365)
         })
 
-      assert Payments.payment_target_month(contract, 2) == ~D[2026-02-01]
+      assert Payments.payment_target_month(contract, 2) ==
+               Date.new!(next_month_date.year, next_month_date.month, 1)
     end
 
     test "payment_target_month/2 handles year boundary correctly" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
+      # Use last year for start to test year boundary
+      start_year = today.year - 1
 
       contract =
-        contract_fixture(scope, %{
-          start_date: ~D[2025-11-01],
-          end_date: ~D[2026-12-31]
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.new!(start_year, 11, 1),
+            end_date: Date.new!(today.year, 12, 31)
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
 
-      # Payment 1 = November 2025
-      assert Payments.payment_target_month(contract, 1) == ~D[2025-11-01]
-      # Payment 2 = December 2025
-      assert Payments.payment_target_month(contract, 2) == ~D[2025-12-01]
-      # Payment 3 = January 2026
-      assert Payments.payment_target_month(contract, 3) == ~D[2026-01-01]
+      # Payment 1 = November start_year
+      assert Payments.payment_target_month(contract, 1) == Date.new!(start_year, 11, 1)
+      # Payment 2 = December start_year
+      assert Payments.payment_target_month(contract, 2) == Date.new!(start_year, 12, 1)
+      # Payment 3 = January current year
+      assert Payments.payment_target_month(contract, 3) == Date.new!(today.year, 1, 1)
     end
 
     test "received_income_for_month/2 counts payment based on period, not submission time" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
 
-      # Contract starting in January 2026
+      # Contract starting in the past (January of current year)
       contract =
-        contract_fixture(scope, %{
-          start_date: ~D[2026-01-15],
-          end_date: ~D[2026-12-15],
-          rent: "1000.00",
-          tenant_id: scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.new!(today.year, 1, 15),
+            end_date: Date.new!(today.year, 12, 15),
+            rent: "1000.00",
+            tenant_id: scope.user.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
 
       # Payment for February (payment_number 2) but submitted in March
       # This simulates a late payment
@@ -404,8 +432,11 @@ defmodule Vivvo.PaymentsTest do
       {:ok, _} = Payments.accept_payment(scope, payment)
 
       # Payment should be counted in February, not March
-      february_income = Payments.received_income_for_month(scope, ~D[2026-02-01])
-      march_income = Payments.received_income_for_month(scope, ~D[2026-03-01])
+      february_income =
+        Payments.received_income_for_month(scope, Date.new!(today.year, 2, 1))
+
+      march_income =
+        Payments.received_income_for_month(scope, Date.new!(today.year, 3, 1))
 
       assert Decimal.equal?(february_income, Decimal.new("1000.00"))
       assert Decimal.equal?(march_income, Decimal.new("0"))
@@ -413,14 +444,23 @@ defmodule Vivvo.PaymentsTest do
 
     test "received_income_for_month/2 handles multiple late payments correctly" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
 
+      # Contract starting in the past (January of current year)
       contract =
-        contract_fixture(scope, %{
-          start_date: ~D[2026-01-01],
-          end_date: ~D[2026-12-31],
-          rent: "1000.00",
-          tenant_id: scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.new!(today.year, 1, 1),
+            end_date: Date.new!(today.year, 12, 31),
+            rent: "1000.00",
+            tenant_id: scope.user.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
 
       # January payment (on time)
       {:ok, _jan_payment} =
@@ -450,24 +490,37 @@ defmodule Vivvo.PaymentsTest do
         })
 
       # Check that January has correct income
-      january_income = Payments.received_income_for_month(scope, ~D[2026-01-01])
+      january_income =
+        Payments.received_income_for_month(scope, Date.new!(today.year, 1, 1))
+
       assert Decimal.equal?(january_income, Decimal.new("1000.00"))
 
       # Check that February has both payments summed
-      february_income = Payments.received_income_for_month(scope, ~D[2026-02-01])
+      february_income =
+        Payments.received_income_for_month(scope, Date.new!(today.year, 2, 1))
+
       assert Decimal.equal?(february_income, Decimal.new("1000.00"))
     end
 
     test "collection_rate_for_month/2 calculates correctly with late payments" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
 
+      # Contract starting in February (in the past, use past_start_date option)
       contract =
-        contract_fixture(scope, %{
-          start_date: ~D[2026-02-01],
-          end_date: ~D[2026-12-31],
-          rent: "1000.00",
-          tenant_id: scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.new!(today.year, 2, 1),
+            end_date: Date.new!(today.year, 12, 31),
+            rent: "1000.00",
+            tenant_id: scope.user.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
 
       # Partial payment for February (payment_number 1)
       {:ok, _payment} =
@@ -479,20 +532,31 @@ defmodule Vivvo.PaymentsTest do
         })
 
       # Expected: 1000, Received: 700, Rate: 70%
-      rate = Payments.collection_rate_for_month(scope, ~D[2026-02-01])
+      rate =
+        Payments.collection_rate_for_month(scope, Date.new!(today.year, 2, 1))
+
       assert_in_delta rate, 70.0, 0.01
     end
 
     test "outstanding_balance_for_month/2 calculates correctly with late payments" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
 
+      # Contract starting in February (in the past, use past_start_date option)
       contract =
-        contract_fixture(scope, %{
-          start_date: ~D[2026-02-01],
-          end_date: ~D[2026-12-31],
-          rent: "1000.00",
-          tenant_id: scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.new!(today.year, 2, 1),
+            end_date: Date.new!(today.year, 12, 31),
+            rent: "1000.00",
+            tenant_id: scope.user.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
 
       # Partial payment for February
       {:ok, _payment} =
@@ -504,20 +568,31 @@ defmodule Vivvo.PaymentsTest do
         })
 
       # Outstanding should be 1000 - 400 = 600
-      outstanding = Payments.outstanding_balance_for_month(scope, ~D[2026-02-01])
+      outstanding =
+        Payments.outstanding_balance_for_month(scope, Date.new!(today.year, 2, 1))
+
       assert Decimal.equal?(outstanding, Decimal.new("600.00"))
     end
 
     test "received_income_by_month/1 groups payments by target month" do
       scope = user_scope_fixture()
+      today = Date.utc_today()
 
+      # Contract starting in January (in the past, use past_start_date option)
       contract =
-        contract_fixture(scope, %{
-          start_date: ~D[2026-01-01],
-          end_date: ~D[2026-12-31],
-          rent: "1000.00",
-          tenant_id: scope.user.id
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.new!(today.year, 1, 1),
+            end_date: Date.new!(today.year, 12, 31),
+            rent: "1000.00",
+            tenant_id: scope.user.id,
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
 
       # Create payments for different months
       {:ok, _} =
@@ -546,8 +621,15 @@ defmodule Vivvo.PaymentsTest do
 
       income_by_month = Payments.received_income_by_month(scope)
 
-      assert Decimal.equal?(income_by_month[~D[2026-01-01]], Decimal.new("1000.00"))
-      assert Decimal.equal?(income_by_month[~D[2026-02-01]], Decimal.new("1000.00"))
+      assert Decimal.equal?(
+               income_by_month[Date.new!(today.year, 1, 1)],
+               Decimal.new("1000.00")
+             )
+
+      assert Decimal.equal?(
+               income_by_month[Date.new!(today.year, 2, 1)],
+               Decimal.new("1000.00")
+             )
     end
   end
 end

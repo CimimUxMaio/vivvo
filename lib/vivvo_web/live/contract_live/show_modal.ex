@@ -62,7 +62,9 @@ defmodule VivvoWeb.ContractLive.ShowModal do
 
               <%!-- Payment Info --%>
               <:item title="Payment Due Day">Day {@contract.expiration_day} of each month</:item>
-              <:item title="Monthly Rent">{format_currency(@contract.rent)}</:item>
+              <:item title="Monthly Rent">
+                {format_currency(Contracts.current_rent_value(@contract))}
+              </:item>
 
               <%!-- Notes --%>
               <:item :if={@contract.notes && @contract.notes != ""} title="Notes">
@@ -73,9 +75,6 @@ defmodule VivvoWeb.ContractLive.ShowModal do
 
           <%!-- Footer --%>
           <div class="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-            <.button navigate={~p"/properties/#{@property}/contracts/#{@contract}/edit"}>
-              <.icon name="hero-pencil-square" /> Edit
-            </.button>
             <.button
               phx-click="archive"
               phx-target={@myself}
