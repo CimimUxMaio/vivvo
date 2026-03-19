@@ -2,7 +2,9 @@ defmodule Vivvo.Contracts.ContractTest do
   use Vivvo.DataCase, async: true
 
   alias Vivvo.Contracts.Contract
-  import Vivvo.AccountsFixtures, only: [user_scope_fixture: 0]
+  import Vivvo.AccountsFixtures, only: [user_scope_fixture: 0, user_fixture: 1]
+  import Vivvo.PropertiesFixtures, only: [property_fixture: 1]
+  import Vivvo.ContractsFixtures, only: [contract_fixture: 3]
 
   describe "changeset/3" do
     setup do
@@ -302,6 +304,454 @@ defmodule Vivvo.Contracts.ContractTest do
       changeset = Contract.archive_changeset(contract, scope)
 
       assert Ecto.Changeset.get_change(changeset, :archived_by_id) == scope.user.id
+    end
+  end
+
+  describe "creation_changeset/4" do
+    setup do
+      scope = user_scope_fixture()
+      property = property_fixture(scope)
+      tenant1 = user_fixture(%{preferred_roles: [:tenant]})
+      tenant2 = user_fixture(%{preferred_roles: [:tenant]})
+      today = ~D[2026-02-01]
+      {:ok, scope: scope, property: property, tenant1: tenant1, tenant2: tenant2, today: today}
+    end
+
+    test "validates start_date cannot be in the past", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-01-15],
+        end_date: ~D[2026-03-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-01-15], end_date: ~D[2026-03-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      assert %{start_date: ["cannot be in the past"]} = errors_on(changeset)
+    end
+
+    test "allows start_date equal to today", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: today,
+        end_date: ~D[2026-03-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: today, end_date: ~D[2026-03-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "allows start_date in the future", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-02-15],
+        end_date: ~D[2026-03-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-02-15], end_date: ~D[2026-03-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "past_start_date? option allows creating contracts with past dates", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-01-15],
+        end_date: ~D[2026-03-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-01-15], end_date: ~D[2026-03-01]}]
+      }
+
+      changeset =
+        Contract.creation_changeset(%Contract{}, attrs, scope,
+          past_start_date?: true,
+          today: today
+        )
+
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "validates overlapping contracts - exact overlap", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create existing contract
+      existing_contract_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00"
+      }
+
+      # Create the existing contract directly using contract_fixture with past_start_date option
+      contract_fixture(scope, existing_contract_attrs,
+        past_start_date?: true,
+        update_factor: Decimal.new("0.0")
+      )
+
+      # Try to create overlapping contract
+      new_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-02-10], end_date: ~D[2026-04-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      assert %{start_date: ["overlaps with existing contract"]} = errors_on(changeset)
+    end
+
+    test "validates overlapping contracts - partial overlap", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create existing contract
+      existing_contract_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00"
+      }
+
+      contract_fixture(scope, existing_contract_attrs,
+        past_start_date?: true,
+        update_factor: Decimal.new("0.0")
+      )
+
+      # Try to create partially overlapping contract (starts during, ends after)
+      new_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-05-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-03-01], end_date: ~D[2026-05-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      assert %{start_date: ["overlaps with existing contract"]} = errors_on(changeset)
+    end
+
+    test "validates overlapping contracts - contained within", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create existing contract
+      existing_contract_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-06-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00"
+      }
+
+      contract_fixture(scope, existing_contract_attrs,
+        past_start_date?: true,
+        update_factor: Decimal.new("0.0")
+      )
+
+      # Try to create contract contained within existing
+      new_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-04-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-03-01], end_date: ~D[2026-04-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      assert %{start_date: ["overlaps with existing contract"]} = errors_on(changeset)
+    end
+
+    test "allows adjacent contracts (no overlap)", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create existing contract ending on 2026-04-10
+      existing_contract_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00"
+      }
+
+      contract_fixture(scope, existing_contract_attrs,
+        past_start_date?: true,
+        update_factor: Decimal.new("0.0")
+      )
+
+      # Create adjacent contract starting on 2026-04-11 (should be allowed)
+      new_attrs = %{
+        start_date: ~D[2026-04-11],
+        end_date: ~D[2026-06-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-04-11], end_date: ~D[2026-06-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "allows contracts with gaps between them", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create existing contract
+      existing_contract_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00"
+      }
+
+      contract_fixture(scope, existing_contract_attrs,
+        past_start_date?: true,
+        update_factor: Decimal.new("0.0")
+      )
+
+      # Create contract with gap (starts after existing ends)
+      new_attrs = %{
+        start_date: ~D[2026-05-01],
+        end_date: ~D[2026-07-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-05-01], end_date: ~D[2026-07-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "no overlap validation when property has no existing contracts", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-02-10], end_date: ~D[2026-04-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "archived contracts do not trigger overlap validation", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create an archived contract
+      existing_contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: ~D[2026-02-10],
+            end_date: ~D[2026-04-10],
+            expiration_day: 5,
+            property_id: property.id,
+            tenant_id: tenant1.id,
+            rent: "1000.00"
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0")
+        )
+
+      # Archive the contract using the archive_changeset function
+      {:ok, _archived_contract} =
+        existing_contract
+        |> Contract.archive_changeset(scope)
+        |> Vivvo.Repo.update()
+
+      # Should be able to create overlapping contract since existing is archived
+      new_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-02-10], end_date: ~D[2026-04-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      refute Map.has_key?(errors_on(changeset), :start_date)
+    end
+
+    test "sets user_id from scope", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-02-10], end_date: ~D[2026-04-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      assert Ecto.Changeset.get_change(changeset, :user_id) == scope.user.id
+    end
+
+    test "valid creation with all required fields", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-02-10], end_date: ~D[2026-04-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      assert changeset.valid?
+    end
+
+    test "still applies base changeset validations", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      today: today
+    } do
+      attrs = %{
+        start_date: ~D[2026-04-10],
+        end_date: ~D[2026-02-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00",
+        rent_periods: [%{value: "1000.00", start_date: ~D[2026-04-10], end_date: ~D[2026-02-10]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, attrs, scope, today: today)
+      assert %{end_date: ["must be after start date"]} = errors_on(changeset)
+    end
+
+    test "includes existing contract dates in overlap error", %{
+      scope: scope,
+      property: property,
+      tenant1: tenant1,
+      tenant2: tenant2,
+      today: today
+    } do
+      # Create existing contract
+      existing_contract_attrs = %{
+        start_date: ~D[2026-02-10],
+        end_date: ~D[2026-04-10],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant1.id,
+        rent: "1000.00"
+      }
+
+      contract_fixture(scope, existing_contract_attrs,
+        past_start_date?: true,
+        update_factor: Decimal.new("0.0")
+      )
+
+      # Try to create overlapping contract
+      new_attrs = %{
+        start_date: ~D[2026-03-01],
+        end_date: ~D[2026-05-01],
+        expiration_day: 5,
+        property_id: property.id,
+        tenant_id: tenant2.id,
+        rent: "1200.00",
+        rent_periods: [%{value: "1200.00", start_date: ~D[2026-03-01], end_date: ~D[2026-05-01]}]
+      }
+
+      changeset = Contract.creation_changeset(%Contract{}, new_attrs, scope, today: today)
+      errors = errors_on(changeset)
+
+      assert %{start_date: ["overlaps with existing contract"]} = errors
+      # Check that the error has the additional metadata
+      {error_message, _} = changeset.errors[:start_date]
+      assert error_message == "overlaps with existing contract"
     end
   end
 end
