@@ -6,6 +6,6 @@ defmodule Vivvo.Repo.Migrations.AddObanJobsTable do
   end
 
   def down do
-    Oban.Migration.down(version: 1)
+    Oban.Migration.down(version: 12)
   end
 end
