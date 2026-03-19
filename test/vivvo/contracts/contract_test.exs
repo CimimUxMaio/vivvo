@@ -275,15 +275,14 @@ defmodule Vivvo.Contracts.ContractTest do
         property_id: 1,
         tenant_id: 1,
         index_type: :ipc,
-        index_value: "3.0",
         rent_period_duration: nil,
-        rent_periods: [%{value: "100.00", start_date: ~D[2026-02-05], end_date: ~D[2026-12-31]}]
+        rent: "1000.00"
       }
 
       changeset = Contract.changeset(%Contract{}, attrs, scope)
-      # This validation may or may not exist depending on implementation
-      # Just verify the changeset behavior
-      changeset.valid? || errors_on(changeset)
+
+      refute changeset.valid?
+      assert "is required when index type is set" in errors_on(changeset).rent_period_duration
     end
   end
 

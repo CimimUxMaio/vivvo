@@ -406,7 +406,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       assert job_contract_ids == Enum.sort([contract_a.id, contract_b.id])
     end
 
-    test "handles contracts with different index types" do
+    test "processes single contract with IPC index type" do
       scope = user_scope_fixture()
       today = Date.utc_today()
 
