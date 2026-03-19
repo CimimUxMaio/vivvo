@@ -87,7 +87,14 @@ config :vivvo, Oban,
   engine: Oban.Engines.Basic,
   queues: [default: 10, rent_periods: 5],
   repo: Vivvo.Repo,
+  shutdown_grace_period: :timer.seconds(30),
   plugins: [
+    # Automatically delete completed, cancelled, and discarded jobs after 7 days
+    # to prevent the oban_jobs table from growing indefinitely
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    # Rescue jobs left in executing state after node crashes or deployments
+    # Moves orphan jobs back to available state after 30 minutes
+    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
     {Oban.Plugins.Cron,
      crontab: [
        # Run at 12:00 PM on the 25th of each month
