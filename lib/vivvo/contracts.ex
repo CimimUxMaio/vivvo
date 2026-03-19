@@ -215,13 +215,18 @@ defmodule Vivvo.Contracts do
   end
 
   defp generate_contract_period_dates(contract, today) do
-    Stream.iterate(1, &(&1 + 1))
-    |> Stream.map(&contract_period_date(contract, &1))
-    |> Stream.take_while(fn period ->
-      # Before or equal to today
-      Date.compare(period.start_date, today) != :gt
-    end)
-    |> Enum.to_list()
+    first_period = contract_period_date(contract, 1)
+
+    additional_periods =
+      Stream.iterate(2, &(&1 + 1))
+      |> Stream.map(&contract_period_date(contract, &1))
+      |> Stream.take_while(fn period ->
+        # Before or equal to today
+        Date.compare(period.start_date, today) != :gt
+      end)
+      |> Enum.to_list()
+
+    [first_period | additional_periods]
   end
 
   defp contract_period_date(%Contract{rent_period_duration: duration} = contract, num) do
