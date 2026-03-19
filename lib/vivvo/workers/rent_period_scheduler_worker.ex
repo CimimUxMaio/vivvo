@@ -7,15 +7,13 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
   This proactively creates the next rent period before the current one expires,
   ensuring users always have access to current rent information.
 
-  Uses unique constraint with year and month to prevent duplicate scheduling
-  even if the server crashes and restarts.
+  Scheduled via Oban Cron plugin which handles duplicate prevention automatically.
   """
 
   require Logger
 
   use Oban.Worker,
     queue: :default,
-    unique: [period: :infinity, keys: [:year, :month]],
     max_attempts: 7
 
   alias Vivvo.Contracts
