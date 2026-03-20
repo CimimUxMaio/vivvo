@@ -63,12 +63,12 @@ defmodule VivvoWeb.UserSessionControllerTest do
 
     test "redirects to login page with invalid credentials", %{conn: conn, user: user} do
       conn =
-        post(conn, ~p"/users/log-in?mode=password", %{
+        post(conn, ~p"/users/log-in?auth=password", %{
           "user" => %{"email" => user.email, "password" => "invalid_password"}
         })
 
       assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Invalid email or password"
-      assert redirected_to(conn) == ~p"/users/log-in"
+      assert redirected_to(conn) == ~p"/users/log-in?auth=password"
     end
   end
 

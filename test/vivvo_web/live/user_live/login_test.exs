@@ -8,9 +8,10 @@ defmodule VivvoWeb.UserLive.LoginTest do
     test "renders login page", %{conn: conn} do
       {:ok, _lv, html} = live(conn, ~p"/users/log-in")
 
-      assert html =~ "Log in"
+      assert html =~ "Welcome back"
       assert html =~ "Sign up"
-      assert html =~ "Log in with email"
+      assert html =~ "Magic Link"
+      assert html =~ "Password"
     end
   end
 
@@ -49,6 +50,9 @@ defmodule VivvoWeb.UserLive.LoginTest do
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
+      # Switch to password tab
+      lv |> element("button[phx-value-selected='password']") |> render_click()
+
       form =
         form(lv, "#login_form_password",
           user: %{email: user.email, password: valid_user_password(), remember_me: true}
@@ -64,6 +68,9 @@ defmodule VivvoWeb.UserLive.LoginTest do
     } do
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
+      # Switch to password tab
+      lv |> element("button[phx-value-selected='password']") |> render_click()
+
       form =
         form(lv, "#login_form_password", user: %{email: "test@email.com", password: "123456"})
 
@@ -71,7 +78,7 @@ defmodule VivvoWeb.UserLive.LoginTest do
 
       conn = follow_trigger_action(form, conn)
       assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Invalid email or password"
-      assert redirected_to(conn) == ~p"/users/log-in"
+      assert redirected_to(conn) == ~p"/users/log-in?auth=password"
     end
   end
 
@@ -98,12 +105,12 @@ defmodule VivvoWeb.UserLive.LoginTest do
     test "shows login page with email filled in", %{conn: conn, user: user} do
       {:ok, _lv, html} = live(conn, ~p"/users/log-in")
 
-      assert html =~ "You need to reauthenticate"
-      refute html =~ "Register"
-      assert html =~ "Log in with email"
+      assert html =~ "Confirm your identity"
+      refute html =~ "Sign up"
+      assert html =~ "Magic Link"
 
       assert html =~
-               ~s(<input type="email" name="user[email]" id="login_form_magic_email" value="#{user.email}")
+               ~s(<input type="email" name="user[email]" id="user_email" value="#{user.email}")
     end
   end
 end
