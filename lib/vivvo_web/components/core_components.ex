@@ -732,6 +732,68 @@ defmodule VivvoWeb.CoreComponents do
   end
 
   @doc """
+  Renders a sliding selector control with animated background indicator.
+
+  The indicator position and active styling are computed server-side from
+  the `value` attr.
+
+  ## Examples
+
+      <.sliding_selector value={@active_method} on_select="switch_method">
+        <:option value="magic">Magic Link</:option>
+        <:option value="password">Password</:option>
+      </.sliding_selector>
+  """
+  attr :id, :string, default: nil, doc: "the optional id of the selector container"
+  attr :value, :string, required: true, doc: "the currently selected option value"
+  attr :on_select, :any, required: true, doc: "phx-click event name or JS command for selection"
+  attr :class, :string, default: "bg-base-200 rounded-xl", doc: "container CSS classes"
+
+  slot :option, required: true do
+    attr :value, :string, required: true, doc: "the option value"
+  end
+
+  def sliding_selector(assigns) do
+    count = length(assigns.option)
+    active_index = Enum.find_index(assigns.option, &(&1.value == assigns.value)) || 0
+
+    option_width = 100.0 / count
+    indicator_left = option_width * active_index
+
+    assigns =
+      assign(assigns,
+        option_width: option_width,
+        indicator_left: indicator_left
+      )
+
+    ~H"""
+    <div id={@id} class={["flex p-1 relative", @class]} data-selected={@value}>
+      <%!-- Sliding background indicator --%>
+      <div
+        class="absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-lg shadow-sm transition-all duration-300 ease-out top-1"
+        style={"width: calc(#{@option_width}% - 0.5rem); left: calc(#{@indicator_left}% + 0.25rem);"}
+      />
+
+      <%= for option <- @option do %>
+        <button
+          type="button"
+          phx-click={@on_select}
+          phx-value-selected={option.value}
+          class={[
+            "flex-1 relative z-10 py-2.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer",
+            "flex items-center justify-center gap-2",
+            @value == option.value && "text-primary",
+            @value != option.value && "text-base-content/60 hover:text-base-content"
+          ]}
+        >
+          {render_slot(option)}
+        </button>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do
