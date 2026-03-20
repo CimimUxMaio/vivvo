@@ -1659,7 +1659,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Animated content container --%>
           <div class={[
             "overflow-hidden transition-all duration-300 ease-in-out",
-            @current_expanded && "max-h-[2000px] opacity-100",
+            @current_expanded && "max-h-[600px] opacity-100 overflow-y-auto",
             !@current_expanded && "max-h-0 opacity-0"
           ]}>
             <div class="divide-y divide-base-200 border-t border-base-200">
@@ -1705,7 +1705,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Animated content container --%>
           <div class={[
             "overflow-hidden transition-all duration-300 ease-in-out",
-            @history_expanded && "max-h-[2000px] opacity-100",
+            @history_expanded && "max-h-[600px] opacity-100 overflow-y-auto",
             !@history_expanded && "max-h-0 opacity-0"
           ]}>
             <div class="divide-y divide-base-200 border-t border-base-200">
