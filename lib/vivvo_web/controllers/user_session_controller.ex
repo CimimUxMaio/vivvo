@@ -30,8 +30,9 @@ defmodule VivvoWeb.UserSessionController do
   end
 
   # email + password login
-  defp create(conn, %{"user" => user_params}, info) do
+  defp create(conn, %{"user" => user_params} = params, info) do
     %{"email" => email, "password" => password} = user_params
+    auth_method = params["auth"] || "magic"
 
     if user = Accounts.get_user_by_email_and_password(email, password) do
       conn
@@ -42,7 +43,7 @@ defmodule VivvoWeb.UserSessionController do
       conn
       |> put_flash(:error, "Invalid email or password")
       |> put_flash(:email, String.slice(email, 0, 160))
-      |> redirect(to: ~p"/users/log-in")
+      |> redirect(to: ~p"/users/log-in?auth=#{auth_method}")
     end
   end
 
