@@ -1068,7 +1068,7 @@ defmodule Vivvo.Contracts do
       totals_by_month = calculate_totals_by_month(contract_payments)
 
       Enum.map(
-        1..current_payment_num,
+        current_payment_num..1//-1,
         &build_payment_status(&1, contract, contract_payments, totals_by_month, today)
       )
     end
