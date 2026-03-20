@@ -183,7 +183,7 @@ defmodule VivvoWeb.UserLive.Login do
             type="checkbox"
             name={@form[:remember_me].name}
             value="true"
-            checked
+            checked={@form[:remember_me].value not in [false, "false"]}
             class="checkbox checkbox-primary checkbox-sm"
           />
           <span class="text-sm text-base-content/70 group-hover:text-base-content transition-colors">
