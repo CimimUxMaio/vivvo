@@ -1531,16 +1531,26 @@ defmodule VivvoWeb.HomeLive do
 
   # Primary Action Zone Component
   defp primary_action_zone(assigns) do
+    has_amount_due? = Decimal.gt?(assigns.total_due, Decimal.new(0))
+
     cta_info =
       cond do
-        # Check if any payment is pending validation
+        # PRIORITY 1: Submit payment takes precedence over viewing pending
+        has_amount_due? ->
+          month = get_earliest_unpaid_month(assigns.scope, assigns.contract)
+          # Verify the month actually has remaining amount to pay
+          summary = calculate_payment_summary(assigns.scope, assigns.contract, month)
+
+          if Decimal.gt?(summary.remaining, Decimal.new(0)) do
+            {:submit_payment, "Submit Payment", "hero-credit-card", assigns.contract.id, month}
+          else
+            # This shouldn't happen given get_earliest_unpaid_month logic, but handle gracefully
+            nil
+          end
+
+        # PRIORITY 2: Check if any payment is pending validation (only when no amount due)
         has_pending_payment?(assigns.contract.payments) ->
           {:view_pending, "View Pending Payment", "hero-eye", nil, nil}
-
-        # Check if payment is due
-        Decimal.gt?(assigns.total_due, Decimal.new(0)) ->
-          month = get_earliest_unpaid_month(assigns.scope, assigns.contract)
-          {:submit_payment, "Submit Payment", "hero-credit-card", assigns.contract.id, month}
 
         # All caught up - don't render the action zone
         true ->
@@ -2367,8 +2377,15 @@ defmodule VivvoWeb.HomeLive do
     |> Enum.filter(fn num ->
       due_date = Contracts.calculate_due_date(contract, num)
 
-      Date.compare(today, due_date) != :lt and
-        not Payments.month_fully_paid?(scope, contract, num)
+      # Skip future months
+      if Date.compare(today, due_date) == :lt do
+        false
+      else
+        # Check if month still has remaining amount to pay
+        # (considering both accepted AND pending payments)
+        summary = calculate_payment_summary(scope, contract, num)
+        Decimal.gt?(summary.remaining, Decimal.new(0))
+      end
     end)
     |> List.first(current_payment_num)
   end
