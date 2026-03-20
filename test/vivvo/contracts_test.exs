@@ -996,27 +996,59 @@ defmodule Vivvo.ContractsTest do
 
     test "excludes current payment number when its due date hasn't passed" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      # Contract starting today with expiration_day in the future
-      start_date = today
-      # Use tomorrow's day number (or 28 if today is end of month)
-      expiration_day = min(today.day + 1, 28)
+      # Use a fixed date with day < 20 so expiration_day can be set to a future date
+      # Using Jan 15, 2026 as the reference date (simulating "today")
+      reference_date = Date.new!(2026, 1, 15)
+      # Contract started on this date
+      start_date = Date.new!(2026, 1, 15)
 
       contract =
-        contract_fixture(scope, %{
-          start_date: start_date,
-          end_date: Date.add(start_date, 365),
-          expiration_day: expiration_day
-        })
+        contract_fixture(
+          scope,
+          %{
+            start_date: start_date,
+            end_date: Date.add(start_date, 365),
+            expiration_day: 20
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
 
-      result = Contracts.get_past_payment_numbers(contract, today)
+      result = Contracts.get_past_payment_numbers(contract, reference_date)
 
-      # Current month hasn't passed yet since expiration_day > today.day
-      # For a contract starting today, current payment number is 1
+      # Current month hasn't passed yet since expiration_day (20) > reference_date.day (15)
+      # For a contract starting on reference_date, current payment number is 1
       # but no periods have passed yet, so result should be empty
-      current = Contracts.get_current_payment_number(contract)
+      current = Contracts.get_current_payment_number(contract, reference_date)
       assert current == 1
       assert result == []
+    end
+
+    test "includes first payment when expiration_day equals start date day" do
+      scope = user_scope_fixture()
+      # Use a fixed date where expiration_day equals the day
+      # Using Jan 20, 2026 as the reference date (simulating "today")
+      reference_date = Date.new!(2026, 1, 20)
+      # Contract started on this date
+      start_date = Date.new!(2026, 1, 20)
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: start_date,
+            end_date: Date.add(start_date, 365),
+            expiration_day: 20
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
+
+      result = Contracts.get_past_payment_numbers(contract, reference_date)
+
+      # When expiration_day (20) <= reference_date.day (20), the due date has passed or is today
+      # so the first payment should be included
+      assert result == [1]
     end
   end
 
