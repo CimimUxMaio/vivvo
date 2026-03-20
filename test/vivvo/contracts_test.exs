@@ -997,26 +997,45 @@ defmodule Vivvo.ContractsTest do
     test "excludes current payment number when its due date hasn't passed" do
       scope = user_scope_fixture()
       today = Date.utc_today()
-      # Contract starting today with expiration_day in the future
-      start_date = today
-      # Use tomorrow's day number (or 28 if today is end of month)
-      expiration_day = min(today.day + 1, 28)
 
-      contract =
-        contract_fixture(scope, %{
-          start_date: start_date,
-          end_date: Date.add(start_date, 365),
-          expiration_day: expiration_day
-        })
+      # Skip this test when today is the 20th or later
+      # because expiration_day can only be 1-20, so we cannot set a future due date
+      if today.day >= 20 do
+        # When today.day >= 20, the due date for payment 1 is today or earlier
+        # so the result would include payment 1, making this test scenario invalid
+        # We verify the alternative behavior instead
+        contract =
+          contract_fixture(scope, %{
+            start_date: today,
+            end_date: Date.add(today, 365),
+            expiration_day: 20
+          })
 
-      result = Contracts.get_past_payment_numbers(contract, today)
+        result = Contracts.get_past_payment_numbers(contract, today)
+        # When expiration_day <= today.day, the due date has passed or is today
+        # so the first payment should be included
+        assert result == [1]
+      else
+        # Contract starting today with expiration_day in the future
+        start_date = today
+        expiration_day = today.day + 1
 
-      # Current month hasn't passed yet since expiration_day > today.day
-      # For a contract starting today, current payment number is 1
-      # but no periods have passed yet, so result should be empty
-      current = Contracts.get_current_payment_number(contract)
-      assert current == 1
-      assert result == []
+        contract =
+          contract_fixture(scope, %{
+            start_date: start_date,
+            end_date: Date.add(start_date, 365),
+            expiration_day: expiration_day
+          })
+
+        result = Contracts.get_past_payment_numbers(contract, today)
+
+        # Current month hasn't passed yet since expiration_day > today.day
+        # For a contract starting today, current payment number is 1
+        # but no periods have passed yet, so result should be empty
+        current = Contracts.get_current_payment_number(contract)
+        assert current == 1
+        assert result == []
+      end
     end
   end
 
