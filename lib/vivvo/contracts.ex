@@ -493,8 +493,7 @@ defmodule Vivvo.Contracts do
       3  # expired contract returns total payments, not inflated number
 
   """
-  def get_current_payment_number(%Contract{} = contract) do
-    today = Date.utc_today()
+  def get_current_payment_number(%Contract{} = contract, today \\ Date.utc_today()) do
     start_date = contract.start_date
 
     if Date.compare(today, start_date) == :lt do
@@ -520,8 +519,8 @@ defmodule Vivvo.Contracts do
       []  # if today is earlier than December 2026
 
   """
-  def get_months_up_to_current(%Contract{} = contract) do
-    case get_current_payment_number(contract) do
+  def get_months_up_to_current(%Contract{} = contract, today \\ Date.utc_today()) do
+    case get_current_payment_number(contract, today) do
       0 -> []
       current -> Enum.to_list(1..current)
     end
@@ -544,7 +543,7 @@ defmodule Vivvo.Contracts do
 
   """
   def get_past_payment_numbers(%Contract{} = contract, today) do
-    current = get_current_payment_number(contract)
+    current = get_current_payment_number(contract, today)
     current_due_date = calculate_due_date(contract, current)
 
     last =
