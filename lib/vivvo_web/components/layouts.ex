@@ -172,6 +172,7 @@ defmodule VivvoWeb.Layouts do
                   </div>
                 </div>
               <% else %>
+                <.theme_toggle_compact />
                 <.link
                   href={~p"/users/log-in"}
                   class="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
@@ -342,7 +343,11 @@ defmodule VivvoWeb.Layouts do
   end
 
   @doc """
-  Compact theme toggle for use in dropdown menus.
+  Compact theme toggle for use in dropdown menus and navbars.
+
+  Uses CSS arbitrary variants to react to the `data-theme` attribute on the
+  `<html>` element, so the indicator and active styling are fully client-side
+  driven without any server state.
   """
   def theme_toggle_compact(assigns) do
     ~H"""
@@ -393,44 +398,6 @@ defmodule VivvoWeb.Layouts do
         title="Dark theme"
       >
         <.icon name="hero-moon" class="w-3.5 h-3.5" />
-      </button>
-    </div>
-    """
-  end
-
-  @doc """
-  Full-size theme toggle for standalone use.
-  """
-  def theme_toggle(assigns) do
-    ~H"""
-    <div class="relative flex flex-row items-center border border-base-300 bg-base-200/50 rounded-full p-1">
-      <div class="absolute w-8 h-8 rounded-full bg-base-100 shadow-sm left-1 [[data-theme=light]_&]:left-[calc(100%-2.25rem)] [[data-theme=dark]_&]:left-[calc(50%-0.25rem)] transition-all duration-200" />
-
-      <button
-        class="relative z-10 flex p-2 cursor-pointer w-8 h-8 items-center justify-center"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-        title="System theme"
-      >
-        <.icon name="hero-computer-desktop" class="w-4 h-4 text-base-content/70" />
-      </button>
-
-      <button
-        class="relative z-10 flex p-2 cursor-pointer w-8 h-8 items-center justify-center"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-        title="Light theme"
-      >
-        <.icon name="hero-sun" class="w-4 h-4 text-base-content/70" />
-      </button>
-
-      <button
-        class="relative z-10 flex p-2 cursor-pointer w-8 h-8 items-center justify-center"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-        title="Dark theme"
-      >
-        <.icon name="hero-moon" class="w-4 h-4 text-base-content/70" />
       </button>
     </div>
     """
