@@ -65,75 +65,66 @@ defmodule VivvoWeb.PropertyLive.Index do
                     :for={{id, property} <- @streams.properties}
                     id={id}
                     class="hover:bg-base-200/30 transition-colors group cursor-pointer"
+                    phx-click={JS.push("show-property", value: %{id: property.id})}
                   >
                     <%!-- Property Name & Address --%>
                     <td class="px-4 py-4">
-                      <.link navigate={~p"/properties/#{property}"} class="contents">
-                        <div class="flex items-center gap-3">
-                          <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
-                          </div>
-                          <div class="min-w-0">
-                            <p class="font-semibold text-base-content truncate">
-                              {property.name}
-                            </p>
-                            <p class="text-xs text-base-content/50 truncate max-w-[200px]">
-                              {property.address}
-                            </p>
-                          </div>
+                      <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
                         </div>
-                      </.link>
+                        <div class="min-w-0">
+                          <p class="font-semibold text-base-content truncate">
+                            {property.name}
+                          </p>
+                          <p class="text-xs text-base-content/50 truncate max-w-[200px]">
+                            {property.address}
+                          </p>
+                        </div>
+                      </div>
                     </td>
 
                     <%!-- Status Badge --%>
                     <td class="px-4 py-4 text-center">
-                      <.link navigate={~p"/properties/#{property}"} class="contents">
-                        <.status_badge status={@property_statuses[property.id]} />
-                      </.link>
+                      <.status_badge status={@property_statuses[property.id]} />
                     </td>
 
                     <%!-- Area --%>
                     <td class="px-4 py-4 text-center">
-                      <.link navigate={~p"/properties/#{property}"} class="contents">
-                        <div class="flex items-center justify-center gap-1.5 text-base-content/70">
-                          <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
-                          <span class="font-medium">{property.area} m²</span>
-                        </div>
-                      </.link>
+                      <div class="flex items-center justify-center gap-1.5 text-base-content/70">
+                        <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
+                        <span class="font-medium">{property.area} m²</span>
+                      </div>
                     </td>
 
                     <%!-- Rooms --%>
                     <td class="px-4 py-4 text-center">
-                      <.link navigate={~p"/properties/#{property}"} class="contents">
-                        <div class="flex items-center justify-center gap-1.5 text-base-content/70">
-                          <.icon name="hero-home" class="w-4 h-4" />
-                          <span class="font-medium">{property.rooms}</span>
-                        </div>
-                      </.link>
+                      <div class="flex items-center justify-center gap-1.5 text-base-content/70">
+                        <.icon name="hero-home" class="w-4 h-4" />
+                        <span class="font-medium">{property.rooms}</span>
+                      </div>
                     </td>
 
                     <%!-- Notes - Hidden on tablet --%>
                     <td class="hidden lg:table-cell px-4 py-4">
-                      <.link navigate={~p"/properties/#{property}"} class="contents">
-                        <%= if property.notes != "" do %>
-                          <p
-                            class="text-xs text-base-content/60 truncate max-w-[150px]"
-                            title={property.notes}
-                          >
-                            {property.notes}
-                          </p>
-                        <% else %>
-                          <span class="text-xs text-base-content/30">-</span>
-                        <% end %>
-                      </.link>
+                      <%= if property.notes != "" do %>
+                        <p
+                          class="text-xs text-base-content/60 truncate max-w-[150px]"
+                          title={property.notes}
+                        >
+                          {property.notes}
+                        </p>
+                      <% else %>
+                        <span class="text-xs text-base-content/30">-</span>
+                      <% end %>
                     </td>
 
                     <%!-- Actions --%>
-                    <td class="px-4 py-4">
+                    <td class="px-4 py-4" phx-stop>
                       <div class="flex items-center justify-center gap-1">
                         <.link
                           navigate={~p"/properties/#{property}/edit"}
-                          class="btn btn-ghost btn-sm btn-square"
+                          class="btn btn-ghost btn-md btn-square"
                           title="Edit"
                         >
                           <.icon name="hero-pencil" class="w-5 h-5" />
@@ -141,7 +132,7 @@ defmodule VivvoWeb.PropertyLive.Index do
                         <button
                           phx-click={JS.push("delete", value: %{id: property.id})}
                           data-confirm="Are you sure you want to delete this property?"
-                          class="btn btn-ghost btn-sm btn-square text-error hover:text-error"
+                          class="btn btn-ghost btn-md btn-square text-error hover:text-error"
                           title="Delete"
                         >
                           <.icon name="hero-trash" class="w-5 h-5" />
@@ -159,48 +150,47 @@ defmodule VivvoWeb.PropertyLive.Index do
                 :for={{id, property} <- @streams.properties}
                 id={"#{id}-mobile"}
                 class="p-4 hover:bg-base-200/30 transition-colors cursor-pointer"
+                phx-click={JS.push("show-property", value: %{id: property.id})}
               >
-                <.link navigate={~p"/properties/#{property}"} class="contents">
-                  <%!-- Card Header: Icon + Name + Status --%>
-                  <div class="flex items-start justify-between gap-3 mb-3">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <.icon name="hero-building-office" class="w-6 h-6 text-primary" />
-                      </div>
-                      <div class="min-w-0">
-                        <p class="font-semibold text-base-content truncate">
-                          {property.name}
-                        </p>
-                        <p class="text-xs text-base-content/50 truncate">
-                          {property.address}
-                        </p>
-                      </div>
+                <%!-- Card Header: Icon + Name + Status --%>
+                <div class="flex items-start justify-between gap-3 mb-3">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <.icon name="hero-building-office" class="w-6 h-6 text-primary" />
                     </div>
-                    <.status_badge status={@property_statuses[property.id]} />
-                  </div>
-
-                  <%!-- Card Details: Area & Rooms --%>
-                  <div class="flex items-center gap-4 mb-3 text-sm">
-                    <div class="flex items-center gap-1.5 text-base-content/70">
-                      <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
-                      <span>{property.area} m²</span>
-                    </div>
-                    <div class="flex items-center gap-1.5 text-base-content/70">
-                      <.icon name="hero-home" class="w-4 h-4" />
-                      <span>{property.rooms} rooms</span>
+                    <div class="min-w-0">
+                      <p class="font-semibold text-base-content truncate">
+                        {property.name}
+                      </p>
+                      <p class="text-xs text-base-content/50 truncate">
+                        {property.address}
+                      </p>
                     </div>
                   </div>
+                  <.status_badge status={@property_statuses[property.id]} />
+                </div>
 
-                  <%!-- Card Notes --%>
-                  <%= if property.notes && property.notes != "" do %>
-                    <p class="text-xs text-base-content/60 mb-3 line-clamp-2">
-                      {property.notes}
-                    </p>
-                  <% end %>
-                </.link>
+                <%!-- Card Details: Area & Rooms --%>
+                <div class="flex items-center gap-4 mb-3 text-sm">
+                  <div class="flex items-center gap-1.5 text-base-content/70">
+                    <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
+                    <span>{property.area} m²</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 text-base-content/70">
+                    <.icon name="hero-home" class="w-4 h-4" />
+                    <span>{property.rooms} rooms</span>
+                  </div>
+                </div>
+
+                <%!-- Card Notes --%>
+                <%= if property.notes && property.notes != "" do %>
+                  <p class="text-xs text-base-content/60 mb-3 line-clamp-2">
+                    {property.notes}
+                  </p>
+                <% end %>
 
                 <%!-- Card Actions --%>
-                <div class="flex items-center gap-2 pt-3 border-t border-base-200">
+                <div class="flex items-center gap-2 pt-3 border-t border-base-200" phx-stop>
                   <.link
                     navigate={~p"/properties/#{property}/edit"}
                     class="btn btn-outline btn-sm flex-1"
@@ -295,6 +285,11 @@ defmodule VivvoWeb.PropertyLive.Index do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to delete property")}
     end
+  end
+
+  @impl true
+  def handle_event("show-property", %{"id" => id}, socket) do
+    {:noreply, push_navigate(socket, to: ~p"/properties/#{id}")}
   end
 
   @impl true
