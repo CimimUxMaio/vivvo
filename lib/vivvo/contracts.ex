@@ -1258,9 +1258,7 @@ defmodule Vivvo.Contracts do
     current_period = current_rent_period(contract, today)
     update_date = Date.add(current_period.end_date, 1)
 
-    if not Date.before?(update_date, contract.end_date) do
-      nil
-    else
+    if Date.before?(update_date, contract.end_date) do
       update_date
     end
   end
