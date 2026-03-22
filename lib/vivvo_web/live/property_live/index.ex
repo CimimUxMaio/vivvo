@@ -64,70 +64,73 @@ defmodule VivvoWeb.PropertyLive.Index do
                   <tr
                     :for={{id, property} <- @streams.properties}
                     id={id}
-                    class="hover:bg-base-200/30 transition-colors group"
+                    class="hover:bg-base-200/30 transition-colors group cursor-pointer"
                   >
                     <%!-- Property Name & Address --%>
                     <td class="px-4 py-4">
-                      <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
+                      <.link navigate={~p"/properties/#{property}"} class="contents">
+                        <div class="flex items-center gap-3">
+                          <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
+                          </div>
+                          <div class="min-w-0">
+                            <p class="font-semibold text-base-content truncate">
+                              {property.name}
+                            </p>
+                            <p class="text-xs text-base-content/50 truncate max-w-[200px]">
+                              {property.address}
+                            </p>
+                          </div>
                         </div>
-                        <div class="min-w-0">
-                          <p class="font-semibold text-base-content truncate">
-                            {property.name}
-                          </p>
-                          <p class="text-xs text-base-content/50 truncate max-w-[200px]">
-                            {property.address}
-                          </p>
-                        </div>
-                      </div>
+                      </.link>
                     </td>
 
                     <%!-- Status Badge --%>
                     <td class="px-4 py-4 text-center">
-                      <.status_badge status={@property_statuses[property.id]} />
+                      <.link navigate={~p"/properties/#{property}"} class="contents">
+                        <.status_badge status={@property_statuses[property.id]} />
+                      </.link>
                     </td>
 
                     <%!-- Area --%>
                     <td class="px-4 py-4 text-center">
-                      <div class="flex items-center justify-center gap-1.5 text-base-content/70">
-                        <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
-                        <span class="font-medium">{property.area} m²</span>
-                      </div>
+                      <.link navigate={~p"/properties/#{property}"} class="contents">
+                        <div class="flex items-center justify-center gap-1.5 text-base-content/70">
+                          <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
+                          <span class="font-medium">{property.area} m²</span>
+                        </div>
+                      </.link>
                     </td>
 
                     <%!-- Rooms --%>
                     <td class="px-4 py-4 text-center">
-                      <div class="flex items-center justify-center gap-1.5 text-base-content/70">
-                        <.icon name="hero-home" class="w-4 h-4" />
-                        <span class="font-medium">{property.rooms}</span>
-                      </div>
+                      <.link navigate={~p"/properties/#{property}"} class="contents">
+                        <div class="flex items-center justify-center gap-1.5 text-base-content/70">
+                          <.icon name="hero-home" class="w-4 h-4" />
+                          <span class="font-medium">{property.rooms}</span>
+                        </div>
+                      </.link>
                     </td>
 
                     <%!-- Notes - Hidden on tablet --%>
                     <td class="hidden lg:table-cell px-4 py-4">
-                      <%= if property.notes != "" do %>
-                        <p
-                          class="text-xs text-base-content/60 truncate max-w-[150px]"
-                          title={property.notes}
-                        >
-                          {property.notes}
-                        </p>
-                      <% else %>
-                        <span class="text-xs text-base-content/30">-</span>
-                      <% end %>
+                      <.link navigate={~p"/properties/#{property}"} class="contents">
+                        <%= if property.notes != "" do %>
+                          <p
+                            class="text-xs text-base-content/60 truncate max-w-[150px]"
+                            title={property.notes}
+                          >
+                            {property.notes}
+                          </p>
+                        <% else %>
+                          <span class="text-xs text-base-content/30">-</span>
+                        <% end %>
+                      </.link>
                     </td>
 
                     <%!-- Actions --%>
                     <td class="px-4 py-4">
                       <div class="flex items-center justify-center gap-1">
-                        <.link
-                          navigate={~p"/properties/#{property}"}
-                          class="btn btn-ghost btn-sm btn-square"
-                          title="View"
-                        >
-                          <.icon name="hero-eye" class="w-5 h-5" />
-                        </.link>
                         <.link
                           navigate={~p"/properties/#{property}/edit"}
                           class="btn btn-ghost btn-sm btn-square"
@@ -155,53 +158,49 @@ defmodule VivvoWeb.PropertyLive.Index do
               <div
                 :for={{id, property} <- @streams.properties}
                 id={"#{id}-mobile"}
-                class="p-4 hover:bg-base-200/30 transition-colors"
+                class="p-4 hover:bg-base-200/30 transition-colors cursor-pointer"
               >
-                <%!-- Card Header: Icon + Name + Status --%>
-                <div class="flex items-start justify-between gap-3 mb-3">
-                  <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <.icon name="hero-building-office" class="w-6 h-6 text-primary" />
+                <.link navigate={~p"/properties/#{property}"} class="contents">
+                  <%!-- Card Header: Icon + Name + Status --%>
+                  <div class="flex items-start justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <.icon name="hero-building-office" class="w-6 h-6 text-primary" />
+                      </div>
+                      <div class="min-w-0">
+                        <p class="font-semibold text-base-content truncate">
+                          {property.name}
+                        </p>
+                        <p class="text-xs text-base-content/50 truncate">
+                          {property.address}
+                        </p>
+                      </div>
                     </div>
-                    <div class="min-w-0">
-                      <p class="font-semibold text-base-content truncate">
-                        {property.name}
-                      </p>
-                      <p class="text-xs text-base-content/50 truncate">
-                        {property.address}
-                      </p>
+                    <.status_badge status={@property_statuses[property.id]} />
+                  </div>
+
+                  <%!-- Card Details: Area & Rooms --%>
+                  <div class="flex items-center gap-4 mb-3 text-sm">
+                    <div class="flex items-center gap-1.5 text-base-content/70">
+                      <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
+                      <span>{property.area} m²</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-base-content/70">
+                      <.icon name="hero-home" class="w-4 h-4" />
+                      <span>{property.rooms} rooms</span>
                     </div>
                   </div>
-                  <.status_badge status={@property_statuses[property.id]} />
-                </div>
 
-                <%!-- Card Details: Area & Rooms --%>
-                <div class="flex items-center gap-4 mb-3 text-sm">
-                  <div class="flex items-center gap-1.5 text-base-content/70">
-                    <.icon name="hero-square-3-stack-3d" class="w-4 h-4" />
-                    <span>{property.area} m²</span>
-                  </div>
-                  <div class="flex items-center gap-1.5 text-base-content/70">
-                    <.icon name="hero-home" class="w-4 h-4" />
-                    <span>{property.rooms} rooms</span>
-                  </div>
-                </div>
-
-                <%!-- Card Notes --%>
-                <%= if property.notes && property.notes != "" do %>
-                  <p class="text-xs text-base-content/60 mb-3 line-clamp-2">
-                    {property.notes}
-                  </p>
-                <% end %>
+                  <%!-- Card Notes --%>
+                  <%= if property.notes && property.notes != "" do %>
+                    <p class="text-xs text-base-content/60 mb-3 line-clamp-2">
+                      {property.notes}
+                    </p>
+                  <% end %>
+                </.link>
 
                 <%!-- Card Actions --%>
                 <div class="flex items-center gap-2 pt-3 border-t border-base-200">
-                  <.link
-                    navigate={~p"/properties/#{property}"}
-                    class="btn btn-outline btn-sm flex-1"
-                  >
-                    <.icon name="hero-eye" class="w-4 h-4 mr-1" /> View
-                  </.link>
                   <.link
                     navigate={~p"/properties/#{property}/edit"}
                     class="btn btn-outline btn-sm flex-1"
