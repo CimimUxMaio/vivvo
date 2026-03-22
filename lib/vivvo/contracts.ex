@@ -1038,19 +1038,24 @@ defmodule Vivvo.Contracts do
   @doc """
   Get all payment statuses for a contract up to current month.
 
-  Returns a list of maps with payment info for each month.
+  Returns a list of maps with payment info for each month in descending
+  payment_number order (from current month down to month 1).
 
   ## Examples
 
       iex> get_payment_statuses(scope, contract)
       [
         %{
-          payment_number: 1,
-          due_date: ~D[2026-01-10],
+          payment_number: 5,
+          due_date: ~D[2026-05-10],
           rent: Decimal.new("500.00"),
           total_paid: Decimal.new("500.00"),
           status: :paid,
           payments: [%Payment{files: [...]}]
+        },
+        %{
+          payment_number: 4,
+          ...
         }
       ]
 
@@ -1253,7 +1258,7 @@ defmodule Vivvo.Contracts do
     current_period = current_rent_period(contract, today)
     update_date = Date.add(current_period.end_date, 1)
 
-    if Date.after?(update_date, contract.end_date) do
+    if not Date.before?(update_date, contract.end_date) do
       nil
     else
       update_date
