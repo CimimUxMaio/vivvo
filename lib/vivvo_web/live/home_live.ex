@@ -203,7 +203,7 @@ defmodule VivvoWeb.HomeLive do
     if contract do
       {month_num, _} = Integer.parse(month)
 
-      summary = calculate_payment_summary(scope, contract, month_num)
+      summary = calculate_payment_summary(contract, month_num)
 
       # Pre-populate with minimum of rent or remaining allowance
       initial_amount = Decimal.min(summary.rent, summary.remaining)
@@ -249,7 +249,7 @@ defmodule VivvoWeb.HomeLive do
     scope = socket.assigns.current_scope
     {contract, month} = socket.assigns.submitting_payment
 
-    summary = calculate_payment_summary(scope, contract, month)
+    summary = calculate_payment_summary(contract, month)
 
     changeset =
       Payments.change_payment(
@@ -276,7 +276,7 @@ defmodule VivvoWeb.HomeLive do
     scope = socket.assigns.current_scope
     {contract, month} = socket.assigns.submitting_payment
 
-    summary = calculate_payment_summary(scope, contract, month)
+    summary = calculate_payment_summary(contract, month)
 
     attrs =
       params
@@ -1531,16 +1531,18 @@ defmodule VivvoWeb.HomeLive do
 
   # Primary Action Zone Component
   defp primary_action_zone(assigns) do
+    has_amount_due? = Decimal.gt?(assigns.total_due, Decimal.new(0))
+
     cta_info =
       cond do
-        # Check if any payment is pending validation
+        # PRIORITY 1: Submit payment takes precedence over viewing pending
+        has_amount_due? ->
+          month = get_earliest_unpaid_month(assigns.contract)
+          build_submit_payment_cta(month, assigns.contract)
+
+        # PRIORITY 2: Check if any payment is pending validation (only when no amount due)
         has_pending_payment?(assigns.contract.payments) ->
           {:view_pending, "View Pending Payment", "hero-eye", nil, nil}
-
-        # Check if payment is due
-        Decimal.gt?(assigns.total_due, Decimal.new(0)) ->
-          month = get_earliest_unpaid_month(assigns.scope, assigns.contract)
-          {:submit_payment, "Submit Payment", "hero-credit-card", assigns.contract.id, month}
 
         # All caught up - don't render the action zone
         true ->
@@ -1649,7 +1651,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Animated content container --%>
           <div class={[
             "overflow-hidden transition-all duration-300 ease-in-out",
-            @current_expanded && "max-h-[2000px] opacity-100",
+            @current_expanded && "max-h-[600px] opacity-100 overflow-y-auto",
             !@current_expanded && "max-h-0 opacity-0"
           ]}>
             <div class="divide-y divide-base-200 border-t border-base-200">
@@ -1695,7 +1697,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Animated content container --%>
           <div class={[
             "overflow-hidden transition-all duration-300 ease-in-out",
-            @history_expanded && "max-h-[2000px] opacity-100",
+            @history_expanded && "max-h-[600px] opacity-100 overflow-y-auto",
             !@history_expanded && "max-h-0 opacity-0"
           ]}>
             <div class="divide-y divide-base-200 border-t border-base-200">
@@ -2330,6 +2332,19 @@ defmodule VivvoWeb.HomeLive do
     Enum.any?(payments, &(&1.status == :pending))
   end
 
+  # Builds submit payment CTA or falls back to pending payment check
+  defp build_submit_payment_cta(nil, contract) do
+    if has_pending_payment?(contract.payments) do
+      {:view_pending, "View Pending Payment", "hero-eye", nil, nil}
+    else
+      nil
+    end
+  end
+
+  defp build_submit_payment_cta(month, contract) do
+    {:submit_payment, "Submit Payment", "hero-credit-card", contract.id, month}
+  end
+
   # Returns true if the payment item is for the current payment period
   defp current_payment_month?(item, contract) do
     current_payment_num = Contracts.get_current_payment_number(contract)
@@ -2359,7 +2374,7 @@ defmodule VivvoWeb.HomeLive do
     end
   end
 
-  defp get_earliest_unpaid_month(scope, contract) do
+  defp get_earliest_unpaid_month(contract) do
     current_payment_num = Contracts.get_current_payment_number(contract)
     today = Date.utc_today()
 
@@ -2367,10 +2382,17 @@ defmodule VivvoWeb.HomeLive do
     |> Enum.filter(fn num ->
       due_date = Contracts.calculate_due_date(contract, num)
 
-      Date.compare(today, due_date) != :lt and
-        not Payments.month_fully_paid?(scope, contract, num)
+      # Skip future months
+      if Date.compare(today, due_date) == :lt do
+        false
+      else
+        # Check if month still has remaining amount to pay
+        # (considering both accepted AND pending payments)
+        remaining = get_remaining_amount(contract, num)
+        Decimal.gt?(remaining, Decimal.new(0))
+      end
     end)
-    |> List.first(current_payment_num)
+    |> List.first()
   end
 
   # Calculates all display values for a trend bar item.
@@ -2408,9 +2430,33 @@ defmodule VivvoWeb.HomeLive do
   defp rent_period_duration_label(12), do: "Yearly"
   defp rent_period_duration_label(months) when months > 0, do: "Every #{months} months"
 
-  defp calculate_payment_summary(scope, contract, month) do
-    accepted_total = Payments.total_accepted_for_month(scope, contract.id, month)
-    pending_total = Payments.total_pending_for_month(scope, contract.id, month)
+  # Calculates payment totals for a specific month from preloaded contract payments.
+  # Returns {accepted_total, pending_total} to avoid N+1 queries.
+  defp calculate_payment_totals(contract, month) do
+    contract.payments
+    |> Enum.filter(&(&1.payment_number == month))
+    |> Enum.reduce({Decimal.new(0), Decimal.new(0)}, fn payment, {accepted, pending} ->
+      case payment.status do
+        :accepted -> {Decimal.add(accepted, payment.amount), pending}
+        :pending -> {accepted, Decimal.add(pending, payment.amount)}
+        _ -> {accepted, pending}
+      end
+    end)
+  end
+
+  # Returns the remaining amount to pay for a specific month.
+  # This is the efficient single-purpose function for checking if payment is needed.
+  defp get_remaining_amount(contract, month) do
+    {accepted_total, pending_total} = calculate_payment_totals(contract, month)
+    due_date = Contracts.calculate_due_date(contract, month)
+    rent = Contracts.current_rent_value(contract, due_date)
+    Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
+  end
+
+  # Returns a full summary map for display purposes (templates).
+  # Use get_remaining_amount/2 when you only need the remaining balance.
+  defp calculate_payment_summary(contract, month) do
+    {accepted_total, pending_total} = calculate_payment_totals(contract, month)
     due_date = Contracts.calculate_due_date(contract, month)
     rent = Contracts.current_rent_value(contract, due_date)
     remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
