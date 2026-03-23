@@ -66,6 +66,10 @@ defmodule VivvoWeb.PropertyLive.Index do
                     id={id}
                     class="hover:bg-base-200/30 transition-colors group cursor-pointer"
                     phx-click={JS.push("show-property", value: %{id: property.id})}
+                    role="button"
+                    tabindex="0"
+                    phx-keydown={JS.push("show-property", value: %{id: property.id})}
+                    phx-key="enter"
                   >
                     <%!-- Property Name & Address --%>
                     <td class="px-4 py-4">
