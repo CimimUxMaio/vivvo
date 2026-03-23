@@ -33,7 +33,7 @@ defmodule VivvoWeb.PropertyLive.Form do
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <%!-- Left Side: Property Preview Card (40%) --%>
           <div class="lg:col-span-2">
-            <.property_preview_card form={@form} />
+            <.property_preview_card form={@form} page_title={@page_title} />
           </div>
 
           <%!-- Right Side: Form Container (60%) --%>
@@ -202,15 +202,12 @@ defmodule VivvoWeb.PropertyLive.Form do
 
         <%!-- Action Buttons --%>
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-4 border-t border-base-200">
-          <.button phx-disable-with="Saving..." variant="primary" class="sm:flex-1 btn btn-primary">
+          <.button phx-disable-with="Saving..." variant="primary" class="flex-1">
             Save Property
           </.button>
-          <.link
-            navigate={return_path(@current_scope, @return_to, @property)}
-            class="btn flex-1 inline-flex items-center justify-center"
-          >
+          <.button navigate={return_path(@current_scope, @return_to, @property)} class="flex-1">
             Cancel
-          </.link>
+          </.button>
         </div>
       </.form>
     </div>
