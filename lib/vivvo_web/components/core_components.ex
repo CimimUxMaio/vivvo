@@ -49,10 +49,15 @@ defmodule VivvoWeb.CoreComponents do
   def button(%{rest: rest} = assigns) do
     variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
 
+    base_class = ["btn", Map.fetch!(variants, assigns[:variant])]
+
     assigns =
-      assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
+      assigns
+      |> Map.update(:class, base_class, fn class ->
+        [base_class, class]
       end)
+
+    IO.inspect(assigns.class, label: "Button classes")
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""
@@ -312,7 +317,8 @@ defmodule VivvoWeb.CoreComponents do
 
   ## Examples
 
-      <.page_header title="Properties" subtitle="Manage your rental properties">
+      <.page_header title="Properties" back_navigate={~p"/properties"}>
+        <:subtitle>Manage your rental properties</:subtitle>
         <:action>
           <.button variant="primary" navigate={~p"/properties/new"}>
             <.icon name="hero-plus" class="w-5 h-5 mr-2" /> New Property
@@ -325,7 +331,7 @@ defmodule VivvoWeb.CoreComponents do
       </.page_header>
   """
   attr :title, :string, required: true, doc: "the page title"
-  attr :back_navigate, :any, required: true, doc: "navigate path for back button"
+  attr :back_navigate, :any, default: nil, doc: "navigate path for back button (optional)"
   slot :subtitle, doc: "optional subtitle or description"
   slot :action, doc: "action buttons displayed on the right side"
 
@@ -333,12 +339,15 @@ defmodule VivvoWeb.CoreComponents do
     ~H"""
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div class="flex items-center gap-4">
-        <.link
-          navigate={@back_navigate}
-          class="flex items-center justify-center w-10 h-10 rounded-xl bg-base-100 border border-base-200 text-base-content/60 hover:text-primary hover:border-primary/30 transition-all"
-        >
-          <.icon name="hero-arrow-left" class="w-5 h-5" />
-        </.link>
+        <%= if @back_navigate do %>
+          <.link
+            navigate={@back_navigate}
+            class="flex items-center justify-center w-10 h-10 rounded-xl bg-base-100 border border-base-200 text-base-content/60 hover:text-primary hover:border-primary/30 transition-all"
+            aria-label="Back"
+          >
+            <.icon name="hero-arrow-left" class="w-5 h-5" />
+          </.link>
+        <% end %>
         <div>
           <h1 class="text-2xl sm:text-3xl font-bold text-base-content">{@title}</h1>
           <%= if @subtitle != [] do %>
