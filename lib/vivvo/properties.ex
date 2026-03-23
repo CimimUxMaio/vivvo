@@ -44,7 +44,7 @@ defmodule Vivvo.Properties do
       [%Property{}, ...]
 
       iex> list_properties(scope, preload: [:contract])
-      [%Property{contract: %Contract{}}, ...]
+      [%Property{contract: %Vivvo.Contracts.Contract{}}, ...]
 
   """
   def list_properties(%Scope{} = scope, opts \\ []) do
