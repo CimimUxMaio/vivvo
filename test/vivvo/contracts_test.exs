@@ -1801,23 +1801,26 @@ defmodule Vivvo.ContractsTest do
 
     test "returns nil when update would be after contract end_date" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
 
-      # Create contract ending soon - one month duration
+      # Use fixed dates to ensure deterministic behavior
+      # Contract: Jan 1 - Jan 15, 2026 with 1-month rent periods
+      # Period 1: Jan 1 - Jan 15 (capped at end_date)
+      # update_date = Jan 16 which is after contract end_date
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: Date.add(today, -20),
-            end_date: Date.add(today, 10),
+            start_date: ~D[2026-01-01],
+            end_date: ~D[2026-01-15],
             rent_period_duration: 1,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: ~D[2026-01-10]
         )
 
-      # The next update date would be after the contract ends
+      # The next update date (Jan 16) would be after the contract ends (Jan 15)
       result = Contracts.next_rent_update_date(contract)
 
       # Should return nil because next update would be after contract end
@@ -2350,10 +2353,14 @@ defmodule Vivvo.ContractsTest do
       scope: scope,
       tenant_scope: tenant_scope
     } do
-      today = Date.utc_today()
-      # Contract started ~2 months ago to ensure exactly 3 payment periods
-      # Using 55 days ensures we span 3 months but don't create a 4th period
-      start_date = Date.add(today, -55)
+      # Use fixed dates to ensure deterministic behavior
+      # Contract: Jan 15, 2026 with expiration_day: 1
+      # Payment 1 due: Jan 1, 2026
+      # Payment 2 due: Feb 1, 2026
+      # Payment 3 due: Mar 1, 2026
+      # Today: Mar 20, 2026 (all 3 payments are past due)
+      today = ~D[2026-03-20]
+      start_date = ~D[2026-01-15]
 
       contract =
         contract_fixture(
@@ -2368,7 +2375,8 @@ defmodule Vivvo.ContractsTest do
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: today
         )
 
       # Verify we have exactly 3 past payment periods
