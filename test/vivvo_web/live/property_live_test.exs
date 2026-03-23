@@ -46,7 +46,7 @@ defmodule VivvoWeb.PropertyLiveTest do
     test "lists all properties", %{conn: conn, property: property} do
       {:ok, _index_live, html} = live(conn, ~p"/properties")
 
-      assert html =~ "Listing Properties"
+      assert html =~ "Properties"
       assert html =~ property.name
     end
 
@@ -81,7 +81,7 @@ defmodule VivvoWeb.PropertyLiveTest do
 
       assert {:ok, form_live, _html} =
                index_live
-               |> element("#properties-#{property.id} a", "Edit")
+               |> element("#properties-#{property.id} a[title='Edit']")
                |> render_click()
                |> follow_redirect(conn, ~p"/properties/#{property}/edit")
 
@@ -105,7 +105,10 @@ defmodule VivvoWeb.PropertyLiveTest do
     test "deletes property in listing", %{conn: conn, property: property} do
       {:ok, index_live, _html} = live(conn, ~p"/properties")
 
-      assert index_live |> element("#properties-#{property.id} a", "Delete") |> render_click()
+      assert index_live
+             |> element("#properties-#{property.id} button[title='Delete']")
+             |> render_click()
+
       refute has_element?(index_live, "#properties-#{property.id}")
     end
 

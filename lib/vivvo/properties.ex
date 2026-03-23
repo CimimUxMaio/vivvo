@@ -34,14 +34,26 @@ defmodule Vivvo.Properties do
   @doc """
   Returns the list of properties.
 
+  ## Options
+
+    * `:preload` - A list of associations to preload (e.g., `[:contract]`)
+
   ## Examples
 
       iex> list_properties(scope)
       [%Property{}, ...]
 
+      iex> list_properties(scope, preload: [:contract])
+      [%Property{contract: %Vivvo.Contracts.Contract{}}, ...]
+
   """
-  def list_properties(%Scope{} = scope) do
-    Repo.all_by(Property, user_id: scope.user.id, archived: false)
+  def list_properties(%Scope{} = scope, opts \\ []) do
+    preloads = Keyword.get(opts, :preload, [])
+
+    Property
+    |> where([p], p.user_id == ^scope.user.id and p.archived == false)
+    |> preload(^preloads)
+    |> Repo.all()
   end
 
   @doc """
