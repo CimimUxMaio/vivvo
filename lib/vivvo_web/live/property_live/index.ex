@@ -9,6 +9,7 @@ defmodule VivvoWeb.PropertyLive.Index do
   use VivvoWeb, :live_view
 
   alias Vivvo.Contracts
+  alias Vivvo.Contracts.Contract
   alias Vivvo.Properties
   alias Vivvo.Properties.Property
 
@@ -262,6 +263,7 @@ defmodule VivvoWeb.PropertyLive.Index do
 
     if connected?(socket) do
       Properties.subscribe_properties(socket.assigns.current_scope)
+      Contracts.subscribe_contracts(socket.assigns.current_scope)
     end
 
     {:ok,
@@ -300,6 +302,24 @@ defmodule VivvoWeb.PropertyLive.Index do
   def handle_info({type, %Property{user_id: user_id}}, socket)
       when type in [:created, :updated, :deleted] do
     # Only process messages for properties belonging to current user
+    if user_id == socket.assigns.current_scope.user.id do
+      properties = list_properties(socket.assigns.current_scope)
+      property_statuses = build_property_statuses(properties)
+
+      {:noreply,
+       socket
+       |> assign(:property_statuses, property_statuses)
+       |> assign(:properties_empty?, properties == [])
+       |> stream(:properties, properties, reset: true)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info({type, %Contract{user_id: user_id}}, socket)
+      when type in [:created, :updated, :deleted] do
+    # Only process messages for contracts belonging to current user
     if user_id == socket.assigns.current_scope.user.id do
       properties = list_properties(socket.assigns.current_scope)
       property_statuses = build_property_statuses(properties)
