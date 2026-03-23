@@ -15,6 +15,20 @@ defmodule VivvoWeb.PropertyLive.Form do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="space-y-6 sm:space-y-8">
+        <%!-- Page Header --%>
+        <.page_header
+          title={@page_title}
+          back_navigate={return_path(@current_scope, @return_to, @property)}
+        >
+          <:subtitle>
+            <%= if @live_action == :new do %>
+              Create a new property listing
+            <% else %>
+              Update your property details
+            <% end %>
+          </:subtitle>
+        </.page_header>
+
         <%!-- Main Content: Two Column Layout --%>
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <%!-- Left Side: Property Preview Card (40%) --%>
@@ -40,7 +54,8 @@ defmodule VivvoWeb.PropertyLive.Form do
   # Property Preview Card Component - Live updating preview
   defp property_preview_card(assigns) do
     # Extract form values for live preview
-    name = get_form_value(assigns.form, :name, "New Property")
+    page_title = assigns[:page_title] || "Property"
+    name = get_form_value(assigns.form, :name, page_title)
     address = get_form_value(assigns.form, :address, "Address will appear here...")
     area = get_form_value(assigns.form, :area, nil)
     rooms = get_form_value(assigns.form, :rooms, nil)

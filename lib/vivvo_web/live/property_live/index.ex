@@ -19,19 +19,14 @@ defmodule VivvoWeb.PropertyLive.Index do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="space-y-6 sm:space-y-8">
         <%!-- Page Header --%>
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-base-content">
-              Properties
-            </h1>
-            <p class="mt-1 text-sm text-base-content/70">
-              Manage your rental properties and track their occupancy status.
-            </p>
-          </div>
-          <.button variant="primary" navigate={~p"/properties/new"}>
-            <.icon name="hero-plus" class="w-5 h-5 mr-2" /> New Property
-          </.button>
-        </div>
+        <.page_header title="Properties" back_navigate={~p"/"}>
+          <:subtitle>Manage your rental properties and track their occupancy status.</:subtitle>
+          <:action>
+            <.button variant="primary" navigate={~p"/properties/new"}>
+              <.icon name="hero-plus" class="w-5 h-5 mr-2" /> New Property
+            </.button>
+          </:action>
+        </.page_header>
 
         <%!-- Properties Table Container --%>
         <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 overflow-hidden">
