@@ -57,8 +57,6 @@ defmodule VivvoWeb.CoreComponents do
         [base_class, class]
       end)
 
-    IO.inspect(assigns.class, label: "Button classes")
-
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""
       <.link class={@class} {@rest}>
