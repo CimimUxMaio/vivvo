@@ -919,9 +919,9 @@ defmodule VivvoWeb.HomeLive do
         <div class="p-8 text-center">
           <.icon name="hero-building-office" class="w-12 h-12 mx-auto text-base-content/30 mb-3" />
           <p class="text-base-content/60">No active properties found</p>
-          <.link href={~p"/properties/new"} class="btn btn-primary btn-sm mt-4">
+          <.button navigate={~p"/properties/new"} variant="primary" class="btn-sm mt-4">
             <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Add Property
-          </.link>
+          </.button>
         </div>
       <% end %>
     </div>
@@ -1101,20 +1101,20 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Actions + Expansion indicator --%>
           <div class="flex items-center gap-2 mt-1">
             <div phx-click-stop class="flex-1 flex items-center gap-2">
-              <button
+              <.button
                 phx-click="accept_payment"
                 phx-value-id={@payment.id}
-                class="btn btn-success btn-sm flex-1"
+                class="btn-success btn-sm flex-1"
               >
                 <.icon name="hero-check" class="w-4 h-4" />
-              </button>
-              <button
+              </.button>
+              <.button
                 phx-click="show_reject_modal"
                 phx-value-payment-id={@payment.id}
-                class="btn btn-error btn-outline btn-sm flex-1"
+                class="btn-error btn-sm flex-1"
               >
                 <.icon name="hero-x-mark" class="w-4 h-4" />
-              </button>
+              </.button>
             </div>
             <%!-- Mobile expansion indicator --%>
             <%= if @has_details do %>
@@ -1197,20 +1197,20 @@ defmodule VivvoWeb.HomeLive do
 
           <%!-- Actions Column (col-span-2) with phx-click-stop --%>
           <div phx-click-stop class="col-span-2 flex items-center gap-2 justify-center">
-            <button
+            <.button
               phx-click="accept_payment"
               phx-value-id={@payment.id}
-              class="btn btn-success btn-sm"
+              class="btn-success btn-sm"
             >
               <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept
-            </button>
-            <button
+            </.button>
+            <.button
               phx-click="show_reject_modal"
               phx-value-payment-id={@payment.id}
-              class="btn btn-error btn-outline btn-sm"
+              class="btn-error btn-sm"
             >
               <.icon name="hero-x-mark" class="w-4 h-4 mr-1" /> Reject
-            </button>
+            </.button>
           </div>
 
           <%!-- Expansion Toggle (col-span-1) --%>
@@ -1581,23 +1581,25 @@ defmodule VivvoWeb.HomeLive do
           </div>
 
           <%= if @cta_type == :submit_payment do %>
-            <button
+            <.button
               phx-click="show_payment_modal"
               phx-value-contract-id={@contract_id}
               phx-value-month={@month}
-              class="btn btn-primary shadow-lg shadow-primary/25 whitespace-nowrap"
+              variant="primary"
+              class="shadow-lg shadow-primary/25 whitespace-nowrap"
             >
               <.icon name={@cta_icon} class="w-5 h-5 mr-2" />
               {@cta_text}
-            </button>
+            </.button>
           <% else %>
-            <button
+            <.button
               phx-click="scroll_to_payments"
-              class="btn btn-primary shadow-lg shadow-primary/25 whitespace-nowrap"
+              variant="primary"
+              class="shadow-lg shadow-primary/25 whitespace-nowrap"
             >
               <.icon name={@cta_icon} class="w-5 h-5 mr-2" />
               {@cta_text}
-            </button>
+            </.button>
           <% end %>
         </div>
       </div>
@@ -1969,15 +1971,16 @@ defmodule VivvoWeb.HomeLive do
     assigns = assign(assigns, :extra_class, extra_class)
 
     ~H"""
-    <button
+    <.button
       phx-click="show_payment_modal"
       phx-value-contract-id={@contract_id}
       phx-value-month={@month}
-      class={["btn btn-primary btn-sm whitespace-nowrap", @extra_class]}
+      variant="primary"
+      class={["btn-sm whitespace-nowrap", @extra_class]}
       phx-stop
     >
       <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Pay
-    </button>
+    </.button>
     """
   end
 

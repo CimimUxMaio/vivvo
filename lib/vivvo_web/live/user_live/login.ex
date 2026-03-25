@@ -138,6 +138,7 @@ defmodule VivvoWeb.UserLive.Login do
       />
       <.button
         class="w-full btn btn-primary"
+        variant="primary"
         phx-disable-with="Sending link..."
       >
         <span class="flex items-center justify-center gap-2">
@@ -173,6 +174,7 @@ defmodule VivvoWeb.UserLive.Login do
           field={@form[:password]}
           type="password"
           label="Password"
+          placeholder="**********"
           autocomplete="current-password"
           required
         />
@@ -193,7 +195,8 @@ defmodule VivvoWeb.UserLive.Login do
       </div>
 
       <.button
-        class="w-full btn btn-primary"
+        class="w-full"
+        variant="primary"
         phx-disable-with="Signing in..."
       >
         <span class="flex items-center justify-center gap-2">
