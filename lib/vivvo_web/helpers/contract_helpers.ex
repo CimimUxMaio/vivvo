@@ -8,7 +8,8 @@ defmodule VivvoWeb.Helpers.ContractHelpers do
   def rent_period_duration_label(nil), do: nil
   def rent_period_duration_label(1), do: "Monthly"
   def rent_period_duration_label(12), do: "Yearly"
-  def rent_period_duration_label(months) when months > 0, do: "Every #{months} months"
+  def rent_period_duration_label(months) when months > 1, do: "Every #{months} months"
+  def rent_period_duration_label(_), do: nil
 
   def format_duration(start_date, end_date) do
     days = Date.diff(end_date, start_date)
@@ -20,7 +21,7 @@ defmodule VivvoWeb.Helpers.ContractHelpers do
       years > 0 && remaining_months > 0 -> "#{years}y #{remaining_months}m"
       years > 0 -> "#{years} year#{if years > 1, do: "s"}"
       months > 0 -> "#{months} month#{if months > 1, do: "s"}"
-      true -> "#{days} day#{if days > 1, do: "s"}"
+      true -> "#{days} day#{if days != 1, do: "s"}"
     end
   end
 

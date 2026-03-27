@@ -10,6 +10,7 @@ defmodule VivvoWeb.PropertyLive.Show do
   import VivvoWeb.Helpers.ContractHelpers
 
   alias Vivvo.Contracts
+  alias Vivvo.Payments
   alias Vivvo.Properties
 
   @impl true
@@ -146,6 +147,8 @@ defmodule VivvoWeb.PropertyLive.Show do
                       contracts={@contracts}
                       property={@property}
                     />
+                  <% _ -> %>
+                    <.active_contract_tab contract={@contract} property={@property} />
                 <% end %>
               </div>
             </div>
@@ -488,13 +491,15 @@ defmodule VivvoWeb.PropertyLive.Show do
     if connected?(socket) do
       Properties.subscribe_properties(socket.assigns.current_scope)
       Contracts.subscribe_contracts(socket.assigns.current_scope)
+      Payments.subscribe_payments(socket.assigns.current_scope)
     end
 
     {:ok, assign_data(socket, id)}
   end
 
   @impl true
-  def handle_event("switch_tab", %{"selected" => tab}, socket) do
+  def handle_event("switch_tab", %{"selected" => tab}, socket)
+      when tab in ["active_contract", "contract_history"] do
     {:noreply, assign(socket, :active_tab, tab)}
   end
 
@@ -520,8 +525,15 @@ defmodule VivvoWeb.PropertyLive.Show do
   end
 
   # Refreshes all property data when an update is received
+  # Preserves user state (active tab, modal visibility) to avoid disrupting the UI
   defp refresh_data(socket) do
-    assign_data(socket, socket.assigns.property.id)
+    active_tab = socket.assigns.active_tab
+    show_modal = socket.assigns.show_contract_modal
+
+    socket
+    |> assign_data(socket.assigns.property.id)
+    |> assign(:active_tab, active_tab)
+    |> assign(:show_contract_modal, show_modal)
   end
 
   @impl true
