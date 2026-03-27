@@ -1920,7 +1920,10 @@ defmodule VivvoWeb.HomeLive do
             <%!-- Timeline Items using timeline_container component --%>
             <.timeline_container gap={:sm}>
               <:timeline_item
-                :for={{payment, config} <- Enum.map(@item.payments, &{&1, payment_timeline_config(&1.status)})}
+                :for={
+                  {payment, config} <-
+                    Enum.map(@item.payments, &{&1, payment_timeline_config(&1.status)})
+                }
                 status={config.status}
                 icon={config.icon}
                 label={config.label}
