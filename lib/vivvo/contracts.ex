@@ -96,6 +96,27 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
+  Returns all non-archived contracts for a specific property, sorted by start date descending.
+
+  Preloads tenant and rent_periods associations.
+
+  ## Examples
+
+      iex> list_property_contracts(scope, 123)
+      [%Contract{tenant: %User{}, rent_periods: [...]}, ...]
+
+  """
+  def list_property_contracts(%Scope{} = scope, property_id) do
+    from(c in Contract,
+      where:
+        c.property_id == ^property_id and c.user_id == ^scope.user.id and c.archived == false,
+      preload: [:tenant, :rent_periods],
+      order_by: [desc: c.start_date]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
   Creates a contract.
 
   ## Options
