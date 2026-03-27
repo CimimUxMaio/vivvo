@@ -1920,10 +1920,10 @@ defmodule VivvoWeb.HomeLive do
             <%!-- Timeline Items using timeline_container component --%>
             <.timeline_container gap={:sm}>
               <:timeline_item
-                :for={payment <- @item.payments}
-                status={payment_timeline_config(payment.status).status}
-                icon={payment_timeline_config(payment.status).icon}
-                label={payment_timeline_config(payment.status).label}
+                :for={{payment, config} <- Enum.map(@item.payments, &{&1, payment_timeline_config(&1.status)})}
+                status={config.status}
+                icon={config.icon}
+                label={config.label}
               >
                 <%!-- Header: Amount & Date --%>
                 <div class="flex items-start justify-between gap-2 mb-2">
