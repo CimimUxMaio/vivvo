@@ -7,6 +7,8 @@ defmodule VivvoWeb.PropertyLive.Show do
   """
   use VivvoWeb, :live_view
 
+  import VivvoWeb.Helpers.ContractHelpers
+
   alias Vivvo.Contracts
   alias Vivvo.Properties
 
@@ -16,29 +18,21 @@ defmodule VivvoWeb.PropertyLive.Show do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="space-y-6 sm:space-y-8">
         <%!-- Page Header --%>
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-base-content">
-              Property {@property.name}
-            </h1>
-            <p class="mt-1 text-sm text-base-content/70">
-              {@property.address}
-            </p>
-          </div>
-          <div class="flex items-center gap-2">
-            <.button navigate={~p"/properties"}>
-              <.icon name="hero-arrow-left" class="w-5 h-5" />
-            </.button>
+        <.page_header title={"Property #{@property.name}"} back_navigate={~p"/properties"}>
+          <:subtitle>
+            {@property.address}
+          </:subtitle>
+          <:action>
             <.button variant="primary" navigate={~p"/properties/#{@property}/edit?return_to=show"}>
               <.icon name="hero-pencil-square" class="w-5 h-5 mr-1" /> Edit
             </.button>
-          </div>
-        </div>
+          </:action>
+        </.page_header>
 
         <%!-- Main Two-Column Layout --%>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <%!-- Left Sidebar: Property Summary Card (1/3 width on desktop) --%>
-          <div class="lg:col-span-1">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <%!-- Left Sidebar: Property Summary Card (40% width on desktop) --%>
+          <div class="lg:col-span-2">
             <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6 lg:sticky lg:top-6">
               <%!-- Hero Icon --%>
               <div class="flex justify-center mb-6">
@@ -105,93 +99,51 @@ defmodule VivvoWeb.PropertyLive.Show do
             </div>
           </div>
 
-          <%!-- Right Side: Tabbed Content (2/3 width on desktop) --%>
-          <div class="lg:col-span-2">
+          <%!-- Right Side: Tabbed Content (60% width on desktop) --%>
+          <div class="lg:col-span-3">
             <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200">
               <%!-- Tab Navigation --%>
-              <div class="flex items-center gap-1 p-2 border-b border-base-200 overflow-x-auto">
-                <button
-                  phx-click="switch_tab"
-                  phx-value-tab="details"
-                  class={[
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap",
-                    "hover:bg-base-200/50 focus:outline-none focus:ring-2 focus:ring-primary/20",
-                    @active_tab == "details" &&
-                      [
-                        "bg-primary/10 text-primary",
-                        "ring-1 ring-primary/20"
-                      ],
-                    @active_tab != "details" && "text-base-content/70 hover:text-base-content"
-                  ]}
+              <div class="p-3 border-b border-base-200">
+                <.sliding_selector
+                  value={@active_tab}
+                  on_select="switch_tab"
                 >
-                  <div class="flex items-center gap-2">
-                    <.icon name="hero-information-circle" class="w-4 h-4" /> Property Details
-                  </div>
-                </button>
-
-                <button
-                  phx-click="switch_tab"
-                  phx-value-tab="active_contract"
-                  class={[
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap",
-                    "hover:bg-base-200/50 focus:outline-none focus:ring-2 focus:ring-primary/20",
-                    @active_tab == "active_contract" &&
-                      [
-                        "bg-primary/10 text-primary",
-                        "ring-1 ring-primary/20"
-                      ],
-                    @active_tab != "active_contract" && "text-base-content/70 hover:text-base-content"
-                  ]}
-                >
-                  <div class="flex items-center gap-2">
-                    <.icon name="hero-document-text" class="w-4 h-4" /> Active Contract
-                    <%= if @contract do %>
-                      <span class={[
-                        "w-2 h-2 rounded-full",
-                        Contracts.contract_status(@contract) == :active && "bg-success",
-                        Contracts.contract_status(@contract) == :upcoming && "bg-info"
-                      ]}>
-                      </span>
-                    <% end %>
-                  </div>
-                </button>
-
-                <button
-                  phx-click="switch_tab"
-                  phx-value-tab="contract_history"
-                  class={[
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap",
-                    "hover:bg-base-200/50 focus:outline-none focus:ring-2 focus:ring-primary/20",
-                    @active_tab == "contract_history" &&
-                      [
-                        "bg-primary/10 text-primary",
-                        "ring-1 ring-primary/20"
-                      ],
-                    @active_tab != "contract_history" &&
-                      "text-base-content/70 hover:text-base-content"
-                  ]}
-                >
-                  <div class="flex items-center gap-2">
-                    <.icon name="hero-clock" class="w-4 h-4" /> Contract History
-                    <%= if @historic_contracts != [] do %>
-                      <span class="px-1.5 py-0.5 bg-base-200 rounded-full text-xs">
-                        {length(@historic_contracts)}
-                      </span>
-                    <% end %>
-                  </div>
-                </button>
+                  <:option value="active_contract">
+                    <span class="flex items-center gap-1">
+                      <.icon name="hero-document-text" class="w-4 h-4" />
+                      <span>Active Contract</span>
+                      <%= if @contract do %>
+                        <span class={[
+                          "w-1.5 h-1.5 rounded-full",
+                          Contracts.contract_status(@contract) == :active && "bg-success",
+                          Contracts.contract_status(@contract) == :upcoming && "bg-info"
+                        ]}>
+                        </span>
+                      <% end %>
+                    </span>
+                  </:option>
+                  <:option value="contract_history">
+                    <span class="flex items-center gap-1">
+                      <.icon name="hero-clock" class="w-4 h-4" />
+                      <span>Contract History</span>
+                      <%= if @contracts != [] do %>
+                        <span class="text-xs">
+                          ({length(@contracts)})
+                        </span>
+                      <% end %>
+                    </span>
+                  </:option>
+                </.sliding_selector>
               </div>
 
               <%!-- Tab Content --%>
               <div class="p-6">
                 <%= case @active_tab do %>
-                  <% "details" -> %>
-                    <.property_details_tab property={@property} />
                   <% "active_contract" -> %>
                     <.active_contract_tab contract={@contract} property={@property} />
                   <% "contract_history" -> %>
                     <.contract_history_tab
-                      historic_contracts={@historic_contracts}
+                      contracts={@contracts}
                       property={@property}
                     />
                 <% end %>
@@ -215,148 +167,60 @@ defmodule VivvoWeb.PropertyLive.Show do
     """
   end
 
-  # Property Details Tab Component
-  defp property_details_tab(assigns) do
-    ~H"""
-    <div class="space-y-6">
-      <%!-- Section Header --%>
-      <div class="flex items-center gap-2 pb-4 border-b border-base-200">
-        <div class="p-1.5 bg-primary/10 rounded-lg">
-          <.icon name="hero-information-circle" class="w-5 h-5 text-primary" />
-        </div>
-        <h3 class="text-lg font-semibold text-base-content">Property Information</h3>
-      </div>
-
-      <%!-- Details Grid --%>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <%!-- Name --%>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-base-content/60">Property Name</label>
-          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
-            <.icon name="hero-building-office" class="w-5 h-5 text-base-content/50" />
-            <span class="font-medium text-base-content">{@property.name}</span>
-          </div>
-        </div>
-
-        <%!-- Address --%>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-base-content/60">Address</label>
-          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
-            <.icon name="hero-map-pin" class="w-5 h-5 text-base-content/50" />
-            <span class="font-medium text-base-content">{@property.address}</span>
-          </div>
-        </div>
-
-        <%!-- Area --%>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-base-content/60">Area</label>
-          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
-            <.icon name="hero-square-3-stack-3d" class="w-5 h-5 text-base-content/50" />
-            <span class="font-medium text-base-content">
-              <%= if @property.area do %>
-                {@property.area} m²
-              <% else %>
-                Not specified
-              <% end %>
-            </span>
-          </div>
-        </div>
-
-        <%!-- Rooms --%>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-base-content/60">Rooms</label>
-          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
-            <.icon name="hero-home" class="w-5 h-5 text-base-content/50" />
-            <span class="font-medium text-base-content">
-              <%= if @property.rooms do %>
-                {@property.rooms} rooms
-              <% else %>
-                Not specified
-              <% end %>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <%!-- Notes Section --%>
-      <div class="space-y-2">
-        <label class="text-sm font-medium text-base-content/60">Notes</label>
-        <div class="p-4 bg-base-200/50 rounded-lg">
-          <%= if @property.notes && @property.notes != "" do %>
-            <div class="flex items-start gap-3">
-              <.icon
-                name="hero-document-text"
-                class="w-5 h-5 text-base-content/50 flex-shrink-0 mt-0.5"
-              />
-              <p class="text-base-content/80 whitespace-pre-wrap">{@property.notes}</p>
-            </div>
-          <% else %>
-            <div class="flex items-center gap-3 text-base-content/50">
-              <.icon name="hero-document-text" class="w-5 h-5" />
-              <span>No notes available for this property.</span>
-            </div>
-          <% end %>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
   # Active Contract Tab Component
   defp active_contract_tab(assigns) do
     ~H"""
     <div class="space-y-6">
       <%= if @contract do %>
         <%!-- Section Header with Status --%>
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-base-200">
+        <div class="flex items-center justify-between gap-4 pb-4 border-b border-base-200">
           <div class="flex items-center gap-2">
-            <div class="p-1.5 bg-success/10 rounded-lg">
+            <div class="p-1.5 bg-success/10 rounded-lg flex items-center justify-center">
               <.icon name="hero-document-text" class="w-5 h-5 text-success" />
             </div>
             <h3 class="text-lg font-semibold text-base-content">Active Contract</h3>
           </div>
-          <.contract_status_badge status={Contracts.contract_status(@contract)} />
-        </div>
-
-        <%!-- Tenant Information --%>
-        <div class="bg-base-200/30 rounded-xl p-5">
-          <h4 class="text-sm font-medium text-base-content/60 mb-4">Current Tenant</h4>
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-              <span class="text-lg font-bold text-primary">
-                {String.first(@contract.tenant.first_name)}{String.first(@contract.tenant.last_name)}
-              </span>
-            </div>
-            <div>
-              <p class="text-lg font-semibold text-base-content">
-                {@contract.tenant.first_name} {@contract.tenant.last_name}
-              </p>
-              <p class="text-sm text-base-content/60">
-                {@contract.tenant.email}
-              </p>
-            </div>
-          </div>
+          <.button phx-click="show_contract_modal">
+            <.icon name="hero-eye" class="w-5 h-5" />
+            <span class="hidden sm:block">View Full Details</span>
+          </.button>
         </div>
 
         <%!-- Contract Details Grid --%>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <%!-- Current Tenant --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Current Tenant</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <span class="text-xs font-bold text-primary">
+                  {String.first(@contract.tenant.first_name)}{String.first(@contract.tenant.last_name)}
+                </span>
+              </div>
+              <div class="min-w-0">
+                <p class="font-medium text-base-content text-sm truncate">
+                  {@contract.tenant.first_name} {@contract.tenant.last_name}
+                </p>
+                <p class="text-xs text-base-content/60 truncate">
+                  {@contract.tenant.email}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <%!-- Monthly Rent --%>
           <div class="space-y-2">
             <label class="text-sm font-medium text-base-content/60">Monthly Rent</label>
             <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
               <.icon name="hero-banknotes" class="w-5 h-5 text-base-content/50" />
-              <span class="font-semibold text-base-content">
+              <span class="font-semibold text-base-content flex items-center gap-2">
                 {format_currency(Contracts.current_rent_value(@contract))}
+                <%= if @contract.index_type do %>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+                    <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+                  </span>
+                <% end %>
               </span>
-            </div>
-          </div>
-
-          <%!-- Contract Status --%>
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-base-content/60">Status</label>
-            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
-              <.icon name="hero-check-circle" class="w-5 h-5 text-base-content/50" />
-              <.contract_status_badge status={Contracts.contract_status(@contract)} />
             </div>
           </div>
 
@@ -381,22 +245,62 @@ defmodule VivvoWeb.PropertyLive.Show do
               </span>
             </div>
           </div>
+
+          <%!-- Payment Due --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Payment Due</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-calendar-days" class="w-5 h-5 text-base-content/50" />
+              <span class="font-medium text-base-content">
+                Day {@contract.expiration_day} of each month
+              </span>
+            </div>
+          </div>
+
+          <%!-- Indexing Information (only shown when contract has indexing) --%>
+          <%= if @contract.index_type do %>
+            <%!-- Index Type --%>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-base-content/60">Index Type</label>
+              <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+                <.icon name="hero-arrow-trending-up" class="w-5 h-5 text-base-content/50" />
+                <span class="font-medium text-base-content">
+                  {index_type_label(@contract.index_type)}
+                </span>
+              </div>
+            </div>
+
+            <%!-- Update Frequency --%>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-base-content/60">Update Frequency</label>
+              <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+                <.icon name="hero-arrow-path" class="w-5 h-5 text-base-content/50" />
+                <span class="font-medium text-base-content">
+                  {rent_period_duration_label(@contract.rent_period_duration)}
+                </span>
+              </div>
+            </div>
+
+            <%!-- Next Rent Update --%>
+            <.next_rent_update_field contract={@contract} />
+          <% end %>
         </div>
 
-        <%!-- Duration Badge --%>
-        <div class="flex items-center gap-2 p-3 bg-info/10 rounded-lg border border-info/20">
-          <.icon name="hero-clock" class="w-5 h-5 text-info" />
-          <span class="text-sm text-base-content/80">
-            Contract duration: {calculate_duration(@contract.start_date, @contract.end_date)}
-          </span>
-        </div>
-
-        <%!-- Actions --%>
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-4 border-t border-base-200">
-          <.button phx-click="show_contract_modal" class="flex-1 sm:flex-none">
-            <.icon name="hero-eye" class="w-5 h-5 mr-1" /> View Full Details
-          </.button>
-        </div>
+        <%!-- Contract Notes --%>
+        <%= if @contract.notes && @contract.notes != "" do %>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Notes</label>
+            <div class="p-4 bg-base-200/50 rounded-lg">
+              <div class="flex items-start gap-3">
+                <.icon
+                  name="hero-document-text"
+                  class="w-5 h-5 text-base-content/50 flex-shrink-0 mt-0.5"
+                />
+                <p class="text-sm text-base-content/80 whitespace-pre-wrap">{@contract.notes}</p>
+              </div>
+            </div>
+          </div>
+        <% end %>
       <% else %>
         <%!-- Empty State --%>
         <div class="text-center py-12">
@@ -418,73 +322,107 @@ defmodule VivvoWeb.PropertyLive.Show do
 
   # Contract History Tab Component
   defp contract_history_tab(assigns) do
+    configs =
+      assigns
+      |> Map.get(:contracts, [])
+      |> Enum.map(&{&1.id, contract_timeline_config(Contracts.contract_status(&1))})
+      |> Map.new()
+
+    assigns = assign(assigns, :configs, configs)
+
     ~H"""
     <div class="space-y-6">
       <%!-- Section Header --%>
       <div class="flex items-center gap-2 pb-4 border-b border-base-200">
-        <div class="p-1.5 bg-info/10 rounded-lg">
+        <div class="p-1.5 flex items-center justify-center bg-info/10 rounded-lg">
           <.icon name="hero-clock" class="w-5 h-5 text-info" />
         </div>
         <h3 class="text-lg font-semibold text-base-content">Contract History</h3>
       </div>
 
-      <%= if @historic_contracts != [] do %>
-        <div class="space-y-4">
-          <%= for contract <- @historic_contracts do %>
-            <div class="bg-base-200/30 rounded-xl p-5 hover:bg-base-200/50 transition-colors">
-              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <%!-- Tenant Info --%>
-                <div class="flex items-center gap-4">
-                  <div class="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
-                    <span class="text-sm font-bold text-base-content/70">
+      <%= if @contracts != [] do %>
+        <div class="bg-base-200 rounded-xl">
+          <.timeline_container>
+            <:timeline_item
+              :for={contract <- @contracts}
+              status={@configs[contract.id].status}
+              icon={@configs[contract.id].icon}
+              label={"#{contract.tenant.first_name} #{contract.tenant.last_name}"}
+            >
+              <%!-- Header: Tenant & Status --%>
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <%!-- Tenant Avatar --%>
+                  <div
+                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"
+                    title={"#{contract.tenant.first_name} #{contract.tenant.last_name}"}
+                    aria-label={"Avatar for #{contract.tenant.first_name} #{contract.tenant.last_name}"}
+                  >
+                    <span class="text-xs font-bold text-primary">
                       {String.first(contract.tenant.first_name)}{String.first(
                         contract.tenant.last_name
                       )}
                     </span>
                   </div>
-                  <div>
-                    <p class="font-semibold text-base-content">
+
+                  <%!-- Tenant Info --%>
+                  <div class="min-w-0">
+                    <p class="font-semibold text-base-content truncate">
                       {contract.tenant.first_name} {contract.tenant.last_name}
                     </p>
-                    <p class="text-sm text-base-content/60">{contract.tenant.email}</p>
+                    <p class="text-xs text-base-content/60 truncate">
+                      {contract.tenant.email}
+                    </p>
                   </div>
                 </div>
 
-                <%!-- Contract Details --%>
-                <div class="flex flex-col items-start sm:items-end gap-2">
-                  <.contract_status_badge status={:expired} />
-                  <div class="flex items-center gap-2 text-sm text-base-content/60">
-                    <.icon name="hero-calendar" class="w-4 h-4" />
-                    {format_date(contract.start_date)} - {format_date(contract.end_date)}
-                  </div>
-                </div>
+                <%!-- Status Badge --%>
+                <.contract_status_badge status={Contracts.contract_status(contract)} />
               </div>
 
-              <%!-- Contract Stats --%>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-base-300/50">
+              <%!-- Contract Period --%>
+              <div class="flex items-center gap-2 text-sm text-base-content/70 mb-3">
+                <.icon name="hero-calendar" class="w-4 h-4 flex-shrink-0" />
+                <span>{format_date(contract.start_date)} - {format_date(contract.end_date)}</span>
+                <span class="text-base-content/40">
+                  ({format_duration(contract.start_date, contract.end_date)})
+                </span>
+              </div>
+
+              <%!-- Contract Details Grid --%>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-base-200">
+                <%!-- Monthly Rent --%>
                 <div>
-                  <p class="text-xs text-base-content/50 mb-1">Monthly Rent</p>
-                  <p class="font-medium text-base-content">
+                  <p class="text-xs text-base-content/50 mb-0.5">Monthly Rent</p>
+                  <p class="font-semibold text-base-content">
                     {format_currency(Contracts.current_rent_value(contract))}
                   </p>
                 </div>
+
+                <%!-- Payment Due --%>
                 <div>
-                  <p class="text-xs text-base-content/50 mb-1">Duration</p>
-                  <p class="font-medium text-base-content">
-                    {calculate_duration(contract.start_date, contract.end_date)}
+                  <p class="text-xs text-base-content/50 mb-0.5">Payment Due</p>
+                  <p class="font-medium text-base-content text-sm">
+                    Day {contract.expiration_day}
                   </p>
                 </div>
-                <div>
-                  <p class="text-xs text-base-content/50 mb-1">Start Date</p>
-                  <p class="font-medium text-base-content">{format_date(contract.start_date)}</p>
-                </div>
-                <div>
-                  <p class="text-xs text-base-content/50 mb-1">End Date</p>
-                  <p class="font-medium text-base-content">{format_date(contract.end_date)}</p>
-                </div>
               </div>
-            </div>
-          <% end %>
+
+              <%!-- Indexing Indicator (if applicable) --%>
+              <%= if contract.index_type do %>
+                <div class="mt-3 pt-3 border-t border-base-200">
+                  <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+                      <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+                    </span>
+                    <span class="text-xs text-base-content/50">
+                      {index_type_label(contract.index_type)}
+                    </span>
+                  </div>
+                </div>
+              <% end %>
+            </:timeline_item>
+          </.timeline_container>
         </div>
       <% else %>
         <%!-- Empty State --%>
@@ -492,29 +430,57 @@ defmodule VivvoWeb.PropertyLive.Show do
           <div class="w-20 h-20 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4">
             <.icon name="hero-clock" class="w-10 h-10 text-base-content/30" />
           </div>
-          <h3 class="text-lg font-semibold text-base-content mb-2">No Contract History</h3>
+          <h3 class="text-lg font-semibold text-base-content mb-2">No Contracts</h3>
           <p class="text-sm text-base-content/60 mb-6 max-w-sm mx-auto">
-            This property doesn't have any past contracts. When contracts expire, they will appear here.
+            This property doesn't have any contracts yet. Create one to start managing tenants and rent payments.
           </p>
+          <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
+            <.icon name="hero-plus" class="w-5 h-5 mr-2" /> Create Contract
+          </.button>
         </div>
       <% end %>
     </div>
     """
   end
 
-  # Helper function to calculate contract duration
-  defp calculate_duration(start_date, end_date) do
-    days = Date.diff(end_date, start_date)
-    months = div(days, 30)
-    years = div(months, 12)
-    remaining_months = rem(months, 12)
+  # Next Rent Update Field Component
+  # Handles computation of next rent update date and status display
+  defp next_rent_update_field(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    days_until = Contracts.days_until_next_update(assigns.contract)
 
-    cond do
-      years > 0 && remaining_months > 0 -> "#{years}y #{remaining_months}m"
-      years > 0 -> "#{years} year#{if years > 1, do: "s"}"
-      months > 0 -> "#{months} month#{if months > 1, do: "s"}"
-      true -> "#{days} day#{if days > 1, do: "s"}"
-    end
+    assigns =
+      assigns
+      |> assign(:next_update, next_update)
+      |> assign(:days_until, days_until)
+
+    ~H"""
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-base-content/60">Next Rent Update</label>
+      <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+        <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+        <div>
+          <%= if @next_update do %>
+            <p class="font-medium text-base-content">{format_date(@next_update)}</p>
+            <p class="text-xs mt-0.5">
+              <%= cond do %>
+                <% @days_until == 0 -> %>
+                  <span class="text-warning font-medium">Today</span>
+                <% @days_until < 0 -> %>
+                  <span class="text-error">Update overdue</span>
+                <% @days_until <= 30 -> %>
+                  <span class="text-warning">In {@days_until} days</span>
+                <% true -> %>
+                  <span class="text-base-content/50">In {@days_until} days</span>
+              <% end %>
+            </p>
+          <% else %>
+            <span class="font-medium text-base-content/50">-</span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
   end
 
   @impl true
@@ -524,25 +490,11 @@ defmodule VivvoWeb.PropertyLive.Show do
       Contracts.subscribe_contracts(socket.assigns.current_scope)
     end
 
-    scope = socket.assigns.current_scope
-    property = Properties.get_property!(scope, id)
-    contract = Contracts.current_contract_for_property(scope, property.id)
-
-    # Fetch historic contracts (past contracts for this property)
-    historic_contracts = fetch_historic_contracts(scope, property.id, contract)
-
-    {:ok,
-     socket
-     |> assign(:page_title, "Show Property")
-     |> assign(:property, property)
-     |> assign(:contract, contract)
-     |> assign(:historic_contracts, historic_contracts)
-     |> assign(:active_tab, "details")
-     |> assign(:show_contract_modal, false)}
+    {:ok, assign_data(socket, id)}
   end
 
   @impl true
-  def handle_event("switch_tab", %{"tab" => tab}, socket) do
+  def handle_event("switch_tab", %{"selected" => tab}, socket) do
     {:noreply, assign(socket, :active_tab, tab)}
   end
 
@@ -551,64 +503,38 @@ defmodule VivvoWeb.PropertyLive.Show do
     {:noreply, assign(socket, :show_contract_modal, true)}
   end
 
+  # Assigns all data for the property show page
+  defp assign_data(socket, property_id) do
+    scope = socket.assigns.current_scope
+    property = Properties.get_property!(scope, property_id)
+    contracts = Contracts.list_property_contracts(scope, property_id)
+    current_contract = Contracts.current_contract_for_property(scope, property_id)
+
+    socket
+    |> assign(:page_title, "Show Property")
+    |> assign(:property, property)
+    |> assign(:contracts, contracts)
+    |> assign(:contract, current_contract)
+    |> assign(:active_tab, "active_contract")
+    |> assign(:show_contract_modal, false)
+  end
+
+  # Refreshes all property data when an update is received
+  defp refresh_data(socket) do
+    assign_data(socket, socket.assigns.property.id)
+  end
+
   @impl true
   def handle_info(:close_contract_modal, socket) do
     {:noreply, assign(socket, :show_contract_modal, false)}
   end
 
+  # Property events - refresh when this property changes
   def handle_info(
-        {:created, %Vivvo.Contracts.Contract{property_id: property_id} = contract},
-        socket
-      )
-      when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
-
-    {:noreply,
-     socket
-     |> assign(:contract, contract)
-     |> assign(
-       :historic_contracts,
-       fetch_historic_contracts(socket.assigns.current_scope, property_id, contract)
-     )}
-  end
-
-  def handle_info(
-        {:updated, %Vivvo.Contracts.Contract{property_id: property_id} = contract},
-        socket
-      )
-      when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
-
-    {:noreply,
-     socket
-     |> assign(:contract, contract)
-     |> assign(
-       :historic_contracts,
-       fetch_historic_contracts(socket.assigns.current_scope, property_id, contract)
-     )}
-  end
-
-  def handle_info({:deleted, %Vivvo.Contracts.Contract{property_id: property_id}}, socket)
-      when property_id == socket.assigns.property.id do
-    {:noreply,
-     socket
-     |> assign(:contract, nil)
-     |> assign(
-       :historic_contracts,
-       fetch_historic_contracts(socket.assigns.current_scope, property_id, nil)
-     )}
-  end
-
-  # Ignore contract events for other properties
-  def handle_info({_action, %Vivvo.Contracts.Contract{}}, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_info(
-        {:updated, %Vivvo.Properties.Property{id: id} = property},
+        {:updated, %Vivvo.Properties.Property{id: id}},
         %{assigns: %{property: %{id: id}}} = socket
       ) do
-    {:noreply, assign(socket, :property, property)}
+    {:noreply, refresh_data(socket)}
   end
 
   def handle_info(
@@ -621,69 +547,37 @@ defmodule VivvoWeb.PropertyLive.Show do
      |> push_navigate(to: ~p"/properties")}
   end
 
-  def handle_info({type, %Vivvo.Properties.Property{}}, socket)
-      when type in [:created, :updated, :deleted] do
+  def handle_info({_action, %Vivvo.Properties.Property{}}, socket) do
     {:noreply, socket}
   end
 
-  # Handle payment events - refresh contract data
+  # Contract events - refresh when any contract for this property changes
+  def handle_info(
+        {_action, %Vivvo.Contracts.Contract{property_id: property_id}},
+        %{assigns: %{property: %{id: id}}} = socket
+      )
+      when property_id == id do
+    {:noreply, refresh_data(socket)}
+  end
+
+  def handle_info({_action, %Vivvo.Contracts.Contract{}}, socket) do
+    {:noreply, socket}
+  end
+
+  # Payment events - refresh when any payment for this property's contracts changes
   def handle_info(
         {_action, %Vivvo.Payments.Payment{contract_id: contract_id}},
-        %{assigns: %{contract: %{id: id}}} = socket
-      )
-      when contract_id == id do
-    {:noreply, refresh_contract_data(socket)}
+        %{assigns: %{contracts: contracts}} = socket
+      ) do
+    # Check if payment belongs to any of this property's contracts
+    if Enum.any?(contracts, &(&1.id == contract_id)) do
+      {:noreply, refresh_data(socket)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({_action, %Vivvo.Payments.Payment{}}, socket) do
     {:noreply, socket}
-  end
-
-  # Helper Functions
-
-  defp refresh_contract_data(socket) do
-    scope = socket.assigns.current_scope
-    contract = Contracts.current_contract_for_property(scope, socket.assigns.property.id)
-
-    socket
-    |> assign(:contract, contract)
-    |> assign(
-      :historic_contracts,
-      fetch_historic_contracts(scope, socket.assigns.property.id, contract)
-    )
-  end
-
-  # Fetch historic contracts (past contracts that are no longer active)
-  # NOTE: Currently returns mock data for demonstration
-  # In production, replace with actual database query to fetch expired contracts
-  defp fetch_historic_contracts(_scope, _property_id, _current_contract) do
-    [
-      %{
-        id: 1,
-        tenant: %{
-          first_name: "John",
-          last_name: "Doe",
-          email: "john.doe@example.com"
-        },
-        start_date: ~D[2022-01-01],
-        end_date: ~D[2023-01-01],
-        rent_periods: [
-          %{amount: Decimal.new("1200.00"), start_date: ~D[2022-01-01]}
-        ]
-      },
-      %{
-        id: 2,
-        tenant: %{
-          first_name: "Jane",
-          last_name: "Smith",
-          email: "jane.smith@example.com"
-        },
-        start_date: ~D[2020-06-01],
-        end_date: ~D[2021-06-01],
-        rent_periods: [
-          %{amount: Decimal.new("1100.00"), start_date: ~D[2020-06-01]}
-        ]
-      }
-    ]
   end
 end
