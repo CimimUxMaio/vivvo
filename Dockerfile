@@ -41,6 +41,9 @@ COPY lib lib
 COPY priv priv
 COPY assets assets
 
+# Install npm dependencies
+RUN npm install --prefix assets/
+
 # Compile
 RUN mix compile
 
