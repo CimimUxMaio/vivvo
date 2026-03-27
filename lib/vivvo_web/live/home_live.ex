@@ -692,10 +692,25 @@ defmodule VivvoWeb.HomeLive do
     """
   end
 
-  # Outstanding Aging Card Component
+  # Outstanding Aging Card Component with Pie Chart
   defp outstanding_aging_card(assigns) do
+    # Prepare chart data with labels, values, and CSS variable names
+    chart_data = [
+      %{label: "Current", value: assigns.outstanding_aging.current, color: "--color-info"},
+      %{label: "0-7 days", value: assigns.outstanding_aging.days_0_7, color: "--color-warning"},
+      %{label: "8-30 days", value: assigns.outstanding_aging.days_8_30, color: "--color-warning"},
+      %{label: "31+ days", value: assigns.outstanding_aging.days_31_plus, color: "--color-error"}
+    ]
+
+    assigns =
+      assign(assigns,
+        chart_data: chart_data,
+        chart_data_json: Jason.encode!(chart_data)
+      )
+
     ~H"""
     <div class="bg-base-100 rounded-2xl p-6 shadow-sm border border-base-200">
+      <%!-- Header with total --%>
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-2">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
@@ -704,40 +719,37 @@ defmodule VivvoWeb.HomeLive do
         <span class="text-2xl font-bold">{format_currency(@total_outstanding)}</span>
       </div>
 
-      <div class="space-y-4">
-        <%!-- Current --%>
-        <.aging_row
-          label="Current"
-          amount={@outstanding_aging.current}
-          color="bg-info"
-          description="Not yet due"
-        />
-
-        <%!-- 0-7 Days --%>
-        <.aging_row
-          label="0-7 days"
-          amount={@outstanding_aging.days_0_7}
-          color="bg-warning"
-          description="Recently overdue"
-        />
-
-        <%!-- 8-30 Days --%>
-        <.aging_row
-          label="8-30 days"
-          amount={@outstanding_aging.days_8_30}
-          color="bg-warning/70"
-          description="Overdue"
-        />
-
-        <%!-- 31+ Days --%>
-        <.aging_row
-          label="31+ days"
-          amount={@outstanding_aging.days_31_plus}
-          color="bg-error"
-          description="Seriously overdue"
-        />
+      <%!-- Pie Chart --%>
+      <div class="relative w-full aspect-square max-w-[300px] mx-auto mb-6">
+        <canvas
+          id="outstanding-balances-chart"
+          phx-hook="PieChart"
+          data-chart-data={@chart_data_json}
+        >
+        </canvas>
       </div>
 
+      <%!-- Legend --%>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mb-4 text-xs">
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded bg-info"></div>
+          <span class="text-base-content/60">Current</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded bg-warning"></div>
+          <span class="text-base-content/60">0-7 days</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded bg-warning/70"></div>
+          <span class="text-base-content/60">8-30 days</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded bg-error"></div>
+          <span class="text-base-content/60">31+ days</span>
+        </div>
+      </div>
+
+      <%!-- Information message --%>
       <%= if Decimal.gt?(@total_outstanding, Decimal.new(0)) do %>
         <div class="mt-4 p-3 bg-warning/10 rounded-lg border border-warning/20">
           <div class="flex items-start gap-2">
@@ -763,21 +775,6 @@ defmodule VivvoWeb.HomeLive do
           </div>
         </div>
       <% end %>
-    </div>
-    """
-  end
-
-  defp aging_row(assigns) do
-    ~H"""
-    <div class="flex items-center gap-4">
-      <div class={["w-2 h-12 rounded-full", @color]}></div>
-      <div class="flex-1">
-        <div class="flex justify-between items-center">
-          <span class="font-medium text-base-content">{@label}</span>
-          <span class="font-bold">{format_currency(@amount)}</span>
-        </div>
-        <p class="text-sm text-base-content/50">{@description}</p>
-      </div>
     </div>
     """
   end

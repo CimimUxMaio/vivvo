@@ -20,6 +20,13 @@ dev.test:
 dev.precommit:
 	mix precommit
 
+# Dependencies
+.PHONY: deps
+## Install all dependencies (mix deps.get and npm install in assets/)
+deps:
+	mix deps.get
+	npm install --prefix assets/
+
 # Database commands
 DB_CONTAINER_NAME := vivvo-db
 DB_IMAGE := postgres:16-alpine
@@ -97,6 +104,7 @@ help:
 	@echo "  $(GREEN)dev.start$(RESET)     Run the development server (default)"
 	@echo "  $(GREEN)dev.test$(RESET)      Run the test suite"
 	@echo "  $(GREEN)dev.precommit$(RESET) Run code formatting, static analysis (credo), and tests"
+	@echo "  $(GREEN)deps$(RESET)          Install all dependencies"
 	@echo ""
 	@echo "$(CYAN)$(BOLD)Database Commands:$(RESET)"
 	@echo "  $(YELLOW)db.up$(RESET)         Start the PostgreSQL Docker container"

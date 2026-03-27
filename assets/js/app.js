@@ -24,6 +24,85 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/vivvo"
 import topbar from "../vendor/topbar"
+import {Chart, PieController, ArcElement, Tooltip, Legend, Title} from "chart.js"
+
+// Register Chart.js components
+Chart.register(PieController, ArcElement, Tooltip, Legend, Title)
+
+/**
+ * PieChart hook for rendering pie charts using Chart.js
+ * Expects data-chart-data attribute containing an array of objects with:
+ *   - label: string
+ *   - value: number
+ *   - color: CSS variable name (e.g., "--color-info", "--color-error")
+ */
+const PieChart = {
+  mounted() {
+    const canvas = this.el
+    const chartData = JSON.parse(canvas.dataset.chartData || "[]")
+    const rootStyles = getComputedStyle(document.documentElement)
+
+    // Extract data from chartData array
+    const labels = chartData.map(item => item.label)
+    const values = chartData.map(item => item.value)
+    const colors = chartData.map(item => rootStyles.getPropertyValue(item.color).trim())
+
+    // Calculate total for percentage calculations
+    const total = values.reduce((sum, val) => sum + parseFloat(val || 0), 0)
+
+    // Create the pie chart
+    this.chart = new Chart(canvas, {
+      type: "pie",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: getComputedStyle(document.documentElement).getPropertyValue("--color-base-100").trim() || "#ffffff",
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false, // We'll use a custom legend
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const value = context.parsed || 0
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0
+                return ` ${this.formatCurrency(value)} (${percentage}%)`
+              }
+            }
+          }
+        },
+        animation: {
+          animateRotate: true,
+          animateScale: false,
+        },
+      },
+    })
+  },
+
+  destroyed() {
+    if (this.chart) {
+      this.chart.destroy()
+    }
+  },
+
+  formatCurrency(value) {
+    const num = parseFloat(value || 0)
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num)
+  }
+}
 
 /**
  * Flash message hook with auto-dismiss and hover pause functionality.
@@ -143,7 +222,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, Flash},
+  hooks: {...colocatedHooks, PieChart, Flash},
 })
 
 // Show progress bar on live navigation and form submits
