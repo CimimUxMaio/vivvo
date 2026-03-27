@@ -7,6 +7,7 @@ defmodule VivvoWeb.HomeLive do
   """
   use VivvoWeb, :live_view
 
+  import VivvoWeb.Helpers.ContractHelpers
   import VivvoWeb.PaymentComponents, only: [file_chip: 1]
   import VivvoWeb.SubmitPaymentModal, only: [submit_payment_modal: 1]
   import VivvoWeb.UploadHelpers, only: [clear_upload_files: 1, process_upload_entry: 2]
@@ -1901,13 +1902,13 @@ defmodule VivvoWeb.HomeLive do
       <%= if @has_payments do %>
         <div class={[
           "overflow-hidden transition-all duration-300 ease-in-out",
-          "bg-base-300/40 border-t border-base-300",
+          "bg-base-200 border-t border-base-300",
           @is_expanded && "max-h-[600px] opacity-100",
           !@is_expanded && "max-h-0 opacity-0"
         ]}>
-          <div class="p-4 sm:p-6 space-y-4">
+          <div class="space-y-2 py-4 sm:py-6">
             <%!-- Timeline Header --%>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between px-4 sm:px-6">
               <h4 class="text-sm font-medium text-base-content/70 flex items-center gap-2">
                 <.icon name="hero-clock" class="w-4 h-4" /> Payment Timeline
               </h4>
@@ -1916,24 +1917,64 @@ defmodule VivvoWeb.HomeLive do
               </span>
             </div>
 
-            <%!-- Timeline Items --%>
-            <div class="relative">
-              <%!-- Vertical Timeline Line --%>
-              <div class="absolute left-[19px] top-2 bottom-2 w-0.5 bg-base-300"></div>
+            <%!-- Timeline Items using timeline_container component --%>
+            <.timeline_container gap={:sm}>
+              <:timeline_item
+                :for={payment <- @item.payments}
+                status={payment_timeline_config(payment.status).status}
+                icon={payment_timeline_config(payment.status).icon}
+                label={payment_timeline_config(payment.status).label}
+              >
+                <%!-- Header: Amount & Date --%>
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <p class="font-semibold text-base">
+                      {format_currency(payment.amount)}
+                    </p>
+                    <p class="text-xs text-base-content/50">
+                      {payment.inserted_at |> Calendar.strftime("%b %d, %Y at %I:%M %p")}
+                    </p>
+                  </div>
+                  <.payment_badge status={payment.status} size={:sm} />
+                </div>
 
-              <div class="space-y-4">
-                <%= for {payment, index} <- Enum.with_index(@item.payments) do %>
-                  <.payment_timeline_item
-                    payment={payment}
-                    index={index}
-                    is_last={index == @payment_count - 1}
-                  />
+                <%!-- Rejection Reason (if applicable) --%>
+                <%= if payment.rejection_reason && payment.rejection_reason != "" do %>
+                  <div class="mt-2 p-2 bg-error/10 rounded-lg border border-error/20">
+                    <p class="text-xs text-error">
+                      <span class="font-medium">Rejected:</span> {payment.rejection_reason}
+                    </p>
+                  </div>
                 <% end %>
-              </div>
-            </div>
+
+                <%!-- Notes --%>
+                <%= if payment.notes && payment.notes != "" do %>
+                  <div class="mt-2">
+                    <p class="text-xs text-base-content/60">
+                      <span class="font-medium">Notes:</span> {payment.notes}
+                    </p>
+                  </div>
+                <% end %>
+
+                <%!-- Attached Files --%>
+                <%= if payment.files != [] && payment.files != nil do %>
+                  <div class="mt-3 pt-3 border-t border-base-200">
+                    <p class="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
+                      <.icon name="hero-paper-clip" class="w-3.5 h-3.5" />
+                      Attached Files ({length(payment.files)})
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                      <%= for file <- payment.files do %>
+                        <.file_chip file={file} />
+                      <% end %>
+                    </div>
+                  </div>
+                <% end %>
+              </:timeline_item>
+            </.timeline_container>
 
             <%!-- Timeline Footer: Total Summary --%>
-            <div class="pt-3 border-t border-base-300/50">
+            <div class="pt-3 border-t border-base-300/50 px-4 sm:px-6">
               <div class="flex items-center justify-between text-sm">
                 <span class="text-base-content/60">Total Paid</span>
                 <span class="font-semibold text-success">
@@ -1981,92 +2022,6 @@ defmodule VivvoWeb.HomeLive do
     >
       <.icon name="hero-plus" class="w-4 h-4 mr-1" /> Pay
     </.button>
-    """
-  end
-
-  # Payment Timeline Item Component
-  defp payment_timeline_item(assigns) do
-    has_files = assigns.payment.files != [] && assigns.payment.files != nil
-    file_count = if has_files, do: length(assigns.payment.files), else: 0
-
-    assigns =
-      assign(assigns,
-        has_files: has_files,
-        file_count: file_count
-      )
-
-    ~H"""
-    <div class="relative flex gap-4">
-      <%!-- Timeline Node --%>
-      <div class="relative flex-shrink-0">
-        <div class={[
-          "w-10 h-10 rounded-full flex items-center justify-center border-2",
-          "bg-base-100 z-10 relative",
-          @payment.status == :accepted && "border-success text-success",
-          @payment.status == :pending && "border-warning text-warning",
-          @payment.status == :rejected && "border-error text-error"
-        ]}>
-          <%= case @payment.status do %>
-            <% :accepted -> %>
-              <.icon name="hero-check" class="w-5 h-5" />
-            <% :pending -> %>
-              <.icon name="hero-clock" class="w-5 h-5" />
-            <% :rejected -> %>
-              <.icon name="hero-x-mark" class="w-5 h-5" />
-          <% end %>
-        </div>
-      </div>
-
-      <%!-- Content Card --%>
-      <div class="flex-1 min-w-0 pb-4">
-        <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
-          <%!-- Header: Amount & Date --%>
-          <div class="flex items-start justify-between gap-2 mb-2">
-            <div>
-              <p class="font-semibold text-base">
-                {format_currency(@payment.amount)}
-              </p>
-              <p class="text-xs text-base-content/50">
-                {@payment.inserted_at |> Calendar.strftime("%b %d, %Y at %I:%M %p")}
-              </p>
-            </div>
-            <.payment_badge status={@payment.status} size={:sm} />
-          </div>
-
-          <%!-- Rejection Reason (if applicable) --%>
-          <%= if @payment.rejection_reason && @payment.rejection_reason != "" do %>
-            <div class="mt-2 p-2 bg-error/10 rounded-lg border border-error/20">
-              <p class="text-xs text-error">
-                <span class="font-medium">Rejected:</span> {@payment.rejection_reason}
-              </p>
-            </div>
-          <% end %>
-
-          <%!-- Notes --%>
-          <%= if @payment.notes && @payment.notes != "" do %>
-            <div class="mt-2">
-              <p class="text-xs text-base-content/60">
-                <span class="font-medium">Notes:</span> {@payment.notes}
-              </p>
-            </div>
-          <% end %>
-
-          <%!-- Attached Files --%>
-          <%= if @has_files do %>
-            <div class="mt-3 pt-3 border-t border-base-200">
-              <p class="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
-                <.icon name="hero-paper-clip" class="w-3.5 h-3.5" /> Attached Files ({@file_count})
-              </p>
-              <div class="flex flex-wrap gap-2">
-                <%= for file <- @payment.files do %>
-                  <.file_chip file={file} />
-                <% end %>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      </div>
-    </div>
     """
   end
 
@@ -2419,19 +2374,6 @@ defmodule VivvoWeb.HomeLive do
       collection_pct: collection_pct
     }
   end
-
-  # Helper functions for contract indexing information
-
-  # Returns a human-readable label for the index type.
-  defp index_type_label(nil), do: nil
-  defp index_type_label(:ipc), do: "IPC (Índice de Precios al Consumidor)"
-  defp index_type_label(:icl), do: "ICL (Índice de Contratos de Locación)"
-
-  # Returns a human-readable label for the rent period duration.
-  defp rent_period_duration_label(nil), do: nil
-  defp rent_period_duration_label(1), do: "Monthly"
-  defp rent_period_duration_label(12), do: "Yearly"
-  defp rent_period_duration_label(months) when months > 0, do: "Every #{months} months"
 
   # Calculates payment totals for a specific month from preloaded contract payments.
   # Returns {accepted_total, pending_total} to avoid N+1 queries.
