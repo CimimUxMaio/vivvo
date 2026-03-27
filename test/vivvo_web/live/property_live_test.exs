@@ -169,7 +169,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab
-      html = show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      html =
+        show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       assert html =~ "Active Contract"
       assert html =~ "No Active Contract"
@@ -179,7 +180,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       assert has_element?(show_live, "a[href='/properties/#{property.id}/contracts/new']")
     end
@@ -195,7 +196,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab
-      html = show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      html =
+        show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       assert html =~ "Active Contract"
       assert html =~ "John Doe"
@@ -215,7 +217,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab
-      html = show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      html =
+        show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       assert html =~ "Jane Smith"
     end
@@ -229,7 +232,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab
-      html = show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      html =
+        show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       assert html =~ "$500.00" or html =~ "500.00"
     end
@@ -255,7 +259,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab
-      html = show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      html =
+        show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       assert html =~ "Active" or html =~ "active"
     end
@@ -267,7 +272,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       # Click on view full details button
       html = show_live |> element("button", "View Full Details") |> render_click()
@@ -280,7 +285,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       {:ok, _new_live, html} =
         show_live
@@ -313,7 +318,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       html = show_live |> element("button", "View Full Details") |> render_click()
 
@@ -336,7 +341,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       # Open modal
       show_live |> element("button", "View Full Details") |> render_click()
@@ -361,7 +366,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
       # Open modal
       html = show_live |> element("button", "View Full Details") |> render_click()
@@ -380,7 +385,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Initially no contract - need to switch to Active Contract tab to verify
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
       html = render(show_live)
       assert html =~ "No Active Contract"
 
@@ -423,7 +428,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab to see contract info
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
       html = render(show_live)
 
       # Initially shows first tenant
@@ -452,7 +457,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab to verify contract is visible
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
       html = render(show_live)
 
       # Initially shows contract
@@ -480,7 +485,7 @@ defmodule VivvoWeb.PropertyLiveTest do
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab to verify
-      show_live |> element("button[phx-value-tab='active_contract']") |> render_click()
+      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
       html = render(show_live)
 
       # Initially no contract for our property
