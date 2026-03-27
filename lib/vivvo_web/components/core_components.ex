@@ -853,6 +853,94 @@ defmodule VivvoWeb.CoreComponents do
   end
 
   @doc """
+  Renders a vertical timeline container with connected timeline items.
+
+  Each `timeline_item` slot displays a status node connected by a vertical line,
+  with customizable content rendered inside the slot body. Timeline items can only
+  be used within this container, enforcing consistent structure.
+
+  ## Status Values
+
+    - `:success` - Completed or active items (green styling)
+    - `:info` - Upcoming or in-progress items (blue styling)
+    - `:warning` - Items requiring attention (yellow/amber styling)
+    - `:error` - Failed or rejected items (red styling)
+    - `:base` - Neutral or inactive items (gray styling)
+
+  ## Examples
+
+      <.timeline_container>
+        <:timeline_item :for={contract <- @contracts} status={:success} icon="hero-check" label="Active">
+          <div>Contract card content here</div>
+        </:timeline_item>
+      </.timeline_container>
+
+      <.timeline_container>
+        <:timeline_item status={:info} icon="hero-clock" label="Pending">
+          <div>Payment details here</div>
+        </:timeline_item>
+      </.timeline_container>
+  """
+  attr :id, :string, default: nil, doc: "optional DOM id for the container"
+
+  attr :gap, :atom,
+    default: :md,
+    values: [:sm, :md, :lg],
+    doc: "spacing between timeline items (sm: space-y-4, md: space-y-6, lg: space-y-8)"
+
+  slot :timeline_item, required: true, doc: "a timeline item with status node and content" do
+    attr :status, :atom, required: true, values: [:success, :info, :warning, :error, :base]
+    attr :icon, :string, required: true
+    attr :label, :string
+  end
+
+  def timeline_container(assigns) do
+    gap_classes = %{
+      sm: "space-y-4",
+      md: "space-y-6",
+      lg: "space-y-8"
+    }
+
+    assigns = assign(assigns, :gap_class, Map.fetch!(gap_classes, assigns.gap))
+
+    ~H"""
+    <div id={@id} class="relative rounded-xl p-4">
+      <%!-- Vertical Timeline Line --%>
+      <div class="absolute left-9 top-4 bottom-2 w-0.5 bg-base-300"></div>
+
+      <div class={@gap_class}>
+        <div :for={item <- @timeline_item} class="relative flex gap-4">
+          <%!-- Timeline Node --%>
+          <div class="relative flex-shrink-0">
+            <div
+              class={[
+                "w-10 h-10 rounded-full flex items-center justify-center border-2",
+                "bg-base-100 z-10 relative",
+                item.status == :success && "border-success text-success",
+                item.status == :info && "border-info text-info",
+                item.status == :warning && "border-warning text-warning",
+                item.status == :error && "border-error text-error",
+                item.status == :base && "border-base-400 text-base-content/50"
+              ]}
+              aria-label={item[:label]}
+            >
+              <.icon name={item.icon} class="w-5 h-5" />
+            </div>
+          </div>
+
+          <%!-- Content with Card Styling --%>
+          <div class="flex-1 min-w-0">
+            <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:shadow-md transition-shadow">
+              {render_slot(item)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

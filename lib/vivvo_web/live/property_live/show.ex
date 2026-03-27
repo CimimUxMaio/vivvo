@@ -7,6 +7,8 @@ defmodule VivvoWeb.PropertyLive.Show do
   """
   use VivvoWeb, :live_view
 
+  import VivvoWeb.Helpers.ContractHelpers
+
   alias Vivvo.Contracts
   alias Vivvo.Payments
   alias Vivvo.Properties
@@ -15,69 +17,144 @@ defmodule VivvoWeb.PropertyLive.Show do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.header>
-        Property {@property.id}
-        <:subtitle>This is a property record from your database.</:subtitle>
-        <:actions>
-          <.button navigate={~p"/properties"}>
-            <.icon name="hero-arrow-left" />
-          </.button>
-          <.button variant="primary" navigate={~p"/properties/#{@property}/edit?return_to=show"}>
-            <.icon name="hero-pencil-square" /> Edit property
-          </.button>
-        </:actions>
-      </.header>
+      <div class="space-y-6 sm:space-y-8">
+        <%!-- Page Header --%>
+        <.page_header title={"Property #{@property.name}"} back_navigate={~p"/properties"}>
+          <:subtitle>
+            {@property.address}
+          </:subtitle>
+          <:action>
+            <.button variant="primary" navigate={~p"/properties/#{@property}/edit?return_to=show"}>
+              <.icon name="hero-pencil-square" class="w-5 h-5 mr-1" /> Edit
+            </.button>
+          </:action>
+        </.page_header>
 
-      <.list>
-        <:item title="Name">{@property.name}</:item>
-        <:item title="Address">{@property.address}</:item>
-        <:item title="Area">{@property.area}</:item>
-        <:item title="Rooms">{@property.rooms}</:item>
-        <:item title="Notes">{@property.notes}</:item>
-      </.list>
+        <%!-- Main Two-Column Layout --%>
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <%!-- Left Sidebar: Property Summary Card (40% width on desktop) --%>
+          <div class="lg:col-span-2">
+            <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6 lg:sticky lg:top-6">
+              <%!-- Hero Icon --%>
+              <div class="flex justify-center mb-6">
+                <div class="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
+                  <.icon name="hero-building-office" class="w-12 h-12 text-primary" />
+                </div>
+              </div>
 
-      <%!-- CONTRACT SECTION --%>
-      <div class="mt-8">
-        <.header>
-          Contract Information
-          <:actions>
-            <%= if @contract do %>
-              <.button phx-click="show_contract_modal">
-                <.icon name="hero-eye" /> View Details
-              </.button>
-            <% else %>
-              <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
-                <.icon name="hero-plus" /> Create Contract
-              </.button>
-            <% end %>
-          </:actions>
-        </.header>
+              <%!-- Property Name --%>
+              <div class="text-center mb-4">
+                <h2 class="text-xl sm:text-2xl font-bold text-base-content break-words">
+                  {@property.name}
+                </h2>
+              </div>
 
-        <%= if @contract do %>
-          <.list>
-            <:item title="Tenant">
-              {@contract.tenant.first_name} {@contract.tenant.last_name}
-            </:item>
-            <:item title="Monthly Rent">
-              {format_currency(Contracts.current_rent_value(@contract))}
-            </:item>
-            <:item title="Status">
-              <.contract_status_badge status={Contracts.contract_status(@contract)} />
-            </:item>
-          </.list>
-        <% else %>
-          <p class="text-gray-500 mt-4">No active contract for this property.</p>
-        <% end %>
+              <%!-- Property Address --%>
+              <div class="text-center mb-6">
+                <p class="text-sm text-base-content/70 flex items-center justify-center gap-2">
+                  <.icon name="hero-map-pin" class="w-4 h-4 flex-shrink-0" />
+                  <span class="break-words">{@property.address}</span>
+                </p>
+              </div>
+
+              <%!-- Specification Badges --%>
+              <div class="flex flex-wrap items-center justify-center gap-3 mb-6">
+                <%= if @property.area do %>
+                  <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-base-200 rounded-full text-sm">
+                    <.icon name="hero-square-3-stack-3d" class="w-4 h-4 text-base-content/60" />
+                    <span class="font-medium">{@property.area} m²</span>
+                  </div>
+                <% end %>
+
+                <%= if @property.rooms do %>
+                  <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-base-200 rounded-full text-sm">
+                    <.icon name="hero-home" class="w-4 h-4 text-base-content/60" />
+                    <span class="font-medium">{@property.rooms} rooms</span>
+                  </div>
+                <% end %>
+              </div>
+
+              <%!-- Notes Preview --%>
+              <%= if @property.notes && @property.notes != "" do %>
+                <div class="pt-4 border-t border-base-200">
+                  <div class="flex items-start gap-2">
+                    <.icon
+                      name="hero-document-text"
+                      class="w-4 h-4 text-base-content/50 flex-shrink-0 mt-0.5"
+                    />
+                    <p class="text-sm text-base-content/70 line-clamp-4">
+                      {@property.notes}
+                    </p>
+                  </div>
+                </div>
+              <% end %>
+
+              <%!-- Empty State Hint --%>
+              <%= if !@property.area && !@property.rooms && (!@property.notes || @property.notes == "") do %>
+                <div class="pt-4 border-t border-base-200">
+                  <p class="text-xs text-base-content/50 text-center">
+                    No additional details available
+                  </p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <%!-- Right Side: Tabbed Content (60% width on desktop) --%>
+          <div class="lg:col-span-3">
+            <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200">
+              <%!-- Tab Navigation --%>
+              <div class="p-3 border-b border-base-200">
+                <.sliding_selector
+                  value={@active_tab}
+                  on_select="switch_tab"
+                >
+                  <:option value="active_contract">
+                    <span class="flex items-center gap-1">
+                      <.icon name="hero-document-text" class="w-4 h-4" />
+                      <span>Active Contract</span>
+                      <%= if @contract do %>
+                        <span class={[
+                          "w-1.5 h-1.5 rounded-full",
+                          Contracts.contract_status(@contract) == :active && "bg-success",
+                          Contracts.contract_status(@contract) == :upcoming && "bg-info"
+                        ]}>
+                        </span>
+                      <% end %>
+                    </span>
+                  </:option>
+                  <:option value="contract_history">
+                    <span class="flex items-center gap-1">
+                      <.icon name="hero-clock" class="w-4 h-4" />
+                      <span>Contract History</span>
+                      <%= if @contracts != [] do %>
+                        <span class="text-xs">
+                          ({length(@contracts)})
+                        </span>
+                      <% end %>
+                    </span>
+                  </:option>
+                </.sliding_selector>
+              </div>
+
+              <%!-- Tab Content --%>
+              <div class="p-6">
+                <%= case @active_tab do %>
+                  <% "active_contract" -> %>
+                    <.active_contract_tab contract={@contract} property={@property} />
+                  <% "contract_history" -> %>
+                    <.contract_history_tab
+                      contracts={@contracts}
+                      property={@property}
+                    />
+                  <% _ -> %>
+                    <.active_contract_tab contract={@contract} property={@property} />
+                <% end %>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <%!-- CONTRACT PAYMENTS SECTION --%>
-      <%= if @contract do %>
-        <.contract_payments_section
-          contract={@contract}
-          months={@months}
-          scope={@current_scope}
-        />
-      <% end %>
 
       <%!-- CONTRACT MODAL --%>
       <%= if @show_contract_modal && @contract do %>
@@ -89,155 +166,322 @@ defmodule VivvoWeb.PropertyLive.Show do
           current_scope={@current_scope}
         />
       <% end %>
-
-      <%!-- REJECT MODAL --%>
-      <%= if @rejecting_payment do %>
-        <.reject_modal
-          id="reject-payment-modal"
-          title="Reject Payment"
-          description="Please provide a reason for rejecting this payment."
-          submit_event="reject_payment"
-          close_event="close_reject_modal"
-          reason_label="Rejection Reason"
-          reason_placeholder="Enter rejection reason..."
-          submit_text="Reject Payment"
-        />
-      <% end %>
     </Layouts.app>
     """
   end
 
-  # Contract Payments Section Component
-  defp contract_payments_section(assigns) do
+  # Active Contract Tab Component
+  defp active_contract_tab(assigns) do
     ~H"""
-    <div class="mt-8">
-      <.header>
-        Contract Payments
-        <:subtitle>Manage monthly payments and submissions</:subtitle>
-      </.header>
-
-      <div class="space-y-4 mt-4">
-        <%= for month <- @months do %>
-          <.owner_month_card
-            contract={@contract}
-            month={month}
-            payments={get_payments_for_month(@contract.payments, month)}
-            scope={@scope}
-          />
-        <% end %>
-      </div>
-    </div>
-    """
-  end
-
-  # Owner Month Card Component
-  defp owner_month_card(assigns) do
-    scope = assigns.scope
-    contract = assigns.contract
-    month = assigns.month
-
-    total_paid = Payments.total_accepted_for_month(scope, contract.id, month)
-    due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.current_rent_value(contract, due_date)
-
-    progress_pct =
-      if Decimal.gt?(rent, Decimal.new(0)) do
-        total_paid
-        |> Decimal.div(rent)
-        |> Decimal.mult(100)
-        |> Decimal.round(0)
-        |> Decimal.to_integer()
-        |> min(100)
-      else
-        0
-      end
-
-    month_status = Payments.get_month_status(scope, contract, month)
-
-    assigns =
-      assign(assigns,
-        total_paid: total_paid,
-        due_date: due_date,
-        rent: rent,
-        progress_pct: progress_pct,
-        month_status: month_status
-      )
-
-    ~H"""
-    <div class={[
-      "card bg-base-100 shadow-md border-l-4",
-      month_status_border(@month_status)
-    ]}>
-      <div class="card-body p-4">
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
-          <div>
-            <h3 class="font-semibold text-lg">Month {@month}</h3>
-            <p class="text-sm text-base-content/70">Due: {format_date(@due_date)}</p>
+    <div class="space-y-6">
+      <%= if @contract do %>
+        <%!-- Section Header with Status --%>
+        <div class="flex items-center justify-between gap-4 pb-4 border-b border-base-200">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 bg-success/10 rounded-lg flex items-center justify-center">
+              <.icon name="hero-document-text" class="w-5 h-5 text-success" />
+            </div>
+            <h3 class="text-lg font-semibold text-base-content">Active Contract</h3>
           </div>
-          <div class="text-right">
-            <p class="text-sm">
-              <span class="font-medium">{format_currency(@total_paid)}</span>
-              <span class="text-base-content/60"> of </span>
-              <span class="font-medium">{format_currency(@rent)}</span>
-            </p>
-          </div>
+          <.button phx-click="show_contract_modal">
+            <.icon name="hero-eye" class="w-5 h-5" />
+            <span class="hidden sm:block">View Full Details</span>
+          </.button>
         </div>
 
-        <%!-- Progress Bar --%>
-        <div class="w-full bg-base-300 rounded-full h-2 mb-3">
-          <div
-            class="bg-primary h-2 rounded-full transition-all duration-300"
-            style={"width: #{@progress_pct}%"}
-          >
-          </div>
-        </div>
-
-        <%!-- Payment Submissions --%>
-        <%= if @payments != [] do %>
-          <div class="divider my-2"></div>
+        <%!-- Contract Details Grid --%>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <%!-- Current Tenant --%>
           <div class="space-y-2">
-            <%= for payment <- @payments do %>
-              <.owner_payment_item payment={payment} />
-            <% end %>
+            <label class="text-sm font-medium text-base-content/60">Current Tenant</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <span class="text-xs font-bold text-primary">
+                  {String.first(@contract.tenant.first_name)}{String.first(@contract.tenant.last_name)}
+                </span>
+              </div>
+              <div class="min-w-0">
+                <p class="font-medium text-base-content text-sm truncate">
+                  {@contract.tenant.first_name} {@contract.tenant.last_name}
+                </p>
+                <p class="text-xs text-base-content/60 truncate">
+                  {@contract.tenant.email}
+                </p>
+              </div>
+            </div>
           </div>
-        <% else %>
-          <p class="text-sm text-base-content/60 italic">No payments submitted for this month.</p>
-        <% end %>
-      </div>
-    </div>
-    """
-  end
 
-  # Owner Payment Item Component
-  defp owner_payment_item(assigns) do
-    ~H"""
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 bg-base-200 rounded-lg">
-      <div class="flex flex-wrap items-center gap-3">
-        <.payment_badge status={@payment.status} size={:sm} />
-        <span class="font-medium">{format_currency(@payment.amount)}</span>
-        <%= if @payment.notes && @payment.notes != "" do %>
-          <span class="text-sm text-base-content/60">- {@payment.notes}</span>
-        <% end %>
-      </div>
+          <%!-- Monthly Rent --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Monthly Rent</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-banknotes" class="w-5 h-5 text-base-content/50" />
+              <span class="font-semibold text-base-content flex items-center gap-2">
+                {format_currency(Contracts.current_rent_value(@contract))}
+                <%= if @contract.index_type do %>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+                    <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+                  </span>
+                <% end %>
+              </span>
+            </div>
+          </div>
 
-      <%= if @payment.status == :pending do %>
-        <div class="flex gap-2">
-          <button
-            phx-click="accept_payment"
-            phx-value-payment-id={@payment.id}
-            class="btn btn-success btn-sm"
-          >
-            <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept
-          </button>
-          <button
-            phx-click="show_reject_modal"
-            phx-value-payment-id={@payment.id}
-            class="btn btn-error btn-sm"
-          >
-            <.icon name="hero-x-mark" class="w-4 h-4 mr-1" /> Reject
-          </button>
+          <%!-- Start Date --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Start Date</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+              <span class="font-medium text-base-content">
+                {format_date(@contract.start_date)}
+              </span>
+            </div>
+          </div>
+
+          <%!-- End Date --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">End Date</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+              <span class="font-medium text-base-content">
+                {format_date(@contract.end_date)}
+              </span>
+            </div>
+          </div>
+
+          <%!-- Payment Due --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Payment Due</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-calendar-days" class="w-5 h-5 text-base-content/50" />
+              <span class="font-medium text-base-content">
+                Day {@contract.expiration_day} of each month
+              </span>
+            </div>
+          </div>
+
+          <%!-- Indexing Information (only shown when contract has indexing) --%>
+          <%= if @contract.index_type do %>
+            <%!-- Index Type --%>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-base-content/60">Index Type</label>
+              <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+                <.icon name="hero-arrow-trending-up" class="w-5 h-5 text-base-content/50" />
+                <span class="font-medium text-base-content">
+                  {index_type_label(@contract.index_type)}
+                </span>
+              </div>
+            </div>
+
+            <%!-- Update Frequency --%>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-base-content/60">Update Frequency</label>
+              <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+                <.icon name="hero-arrow-path" class="w-5 h-5 text-base-content/50" />
+                <span class="font-medium text-base-content">
+                  {rent_period_duration_label(@contract.rent_period_duration)}
+                </span>
+              </div>
+            </div>
+
+            <%!-- Next Rent Update --%>
+            <.next_rent_update_field contract={@contract} />
+          <% end %>
+        </div>
+
+        <%!-- Contract Notes --%>
+        <%= if @contract.notes && @contract.notes != "" do %>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Notes</label>
+            <div class="p-4 bg-base-200/50 rounded-lg">
+              <div class="flex items-start gap-3">
+                <.icon
+                  name="hero-document-text"
+                  class="w-5 h-5 text-base-content/50 flex-shrink-0 mt-0.5"
+                />
+                <p class="text-sm text-base-content/80 whitespace-pre-wrap">{@contract.notes}</p>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      <% else %>
+        <%!-- Empty State --%>
+        <div class="text-center py-12">
+          <div class="w-20 h-20 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4">
+            <.icon name="hero-document-text" class="w-10 h-10 text-base-content/30" />
+          </div>
+          <h3 class="text-lg font-semibold text-base-content mb-2">No Active Contract</h3>
+          <p class="text-sm text-base-content/60 mb-6 max-w-sm mx-auto">
+            This property doesn't have an active contract. Create one to start managing tenants and rent payments.
+          </p>
+          <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
+            <.icon name="hero-plus" class="w-5 h-5 mr-2" /> Create Contract
+          </.button>
         </div>
       <% end %>
+    </div>
+    """
+  end
+
+  # Contract History Tab Component
+  defp contract_history_tab(assigns) do
+    configs =
+      assigns
+      |> Map.get(:contracts, [])
+      |> Enum.map(&{&1.id, contract_timeline_config(Contracts.contract_status(&1))})
+      |> Map.new()
+
+    assigns = assign(assigns, :configs, configs)
+
+    ~H"""
+    <div class="space-y-6">
+      <%!-- Section Header --%>
+      <div class="flex items-center gap-2 pb-4 border-b border-base-200">
+        <div class="p-1.5 flex items-center justify-center bg-info/10 rounded-lg">
+          <.icon name="hero-clock" class="w-5 h-5 text-info" />
+        </div>
+        <h3 class="text-lg font-semibold text-base-content">Contract History</h3>
+      </div>
+
+      <%= if @contracts != [] do %>
+        <div class="bg-base-200 rounded-xl">
+          <.timeline_container>
+            <:timeline_item
+              :for={contract <- @contracts}
+              status={@configs[contract.id].status}
+              icon={@configs[contract.id].icon}
+              label={"#{contract.tenant.first_name} #{contract.tenant.last_name}"}
+            >
+              <%!-- Header: Tenant & Status --%>
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <%!-- Tenant Avatar --%>
+                  <div
+                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"
+                    title={"#{contract.tenant.first_name} #{contract.tenant.last_name}"}
+                    aria-label={"Avatar for #{contract.tenant.first_name} #{contract.tenant.last_name}"}
+                  >
+                    <span class="text-xs font-bold text-primary">
+                      {String.first(contract.tenant.first_name)}{String.first(
+                        contract.tenant.last_name
+                      )}
+                    </span>
+                  </div>
+
+                  <%!-- Tenant Info --%>
+                  <div class="min-w-0">
+                    <p class="font-semibold text-base-content truncate">
+                      {contract.tenant.first_name} {contract.tenant.last_name}
+                    </p>
+                    <p class="text-xs text-base-content/60 truncate">
+                      {contract.tenant.email}
+                    </p>
+                  </div>
+                </div>
+
+                <%!-- Status Badge --%>
+                <.contract_status_badge status={Contracts.contract_status(contract)} />
+              </div>
+
+              <%!-- Contract Period --%>
+              <div class="flex items-center gap-2 text-sm text-base-content/70 mb-3">
+                <.icon name="hero-calendar" class="w-4 h-4 flex-shrink-0" />
+                <span>{format_date(contract.start_date)} - {format_date(contract.end_date)}</span>
+                <span class="text-base-content/40">
+                  ({format_duration(contract.start_date, contract.end_date)})
+                </span>
+              </div>
+
+              <%!-- Contract Details Grid --%>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-base-200">
+                <%!-- Monthly Rent --%>
+                <div>
+                  <p class="text-xs text-base-content/50 mb-0.5">Monthly Rent</p>
+                  <p class="font-semibold text-base-content">
+                    {format_currency(Contracts.current_rent_value(contract))}
+                  </p>
+                </div>
+
+                <%!-- Payment Due --%>
+                <div>
+                  <p class="text-xs text-base-content/50 mb-0.5">Payment Due</p>
+                  <p class="font-medium text-base-content text-sm">
+                    Day {contract.expiration_day}
+                  </p>
+                </div>
+              </div>
+
+              <%!-- Indexing Indicator (if applicable) --%>
+              <%= if contract.index_type do %>
+                <div class="mt-3 pt-3 border-t border-base-200">
+                  <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+                      <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+                    </span>
+                    <span class="text-xs text-base-content/50">
+                      {index_type_label(contract.index_type)}
+                    </span>
+                  </div>
+                </div>
+              <% end %>
+            </:timeline_item>
+          </.timeline_container>
+        </div>
+      <% else %>
+        <%!-- Empty State --%>
+        <div class="text-center py-12">
+          <div class="w-20 h-20 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4">
+            <.icon name="hero-clock" class="w-10 h-10 text-base-content/30" />
+          </div>
+          <h3 class="text-lg font-semibold text-base-content mb-2">No Contracts</h3>
+          <p class="text-sm text-base-content/60 mb-6 max-w-sm mx-auto">
+            This property doesn't have any contracts yet. Create one to start managing tenants and rent payments.
+          </p>
+          <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
+            <.icon name="hero-plus" class="w-5 h-5 mr-2" /> Create Contract
+          </.button>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  # Next Rent Update Field Component
+  # Handles computation of next rent update date and status display
+  defp next_rent_update_field(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    days_until = Contracts.days_until_next_update(assigns.contract)
+
+    assigns =
+      assigns
+      |> assign(:next_update, next_update)
+      |> assign(:days_until, days_until)
+
+    ~H"""
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-base-content/60">Next Rent Update</label>
+      <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+        <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+        <div>
+          <%= if @next_update do %>
+            <p class="font-medium text-base-content">{format_date(@next_update)}</p>
+            <p class="text-xs mt-0.5">
+              <%= cond do %>
+                <% @days_until == 0 -> %>
+                  <span class="text-warning font-medium">Today</span>
+                <% @days_until < 0 -> %>
+                  <span class="text-error">Update overdue</span>
+                <% @days_until <= 30 -> %>
+                  <span class="text-warning">In {@days_until} days</span>
+                <% true -> %>
+                  <span class="text-base-content/50">In {@days_until} days</span>
+              <% end %>
+            </p>
+          <% else %>
+            <span class="font-medium text-base-content/50">-</span>
+          <% end %>
+        </div>
+      </div>
     </div>
     """
   end
@@ -250,20 +494,13 @@ defmodule VivvoWeb.PropertyLive.Show do
       Payments.subscribe_payments(socket.assigns.current_scope)
     end
 
-    scope = socket.assigns.current_scope
-    property = Properties.get_property!(scope, id)
-    contract = Contracts.current_contract_for_property(scope, property.id)
+    {:ok, assign_data(socket, id)}
+  end
 
-    months = if contract, do: Contracts.get_months_up_to_current(contract), else: []
-
-    {:ok,
-     socket
-     |> assign(:page_title, "Show Property")
-     |> assign(:property, property)
-     |> assign(:contract, contract)
-     |> assign(:months, months)
-     |> assign(:show_contract_modal, false)
-     |> assign(:rejecting_payment, nil)}
+  @impl true
+  def handle_event("switch_tab", %{"selected" => tab}, socket)
+      when tab in ["active_contract", "contract_history"] do
+    {:noreply, assign(socket, :active_tab, tab)}
   end
 
   @impl true
@@ -271,63 +508,32 @@ defmodule VivvoWeb.PropertyLive.Show do
     {:noreply, assign(socket, :show_contract_modal, true)}
   end
 
-  @impl true
-  def handle_event("accept_payment", %{"payment-id" => payment_id}, socket) do
+  # Assigns all data for the property show page
+  defp assign_data(socket, property_id) do
     scope = socket.assigns.current_scope
+    property = Properties.get_property!(scope, property_id)
+    contracts = Contracts.list_property_contracts(scope, property_id)
+    current_contract = Contracts.current_contract_for_property(scope, property_id)
 
-    case Payments.get_payment(scope, payment_id) do
-      nil ->
-        {:noreply, put_flash(socket, :error, "Payment not found")}
-
-      payment ->
-        case Payments.accept_payment(scope, payment) do
-          {:ok, _} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Payment accepted successfully")
-             |> refresh_contract_data()}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to accept payment")}
-        end
-    end
+    socket
+    |> assign(:page_title, "Show Property")
+    |> assign(:property, property)
+    |> assign(:contracts, contracts)
+    |> assign(:contract, current_contract)
+    |> assign(:active_tab, "active_contract")
+    |> assign(:show_contract_modal, false)
   end
 
-  @impl true
-  def handle_event("show_reject_modal", %{"payment-id" => payment_id}, socket) do
-    scope = socket.assigns.current_scope
+  # Refreshes all property data when an update is received
+  # Preserves user state (active tab, modal visibility) to avoid disrupting the UI
+  defp refresh_data(socket) do
+    active_tab = socket.assigns.active_tab
+    show_modal = socket.assigns.show_contract_modal
 
-    case Payments.get_payment(scope, payment_id) do
-      nil ->
-        {:noreply, put_flash(socket, :error, "Payment not found")}
-
-      payment ->
-        {:noreply, assign(socket, :rejecting_payment, payment)}
-    end
-  end
-
-  @impl true
-  def handle_event("reject_payment", %{"rejection-reason" => reason}, socket) do
-    scope = socket.assigns.current_scope
-    payment = socket.assigns.rejecting_payment
-
-    case Payments.reject_payment(scope, payment, reason) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:rejecting_payment, nil)
-         |> put_flash(:info, "Payment rejected successfully")
-         |> refresh_contract_data()}
-
-      {:error, changeset} ->
-        errors = format_changeset_errors(changeset)
-        {:noreply, put_flash(socket, :error, "Failed to reject payment: #{errors}")}
-    end
-  end
-
-  @impl true
-  def handle_event("close_reject_modal", _params, socket) do
-    {:noreply, assign(socket, :rejecting_payment, nil)}
+    socket
+    |> assign_data(socket.assigns.property.id)
+    |> assign(:active_tab, active_tab)
+    |> assign(:show_contract_modal, show_modal)
   end
 
   @impl true
@@ -335,54 +541,12 @@ defmodule VivvoWeb.PropertyLive.Show do
     {:noreply, assign(socket, :show_contract_modal, false)}
   end
 
+  # Property events - refresh when this property changes
   def handle_info(
-        {:created, %Vivvo.Contracts.Contract{property_id: property_id} = contract},
-        socket
-      )
-      when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
-
-    months = Contracts.get_months_up_to_current(contract)
-
-    {:noreply,
-     socket
-     |> assign(:contract, contract)
-     |> assign(:months, months)}
-  end
-
-  def handle_info(
-        {:updated, %Vivvo.Contracts.Contract{property_id: property_id} = contract},
-        socket
-      )
-      when property_id == socket.assigns.property.id do
-    contract = Vivvo.Repo.preload(contract, [:tenant, :payments, :rent_periods])
-
-    months = Contracts.get_months_up_to_current(contract)
-
-    {:noreply,
-     socket
-     |> assign(:contract, contract)
-     |> assign(:months, months)}
-  end
-
-  def handle_info({:deleted, %Vivvo.Contracts.Contract{property_id: property_id}}, socket)
-      when property_id == socket.assigns.property.id do
-    {:noreply,
-     socket
-     |> assign(:contract, nil)
-     |> assign(:months, [])}
-  end
-
-  # Ignore contract events for other properties
-  def handle_info({_action, %Vivvo.Contracts.Contract{}}, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_info(
-        {:updated, %Vivvo.Properties.Property{id: id} = property},
+        {:updated, %Vivvo.Properties.Property{id: id}},
         %{assigns: %{property: %{id: id}}} = socket
       ) do
-    {:noreply, assign(socket, :property, property)}
+    {:noreply, refresh_data(socket)}
   end
 
   def handle_info(
@@ -395,53 +559,37 @@ defmodule VivvoWeb.PropertyLive.Show do
      |> push_navigate(to: ~p"/properties")}
   end
 
-  def handle_info({type, %Vivvo.Properties.Property{}}, socket)
-      when type in [:created, :updated, :deleted] do
+  def handle_info({_action, %Vivvo.Properties.Property{}}, socket) do
     {:noreply, socket}
   end
 
-  # Handle payment events
-  def handle_info({_action, %Vivvo.Payments.Payment{contract_id: contract_id}}, socket)
-      when contract_id == socket.assigns.contract.id do
-    {:noreply, refresh_contract_data(socket)}
+  # Contract events - refresh when any contract for this property changes
+  def handle_info(
+        {_action, %Vivvo.Contracts.Contract{property_id: property_id}},
+        %{assigns: %{property: %{id: id}}} = socket
+      )
+      when property_id == id do
+    {:noreply, refresh_data(socket)}
+  end
+
+  def handle_info({_action, %Vivvo.Contracts.Contract{}}, socket) do
+    {:noreply, socket}
+  end
+
+  # Payment events - refresh when any payment for this property's contracts changes
+  def handle_info(
+        {_action, %Vivvo.Payments.Payment{contract_id: contract_id}},
+        %{assigns: %{contracts: contracts}} = socket
+      ) do
+    # Check if payment belongs to any of this property's contracts
+    if Enum.any?(contracts, &(&1.id == contract_id)) do
+      {:noreply, refresh_data(socket)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({_action, %Vivvo.Payments.Payment{}}, socket) do
     {:noreply, socket}
-  end
-
-  # Helper Functions
-
-  defp refresh_contract_data(socket) do
-    scope = socket.assigns.current_scope
-    contract = Contracts.current_contract_for_property(scope, socket.assigns.property.id)
-
-    if contract do
-      months = Contracts.get_months_up_to_current(contract)
-
-      socket
-      |> assign(:contract, contract)
-      |> assign(:months, months)
-    else
-      assign(socket, :contract, nil)
-    end
-  end
-
-  defp get_payments_for_month(payments, month) do
-    Enum.filter(payments, &(&1.payment_number == month))
-  end
-
-  defp month_status_border(:paid), do: "border-success"
-  defp month_status_border(:partial), do: "border-warning"
-  defp month_status_border(:unpaid), do: "border-base-300"
-  defp month_status_border(_), do: "border-base-300"
-
-  defp format_changeset_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map_join("; ", fn {k, v} -> "#{k}: #{Enum.join(v, ", ")}" end)
   end
 end
