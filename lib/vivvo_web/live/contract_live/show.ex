@@ -20,7 +20,7 @@ defmodule VivvoWeb.ContractLive.Show do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="space-y-6 sm:space-y-8">
         <%!-- Page Header with Back Navigation --%>
-        <.page_header title="Contract Details" back_navigate={~p"/properties/#{@property.id}"}>
+        <.page_header title="Contract Details" back_navigate={@back_path}>
           <:subtitle>
             {@property.name} — {format_contract_period(@contract)}
           </:subtitle>
@@ -490,7 +490,11 @@ defmodule VivvoWeb.ContractLive.Show do
   # ============================================================================
 
   @impl true
-  def mount(%{"property_id" => property_id, "contract_id" => contract_id}, _session, socket) do
+  def mount(
+        %{"property_id" => property_id, "contract_id" => contract_id} = params,
+        _session,
+        socket
+      ) do
     scope = socket.assigns.current_scope
     today = Date.utc_today()
 
@@ -514,6 +518,9 @@ defmodule VivvoWeb.ContractLive.Show do
       chart_labels_json = Jason.encode!(chart_data.labels)
       chart_values_json = Jason.encode!(chart_data.values)
 
+      return_to = Map.get(params, "return_to", "contract")
+      back_path = ~p"/properties/#{contract.property.id}?tab=#{return_to}"
+
       {:ok,
        socket
        |> assign(:page_title, "Contract Details")
@@ -527,7 +534,8 @@ defmodule VivvoWeb.ContractLive.Show do
        |> assign(:chart_labels_json, chart_labels_json)
        |> assign(:chart_values_json, chart_values_json)
        |> assign(:chart_min_value, chart_data.min_value)
-       |> assign(:chart_max_value, chart_data.max_value)}
+       |> assign(:chart_max_value, chart_data.max_value)
+       |> assign(:back_path, back_path)}
     end
   end
 end
