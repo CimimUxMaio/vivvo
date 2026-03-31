@@ -46,7 +46,7 @@ defmodule VivvoWeb.ContractLive.Show do
 
           <%!-- RIGHT: Graph Container (30-40% on desktop) --%>
           <div class="lg:col-span-2">
-            <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6 lg:sticky lg:top-6">
+            <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6 lg:sticky lg:top-24">
               <div class="flex items-center gap-2 mb-4">
                 <div class="p-1.5 bg-primary/10 rounded-lg flex items-center justify-center">
                   <.icon name="hero-chart-bar" class="w-5 h-5 text-primary" />
