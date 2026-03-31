@@ -1000,14 +1000,12 @@ defmodule VivvoWeb.CoreComponents do
 
     progress = ContractHelpers.calculate_contract_progress(contract, today)
     today_marker = ContractHelpers.calculate_today_marker(contract, today)
-    progress_color = ContractHelpers.progress_color(progress)
     timeline_data = ContractHelpers.calculate_timeline_data(contract, today)
 
     assigns =
       assign(assigns,
         progress: progress,
         today_marker: today_marker,
-        progress_color: progress_color,
         days_until_start: timeline_data.days_until_start,
         current_month: timeline_data.current_month,
         total_months: timeline_data.total_months,
@@ -1047,7 +1045,7 @@ defmodule VivvoWeb.CoreComponents do
         </div>
       <% end %>
 
-      <.progress_track progress={@progress} color={@progress_color} today_marker={@today_marker} />
+      <.progress_track progress={@progress} today_marker={@today_marker} />
 
       <.progress_labels
         contract={@contract}
@@ -1064,10 +1062,10 @@ defmodule VivvoWeb.CoreComponents do
 
   ## Examples
 
-      <.progress_track progress={75} color="bg-success" today_marker={80} />
+      <.progress_track progress={75} color="bg-primary" today_marker={80} />
   """
   attr :progress, :integer, required: true
-  attr :color, :string, required: true
+  attr :color, :string, required: false, default: "bg-primary"
   attr :today_marker, :integer, required: false, default: nil
 
   def progress_track(assigns) do

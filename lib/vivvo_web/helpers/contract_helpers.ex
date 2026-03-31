@@ -65,17 +65,6 @@ defmodule VivvoWeb.Helpers.ContractHelpers do
   end
 
   @doc """
-  Returns the color class for a given progress percentage.
-
-  - <= 50%: success color (green)
-  - 50-90%: warning color (yellow)
-  - > 90%: error color (red)
-  """
-  def progress_color(progress) when progress <= 50, do: "bg-success"
-  def progress_color(progress) when progress < 90, do: "bg-warning"
-  def progress_color(_progress), do: "bg-error"
-
-  @doc """
   Calculates timeline display data for progress labels.
 
   Returns a map with:
