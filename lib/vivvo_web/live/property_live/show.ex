@@ -346,12 +346,12 @@ defmodule VivvoWeb.PropertyLive.Show do
               icon={@configs[contract.id].icon}
               label={"#{contract.tenant.first_name} #{contract.tenant.last_name}"}
             >
-              <%!-- Header: Tenant & Status --%>
-              <div class="flex items-start justify-between gap-3 mb-3">
-                <div class="flex items-center gap-3 min-w-0">
+              <%!-- Header: Avatar, Tenant Info, Status & Button - Desktop: side-by-side, Mobile: stacked --%>
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div class="flex items-start gap-3">
                   <%!-- Tenant Avatar --%>
                   <div
-                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"
+                    class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5"
                     title={"#{contract.tenant.first_name} #{contract.tenant.last_name}"}
                     aria-label={"Avatar for #{contract.tenant.first_name} #{contract.tenant.last_name}"}
                   >
@@ -363,42 +363,52 @@ defmodule VivvoWeb.PropertyLive.Show do
                   </div>
 
                   <%!-- Tenant Info --%>
-                  <div class="min-w-0">
-                    <p class="font-semibold text-base-content truncate">
+                  <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-base-content text-sm sm:text-base break-words">
                       {contract.tenant.first_name} {contract.tenant.last_name}
                     </p>
-                    <p class="text-xs text-base-content/60 truncate">
+                    <p class="text-xs text-base-content/60 break-all">
                       {contract.tenant.email}
                     </p>
                   </div>
                 </div>
 
-                <%!-- Status Badge --%>
-                <.contract_status_badge status={Contracts.contract_status(contract)} />
+                <%!-- Status Badge & View Button --%>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <.contract_status_badge status={Contracts.contract_status(contract)} />
+                  <.button navigate={~p"/properties/#{@property.id}/contracts/#{contract.id}"}>
+                    <.icon name="hero-eye" class="w-5 h-5" />
+                    <span class="hidden sm:block">View</span>
+                  </.button>
+                </div>
               </div>
 
               <%!-- Contract Period --%>
-              <div class="flex items-center gap-2 text-sm text-base-content/70 mb-3">
-                <.icon name="hero-calendar" class="w-4 h-4 flex-shrink-0" />
-                <span>{format_date(contract.start_date)} - {format_date(contract.end_date)}</span>
-                <span class="text-base-content/40">
-                  ({format_duration(contract.start_date, contract.end_date)})
+              <div class="flex flex-col gap-1 text-sm text-base-content/70 pt-3 border-t border-base-200 mt-3">
+                <div class="flex items-center gap-2">
+                  <.icon name="hero-calendar" class="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    {format_date(contract.start_date)} - {format_date(contract.end_date)}
+                  </span>
+                </div>
+                <span class="text-base-content/50 text-xs pl-6">
+                  {format_duration(contract.start_date, contract.end_date)}
                 </span>
               </div>
 
-              <%!-- Contract Details Grid --%>
-              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-base-200">
+              <%!-- Contract Details: Rent & Payment - Stacked on mobile, side-by-side on desktop --%>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-base-200 mt-3">
                 <%!-- Monthly Rent --%>
-                <div>
-                  <p class="text-xs text-base-content/50 mb-0.5">Monthly Rent</p>
+                <div class="flex items-center justify-between sm:block">
+                  <p class="text-xs text-base-content/50 sm:mb-0.5">Monthly Rent</p>
                   <p class="font-semibold text-base-content">
                     {format_currency(Contracts.current_rent_value(contract))}
                   </p>
                 </div>
 
                 <%!-- Payment Due --%>
-                <div>
-                  <p class="text-xs text-base-content/50 mb-0.5">Payment Due</p>
+                <div class="flex items-center justify-between sm:block">
+                  <p class="text-xs text-base-content/50 sm:mb-0.5">Payment Due</p>
                   <p class="font-medium text-base-content text-sm">
                     Day {contract.expiration_day}
                   </p>
@@ -407,12 +417,12 @@ defmodule VivvoWeb.PropertyLive.Show do
 
               <%!-- Indexing Indicator (if applicable) --%>
               <%= if contract.index_type do %>
-                <div class="mt-3 pt-3 border-t border-base-200">
-                  <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+                <div class="pt-3 border-t border-base-200 mt-3">
+                  <div class="flex flex-col gap-2">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium w-fit">
                       <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
                     </span>
-                    <span class="text-xs text-base-content/50">
+                    <span class="text-xs text-base-content/50 break-words">
                       {index_type_label(contract.index_type)}
                     </span>
                   </div>
