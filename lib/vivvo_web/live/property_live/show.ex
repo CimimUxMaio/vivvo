@@ -23,9 +23,14 @@ defmodule VivvoWeb.PropertyLive.Show do
           <:subtitle>
             {@property.address}
           </:subtitle>
+
           <:action>
             <.button variant="primary" navigate={~p"/properties/#{@property}/edit?return_to=show"}>
               <.icon name="hero-pencil-square" class="w-5 h-5 mr-1" /> Edit
+            </.button>
+
+            <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
+              <.icon name="hero-plus" class="w-5 h-5 mr-2" /> Create Contract
             </.button>
           </:action>
         </.page_header>
@@ -155,17 +160,6 @@ defmodule VivvoWeb.PropertyLive.Show do
           </div>
         </div>
       </div>
-
-      <%!-- CONTRACT MODAL --%>
-      <%= if @show_contract_modal && @contract do %>
-        <.live_component
-          module={VivvoWeb.ContractLive.ShowModal}
-          id="contract-modal"
-          contract={@contract}
-          property={@property}
-          current_scope={@current_scope}
-        />
-      <% end %>
     </Layouts.app>
     """
   end
@@ -183,7 +177,7 @@ defmodule VivvoWeb.PropertyLive.Show do
             </div>
             <h3 class="text-lg font-semibold text-base-content">Active Contract</h3>
           </div>
-          <.button phx-click="show_contract_modal">
+          <.button navigate={~p"/properties/#{@property.id}/contracts/#{@contract.id}"}>
             <.icon name="hero-eye" class="w-5 h-5" />
             <span class="hidden sm:block">View Full Details</span>
           </.button>
@@ -503,11 +497,6 @@ defmodule VivvoWeb.PropertyLive.Show do
     {:noreply, assign(socket, :active_tab, tab)}
   end
 
-  @impl true
-  def handle_event("show_contract_modal", _params, socket) do
-    {:noreply, assign(socket, :show_contract_modal, true)}
-  end
-
   # Assigns all data for the property show page
   defp assign_data(socket, property_id) do
     scope = socket.assigns.current_scope
@@ -521,26 +510,19 @@ defmodule VivvoWeb.PropertyLive.Show do
     |> assign(:contracts, contracts)
     |> assign(:contract, current_contract)
     |> assign(:active_tab, "active_contract")
-    |> assign(:show_contract_modal, false)
   end
 
   # Refreshes all property data when an update is received
-  # Preserves user state (active tab, modal visibility) to avoid disrupting the UI
+  # Preserves user state (active tab) to avoid disrupting the UI
   defp refresh_data(socket) do
     active_tab = socket.assigns.active_tab
-    show_modal = socket.assigns.show_contract_modal
 
     socket
     |> assign_data(socket.assigns.property.id)
     |> assign(:active_tab, active_tab)
-    |> assign(:show_contract_modal, show_modal)
   end
 
   @impl true
-  def handle_info(:close_contract_modal, socket) do
-    {:noreply, assign(socket, :show_contract_modal, false)}
-  end
-
   # Property events - refresh when this property changes
   def handle_info(
         {:updated, %Vivvo.Properties.Property{id: id}},

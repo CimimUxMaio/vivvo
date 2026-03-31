@@ -265,20 +265,24 @@ defmodule VivvoWeb.PropertyLiveTest do
       assert html =~ "Active" or html =~ "active"
     end
 
-    test "'View Full Details' button opens modal", %{conn: conn, property: property, scope: scope} do
+    test "'View Full Details' button navigates to contract show page", %{
+      conn: conn,
+      property: property,
+      scope: scope
+    } do
       tenant = user_fixture(%{preferred_roles: [:tenant]})
-      _contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
+      contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
 
       {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
 
       # Switch to Active Contract tab first
       show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
 
-      # Click on view full details button
-      html = show_live |> element("button", "View Full Details") |> render_click()
-
-      # Modal should be visible with contract details
-      assert html =~ "Contract Details" or html =~ "contract"
+      # Click on view full details button should navigate to show page
+      show_live
+      |> element("a[href='/properties/#{property.id}/contracts/#{contract.id}']")
+      |> render_click()
+      |> follow_redirect(conn, ~p"/properties/#{property.id}/contracts/#{contract.id}")
     end
 
     test "'Create Contract' button navigates to new form", %{conn: conn, property: property} do
@@ -294,87 +298,6 @@ defmodule VivvoWeb.PropertyLiveTest do
         |> follow_redirect(conn, ~p"/properties/#{property}/contracts/new")
 
       assert html =~ "New Contract for"
-    end
-
-    test "modal shows all contract details", %{conn: conn, property: property, scope: scope} do
-      tenant =
-        user_fixture(%{
-          preferred_roles: [:tenant],
-          first_name: "John",
-          last_name: "Doe",
-          email: "john@example.com",
-          phone_number: "+1234567890"
-        })
-
-      _contract =
-        contract_fixture(scope, %{
-          property_id: property.id,
-          tenant_id: tenant.id,
-          rent: "500.00",
-          expiration_day: 5,
-          notes: "Test notes"
-        })
-
-      {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
-
-      # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
-
-      html = show_live |> element("button", "View Full Details") |> render_click()
-
-      assert html =~ "Contract Details"
-      assert html =~ "John Doe"
-      assert html =~ "john@example.com"
-      assert html =~ "$500.00" or html =~ "500.00"
-      assert html =~ "Day 5"
-      assert html =~ "Test notes"
-    end
-
-    test "modal archive action archives contract", %{
-      conn: conn,
-      property: property,
-      scope: scope
-    } do
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
-
-      # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
-
-      # Open modal
-      show_live |> element("button", "View Full Details") |> render_click()
-
-      # Archive the contract
-      show_live |> element("button", "Archive") |> render_click()
-
-      # Contract should be archived
-      assert_raise Ecto.NoResultsError, fn ->
-        Vivvo.Contracts.get_contract!(scope, contract.id)
-      end
-
-      # Page should show no active contract
-      html = render(show_live)
-      assert html =~ "No Active Contract"
-    end
-
-    test "modal close button closes modal", %{conn: conn, property: property, scope: scope} do
-      tenant = user_fixture(%{preferred_roles: [:tenant]})
-      _contract = contract_fixture(scope, %{property_id: property.id, tenant_id: tenant.id})
-
-      {:ok, show_live, _html} = live(conn, ~p"/properties/#{property}")
-
-      # Switch to Active Contract tab first
-      show_live |> element("button[phx-value-selected='active_contract']") |> render_click()
-
-      # Open modal
-      html = show_live |> element("button", "View Full Details") |> render_click()
-      assert html =~ "Contract Details"
-
-      # Modal should have close functionality
-      # The modal uses JS.push to send close_modal event
-      # which is handled by the LiveComponent
     end
   end
 
