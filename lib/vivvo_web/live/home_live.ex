@@ -724,6 +724,7 @@ defmodule VivvoWeb.HomeLive do
         <canvas
           id="outstanding-balances-chart"
           phx-hook="PieChart"
+          phx-update="ignore"
           data-chart-data={@chart_data_json}
         >
         </canvas>

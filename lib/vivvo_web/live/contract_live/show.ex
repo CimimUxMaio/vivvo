@@ -57,6 +57,7 @@ defmodule VivvoWeb.ContractLive.Show do
                 <canvas
                   id="rent-chart"
                   phx-hook="SteppedLineChart"
+                  phx-update="ignore"
                   data-chart-labels={@chart_labels_json}
                   data-chart-values={@chart_values_json}
                   data-chart-min={@chart_min_value}
