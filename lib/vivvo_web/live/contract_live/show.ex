@@ -410,9 +410,7 @@ defmodule VivvoWeb.ContractLive.Show do
     scope = socket.assigns.current_scope
     today = Date.utc_today()
 
-    contract =
-      Contracts.get_contract!(scope, contract_id)
-      |> Vivvo.Repo.preload([:tenant, :property, :user, :rent_periods])
+    contract = Contracts.get_contract!(scope, contract_id)
 
     # Verify the contract belongs to this property
     if contract.property_id != String.to_integer(property_id) do

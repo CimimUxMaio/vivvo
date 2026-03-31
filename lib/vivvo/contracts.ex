@@ -65,7 +65,7 @@ defmodule Vivvo.Contracts do
   def get_contract!(%Scope{} = scope, id) do
     Contract
     |> where([c], c.id == ^id and c.user_id == ^scope.user.id and c.archived == false)
-    |> preload([:tenant, :property, :rent_periods])
+    |> preload([:tenant, :property, :user, :rent_periods])
     |> Repo.one!()
   end
 
