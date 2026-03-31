@@ -1348,6 +1348,60 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
+  Generates chart data for rent value over time from contract start to end.
+
+  Returns a map with :labels, :values, :min_value, and :max_value keys suitable 
+  for Chart.js stepped line chart. Data points are generated for each month from 
+  the contract start date to the minimum of the current date or contract end date.
+
+  ## Examples
+
+      iex> generate_rent_chart_data(contract)
+      %{labels: ["Jan 2026", "Feb 2026", "Mar 2026"], 
+        values: [1200.0, 1200.0, 1250.5],
+        min_value: 1200.0,
+        max_value: 1250.5}
+
+  """
+  def generate_rent_chart_data(%Contract{} = contract, today \\ Date.utc_today()) do
+    end_date = Enum.min([today, contract.end_date], Date)
+
+    months = generate_months_list(contract.start_date, end_date)
+
+    {labels, values, min_value, max_value} =
+      Enum.reduce(months, {[], [], nil, nil}, fn date,
+                                                 {labels_acc, values_acc, min_acc, max_acc} ->
+        label = format_month_label(date)
+        value = Decimal.to_float(current_rent_value(contract, date))
+
+        new_min = if min_acc == nil or value < min_acc, do: value, else: min_acc
+        new_max = if max_acc == nil or value > max_acc, do: value, else: max_acc
+
+        {[label | labels_acc], [value | values_acc], new_min, new_max}
+      end)
+
+    %{
+      labels: Enum.reverse(labels),
+      values: Enum.reverse(values),
+      min_value: min_value || 0,
+      max_value: max_value || 0
+    }
+  end
+
+  defp generate_months_list(start_date, end_date) do
+    Stream.iterate(start_date, &Date.shift(&1, month: 1))
+    |> Stream.take_while(fn date ->
+      Date.compare(date, end_date) != :gt
+    end)
+    |> Enum.to_list()
+  end
+
+  defp format_month_label(date) do
+    month_name = Calendar.strftime(date, "%b")
+    "#{month_name} #{date.year}"
+  end
+
+  @doc """
   Gets a single contract by ID without scope validation. Used by system jobs.
 
   Returns nil if the Contract does not exist.
