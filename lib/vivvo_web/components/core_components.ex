@@ -883,6 +883,8 @@ defmodule VivvoWeb.CoreComponents do
   """
   attr :id, :string, default: nil, doc: "optional DOM id for the container"
 
+  attr :class, :string, default: nil, doc: "additional CSS classes for the container"
+
   attr :gap, :atom,
     default: :md,
     values: [:sm, :md, :lg],
@@ -904,7 +906,7 @@ defmodule VivvoWeb.CoreComponents do
     assigns = assign(assigns, :gap_class, Map.fetch!(gap_classes, assigns.gap))
 
     ~H"""
-    <div id={@id} class="relative rounded-xl p-4">
+    <div id={@id} class={["relative rounded-xl p-4", @class]}>
       <%!-- Vertical Timeline Line --%>
       <div class="absolute left-9 top-4 bottom-2 w-0.5 bg-base-300"></div>
 

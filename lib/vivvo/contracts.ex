@@ -272,9 +272,9 @@ defmodule Vivvo.Contracts do
     |> then(&Enum.min([&1, max_end_date], Date))
   end
 
-  defp compute_rent_value(initial_rent, _update_factor, 0), do: initial_rent
+  def compute_rent_value(initial_rent, _update_factor, 0), do: initial_rent
 
-  defp compute_rent_value(initial_rent, update_factor, period_idx) do
+  def compute_rent_value(initial_rent, update_factor, period_idx) do
     multiplier = decimal_pow(update_factor, period_idx)
 
     Decimal.mult(initial_rent, multiplier)
