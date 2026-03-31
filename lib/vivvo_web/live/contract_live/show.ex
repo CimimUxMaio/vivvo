@@ -53,14 +53,17 @@ defmodule VivvoWeb.ContractLive.Show do
                 </div>
                 <h3 class="text-lg font-semibold text-base-content">Rent Value Over Time</h3>
               </div>
-              <div class="aspect-video bg-base-200 rounded-xl flex items-center justify-center">
-                <div class="text-center p-8">
-                  <.icon name="hero-chart-bar" class="w-16 h-16 text-base-content/20 mx-auto mb-4" />
-                  <p class="text-sm text-base-content/50">Graph coming soon</p>
-                  <p class="text-xs text-base-content/40 mt-1">
-                    Rent evolution visualization
-                  </p>
-                </div>
+              <div class="aspect-video">
+                <canvas
+                  id="rent-chart"
+                  phx-hook="SteppedLineChart"
+                  data-chart-labels={@chart_labels_json}
+                  data-chart-values={@chart_values_json}
+                  data-chart-min={@chart_min_value}
+                  data-chart-max={@chart_max_value}
+                  class="w-full h-full"
+                >
+                </canvas>
               </div>
             </div>
           </div>
@@ -507,6 +510,10 @@ defmodule VivvoWeb.ContractLive.Show do
       days_until = Contracts.days_until_next_update(contract)
       current_rent = Contracts.current_rent_value(contract)
 
+      chart_data = Contracts.generate_rent_chart_data(contract, today)
+      chart_labels_json = Jason.encode!(chart_data.labels)
+      chart_values_json = Jason.encode!(chart_data.values)
+
       {:ok,
        socket
        |> assign(:page_title, "Contract Details")
@@ -516,7 +523,11 @@ defmodule VivvoWeb.ContractLive.Show do
        |> assign(:progress, progress)
        |> assign(:next_update, next_update)
        |> assign(:days_until, days_until)
-       |> assign(:current_rent, current_rent)}
+       |> assign(:current_rent, current_rent)
+       |> assign(:chart_labels_json, chart_labels_json)
+       |> assign(:chart_values_json, chart_values_json)
+       |> assign(:chart_min_value, chart_data.min_value)
+       |> assign(:chart_max_value, chart_data.max_value)}
     end
   end
 end
