@@ -42,28 +42,13 @@ defmodule VivvoWeb.ContractLive.Show do
               days_until={@days_until}
               today={@today}
             />
-
-            <%!-- Notes Section (if present) --%>
-            <%= if @contract.notes && @contract.notes != "" do %>
-              <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
-                <div class="flex items-center gap-2 mb-4">
-                  <div class="p-1.5 bg-base-200 rounded-lg">
-                    <.icon name="hero-document-text" class="w-5 h-5 text-base-content/60" />
-                  </div>
-                  <h3 class="text-lg font-semibold text-base-content">Notes</h3>
-                </div>
-                <div class="prose prose-sm max-w-none text-base-content/80">
-                  <p class="whitespace-pre-wrap">{@contract.notes}</p>
-                </div>
-              </div>
-            <% end %>
           </div>
 
           <%!-- RIGHT: Graph Container (30-40% on desktop) --%>
           <div class="lg:col-span-2">
             <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6 lg:sticky lg:top-6">
               <div class="flex items-center gap-2 mb-4">
-                <div class="p-1.5 bg-primary/10 rounded-lg">
+                <div class="p-1.5 bg-primary/10 rounded-lg flex items-center justify-center">
                   <.icon name="hero-chart-bar" class="w-5 h-5 text-primary" />
                 </div>
                 <h3 class="text-lg font-semibold text-base-content">Rent Value Over Time</h3>
@@ -91,81 +76,46 @@ defmodule VivvoWeb.ContractLive.Show do
 
   defp contract_timeline(assigns) do
     ~H"""
-    <div class="relative rounded-xl p-4 bg-base-200">
-      <%!-- Vertical Timeline Line --%>
-      <div class="absolute left-9 top-4 bottom-2 w-0.5 bg-base-300"></div>
+    <.timeline_container class="bg-base-200 shadow-md">
+      <:timeline_item status={:success} icon="hero-building-office" label="Property">
+        <.property_timeline_card property={@property} />
+      </:timeline_item>
 
-      <div class="space-y-6">
-        <%!-- Property Section --%>
-        <.timeline_entry status={:success} icon="hero-building-office" label="Property">
-          <.property_timeline_card property={@property} />
-        </.timeline_entry>
+      <:timeline_item status={:info} icon="hero-users" label="Parties">
+        <.parties_timeline_card contract={@contract} />
+      </:timeline_item>
 
-        <%!-- Parties Section --%>
-        <.timeline_entry status={:info} icon="hero-users" label="Parties">
-          <.parties_timeline_card contract={@contract} />
-        </.timeline_entry>
+      <:timeline_item status={:info} icon="hero-document-text" label="Terms">
+        <.terms_timeline_card contract={@contract} />
+      </:timeline_item>
 
-        <%!-- Terms Section --%>
-        <.timeline_entry status={:info} icon="hero-document-text" label="Terms">
-          <.terms_timeline_card contract={@contract} />
-        </.timeline_entry>
+      <:timeline_item status={:success} icon="hero-banknotes" label="Financials">
+        <.financials_timeline_card contract={@contract} current_rent={@current_rent} />
+      </:timeline_item>
 
-        <%!-- Financials Section --%>
-        <.timeline_entry status={:success} icon="hero-banknotes" label="Financials">
-          <.financials_timeline_card contract={@contract} current_rent={@current_rent} />
-        </.timeline_entry>
+      <:timeline_item
+        :if={@contract.index_type}
+        status={:warning}
+        icon="hero-arrow-path"
+        label="Rent Updates"
+      >
+        <.rent_periods_timeline_card
+          contract={@contract}
+          rent_periods={@contract.rent_periods}
+          next_update={@next_update}
+          days_until={@days_until}
+        />
+      </:timeline_item>
 
-        <%!-- Rent Periods Milestones (if indexed) --%>
-        <%= if @contract.index_type do %>
-          <.timeline_entry status={:warning} icon="hero-arrow-path" label="Rent Updates">
-            <.rent_periods_timeline_card
-              contract={@contract}
-              rent_periods={@contract.rent_periods}
-              next_update={@next_update}
-              days_until={@days_until}
-            />
-          </.timeline_entry>
-        <% end %>
-
-        <%!-- Contract End Milestone --%>
-        <.timeline_entry status={contract_end_status(@contract)} icon="hero-flag" label="End">
-          <.contract_end_card contract={@contract} today={@today} />
-        </.timeline_entry>
-      </div>
-    </div>
-    """
-  end
-
-  # Timeline Entry Component
-  defp timeline_entry(assigns) do
-    ~H"""
-    <div class="relative flex gap-4">
-      <%!-- Timeline Node --%>
-      <div class="relative flex-shrink-0">
-        <div
-          class={[
-            "w-10 h-10 rounded-full flex items-center justify-center border-2",
-            "bg-base-100 z-10 relative",
-            @status == :success && "border-success text-success",
-            @status == :info && "border-info text-info",
-            @status == :warning && "border-warning text-warning",
-            @status == :error && "border-error text-error",
-            @status == :base && "border-base-400 text-base-content/50"
-          ]}
-          aria-label={@label}
-        >
-          <.icon name={@icon} class="w-5 h-5" />
-        </div>
-      </div>
-
-      <%!-- Content with Card Styling --%>
-      <div class="flex-1 min-w-0">
-        <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:shadow-md transition-shadow">
-          {render_slot(@inner_block)}
-        </div>
-      </div>
-    </div>
+      <:timeline_item
+        :if={@contract.notes && @contract.notes != ""}
+        status={:info}
+        icon="hero-document-text"
+        label="Notes"
+      >
+        <.notes_timeline_card notes={@contract.notes} />
+      </:timeline_item>
+    </.timeline_container>
     """
   end
 
@@ -303,7 +253,7 @@ defmodule VivvoWeb.ContractLive.Show do
       <%!-- Current Rent --%>
       <div class="flex items-center justify-between p-3 bg-success/5 rounded-xl border border-success/10">
         <div class="flex items-center gap-3">
-          <div class="p-2 bg-success/10 rounded-lg">
+          <div class="p-2 bg-success/10 rounded-lg flex items-center justify-center">
             <.icon name="hero-banknotes" class="w-5 h-5 text-success" />
           </div>
           <div>
@@ -362,7 +312,7 @@ defmodule VivvoWeb.ContractLive.Show do
       <%= if @next_update do %>
         <div class="flex items-center justify-between p-3 bg-warning/5 rounded-xl border border-warning/10">
           <div class="flex items-center gap-3">
-            <div class="p-2 bg-warning/10 rounded-lg">
+            <div class="p-2 bg-warning/10 rounded-lg flex items-center justify-center">
               <.icon name="hero-bell" class="w-5 h-5 text-warning" />
             </div>
             <div>
@@ -389,7 +339,7 @@ defmodule VivvoWeb.ContractLive.Show do
       <%= if @sorted_periods != [] do %>
         <div class="space-y-2">
           <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Rent History</p>
-          <div class="space-y-2">
+          <div class="space-y-2 max-h-[280px] overflow-y-auto pr-1">
             <%= for {period, index} <- Enum.with_index(@sorted_periods) do %>
               <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-base-200/50 transition-colors">
                 <div class={[
@@ -402,7 +352,7 @@ defmodule VivvoWeb.ContractLive.Show do
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center justify-between">
                     <span class="font-medium text-sm truncate">
-                      {format_currency(period.amount)}
+                      {format_currency(period.value)}
                     </span>
                     <span class="text-xs text-base-content/50">
                       {format_date(period.start_date)}
@@ -421,45 +371,13 @@ defmodule VivvoWeb.ContractLive.Show do
     """
   end
 
-  # Contract end card showing end status
-  defp contract_end_card(assigns) do
-    days_remaining = days_remaining(assigns.contract, assigns.today)
-    contract_status = Contracts.contract_status(assigns.contract)
-
-    assigns =
-      assigns
-      |> assign(:days_remaining, days_remaining)
-      |> assign(:contract_status, contract_status)
-
+  # Notes card showing contract notes in the timeline
+  defp notes_timeline_card(assigns) do
     ~H"""
-    <div class="space-y-3">
-      <div class="flex items-center justify-between">
-        <div>
-          <h4 class="font-semibold text-base-content">Contract End</h4>
-          <p class="text-sm text-base-content/60">{format_date(@contract.end_date)}</p>
-        </div>
-        <.contract_status_badge status={@contract_status} />
-      </div>
-
-      <%= if @days_remaining != nil do %>
-        <div class="flex items-center gap-2 text-sm">
-          <.icon name="hero-clock" class={days_remaining_icon_class(@days_remaining)} />
-          <span class={days_remaining_text_class(@days_remaining)}>
-            <%= cond do %>
-              <% @days_remaining > 30 -> %>
-                {@days_remaining} days remaining
-              <% @days_remaining > 7 -> %>
-                {@days_remaining} days remaining — ending soon
-              <% @days_remaining > 0 -> %>
-                {@days_remaining} days remaining — final week
-              <% @days_remaining == 0 -> %>
-                Contract ends today
-              <% true -> %>
-                Contract ended {-@days_remaining} days ago
-            <% end %>
-          </span>
-        </div>
-      <% end %>
+    <div class="space-y-2">
+      <p class="text-sm text-base-content/80 whitespace-pre-wrap">
+        {@notes}
+      </p>
     </div>
     """
   end
@@ -474,34 +392,31 @@ defmodule VivvoWeb.ContractLive.Show do
     assigns =
       assigns
       |> assign(:today_marker, today_marker)
-      |> assign(:progress_color, progress_bar_color(assigns.progress))
 
     ~H"""
     <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-2">
-          <div class="p-1.5 bg-primary/10 rounded-lg">
+          <div class="p-1.5 bg-primary/10 rounded-lg flex items-center justify-center">
             <.icon name="hero-map" class="w-5 h-5 text-primary" />
           </div>
           <h3 class="text-lg font-semibold text-base-content">Contract Journey</h3>
         </div>
-        <span class={[
-          "text-sm font-medium px-3 py-1 rounded-full",
-          @progress == 100 && "bg-success/10 text-success",
-          @progress > 50 && @progress < 100 && "bg-info/10 text-info",
-          @progress <= 50 && "bg-warning/10 text-warning"
-        ]}>
-          {@progress}%
-        </span>
+        <div class="flex items-center gap-2">
+          <.contract_status_badge status={Contracts.contract_status(@contract)} />
+          <span class="text-sm font-medium px-3 py-1 rounded-full bg-info/10 text-info">
+            {@progress}%
+          </span>
+        </div>
       </div>
 
-      <%!-- Progress Track --%>
-      <div class="relative">
+      <%!-- Progress Track with Today Marker --%>
+      <div class="relative h-3">
         <%!-- Background Track --%>
         <div class="h-3 bg-base-200 rounded-full overflow-hidden">
           <%!-- Progress Fill --%>
           <div
-            class={["h-full rounded-full transition-all duration-1000 ease-out", @progress_color]}
+            class="h-full rounded-full transition-all duration-1000 ease-out bg-primary"
             style={"width: #{@progress}%"}
           >
           </div>
@@ -510,41 +425,22 @@ defmodule VivvoWeb.ContractLive.Show do
         <%!-- Today Marker --%>
         <%= if @today_marker do %>
           <div
-            class="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-primary flex items-center justify-center"
+            class="absolute top-0 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-primary flex items-center justify-center -mt-1"
             style={"left: calc(#{@today_marker}% - 10px)"}
             title="Today"
           >
             <div class="w-2 h-2 bg-primary rounded-full"></div>
           </div>
         <% end %>
-
-        <%!-- Start and End Labels --%>
-        <div class="flex justify-between mt-3 text-xs text-base-content/50">
-          <div class="flex items-center gap-1">
-            <.icon name="hero-play" class="w-3 h-3 text-success" />
-            <span>{format_date(@contract.start_date)}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <span>{format_date(@contract.end_date)}</span>
-            <.icon name="hero-flag" class="w-3 h-3 text-error" />
-          </div>
-        </div>
       </div>
 
-      <%!-- Status Description --%>
-      <div class="mt-4 pt-4 border-t border-base-200">
-        <div class="flex items-center gap-3">
-          <.contract_status_badge status={Contracts.contract_status(@contract)} />
-          <span class="text-sm text-base-content/70">
-            <%= case Contracts.contract_status(@contract) do %>
-              <% :active -> %>
-                Contract is active and ongoing
-              <% :upcoming -> %>
-                Contract starts in {Date.diff(@contract.start_date, @today)} days
-              <% :expired -> %>
-                Contract has ended
-            <% end %>
-          </span>
+      <%!-- Start and End Labels --%>
+      <div class="flex justify-between mt-3 text-xs text-base-content/50">
+        <div class="flex items-center gap-1">
+          <span>{format_date(@contract.start_date)}</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <span>{format_date(@contract.end_date)}</span>
         </div>
       </div>
     </div>
@@ -585,44 +481,6 @@ defmodule VivvoWeb.ContractLive.Show do
       true -> round(elapsed_days / total_days * 100)
     end
   end
-
-  # Determine progress bar color based on percentage
-  defp progress_bar_color(progress) when progress >= 80, do: "bg-success"
-  defp progress_bar_color(progress) when progress >= 50, do: "bg-info"
-  defp progress_bar_color(_), do: "bg-warning"
-
-  # Determine contract end timeline status
-  defp contract_end_status(contract) do
-    case Contracts.contract_status(contract) do
-      :active -> :info
-      :upcoming -> :base
-      :expired -> :error
-    end
-  end
-
-  # Days remaining helper
-  defp days_remaining(contract, today) do
-    cond do
-      Date.compare(today, contract.start_date) == :lt ->
-        nil
-
-      Date.compare(today, contract.end_date) == :gt ->
-        Date.diff(contract.end_date, today)
-
-      true ->
-        Date.diff(contract.end_date, today)
-    end
-  end
-
-  # Icon class for days remaining
-  defp days_remaining_icon_class(days) when days > 30, do: "w-4 h-4 text-success"
-  defp days_remaining_icon_class(days) when days > 7, do: "w-4 h-4 text-warning"
-  defp days_remaining_icon_class(_), do: "w-4 h-4 text-error"
-
-  # Text class for days remaining
-  defp days_remaining_text_class(days) when days > 30, do: "text-success"
-  defp days_remaining_text_class(days) when days > 7, do: "text-warning"
-  defp days_remaining_text_class(_), do: "text-error"
 
   # ============================================================================
   # Lifecycle Callbacks
