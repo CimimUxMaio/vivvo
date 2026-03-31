@@ -177,7 +177,9 @@ defmodule VivvoWeb.PropertyLive.Show do
             </div>
             <h3 class="text-lg font-semibold text-base-content">Active Contract</h3>
           </div>
-          <.button navigate={~p"/properties/#{@property.id}/contracts/#{@contract.id}"}>
+          <.button navigate={
+            ~p"/properties/#{@property.id}/contracts/#{@contract.id}?return_to=contract"
+          }>
             <.icon name="hero-eye" class="w-5 h-5" />
             <span class="hidden sm:block">View Full Details</span>
           </.button>
@@ -308,7 +310,11 @@ defmodule VivvoWeb.PropertyLive.Show do
           <p class="text-sm text-base-content/60 mb-6 max-w-sm mx-auto">
             This property doesn't have an active contract. Create one to start managing tenants and rent payments.
           </p>
-          <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
+          <.button
+            variant="primary"
+            navigate={~p"/properties/#{@property}/contracts/new"}
+            id="create-contract-empty-state"
+          >
             <.icon name="hero-plus" class="w-5 h-5 mr-2" /> Create Contract
           </.button>
         </div>
@@ -376,7 +382,9 @@ defmodule VivvoWeb.PropertyLive.Show do
                 <%!-- Status Badge & View Button --%>
                 <div class="flex items-center gap-2 flex-shrink-0">
                   <.contract_status_badge status={Contracts.contract_status(contract)} />
-                  <.button navigate={~p"/properties/#{@property.id}/contracts/#{contract.id}"}>
+                  <.button navigate={
+                    ~p"/properties/#{@property.id}/contracts/#{contract.id}?return_to=history"
+                  }>
                     <.icon name="hero-eye" class="w-5 h-5" />
                     <span class="hidden sm:block">View</span>
                   </.button>
@@ -502,9 +510,20 @@ defmodule VivvoWeb.PropertyLive.Show do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    tab = Map.get(params, "tab", "contract")
+    active_tab = if tab == "history", do: "contract_history", else: "active_contract"
+
+    {:noreply, assign(socket, :active_tab, active_tab)}
+  end
+
+  @impl true
   def handle_event("switch_tab", %{"selected" => tab}, socket)
       when tab in ["active_contract", "contract_history"] do
-    {:noreply, assign(socket, :active_tab, tab)}
+    tab_param = if tab == "contract_history", do: "history", else: "contract"
+
+    {:noreply,
+     push_patch(socket, to: ~p"/properties/#{socket.assigns.property.id}?tab=#{tab_param}")}
   end
 
   # Assigns all data for the property show page
@@ -519,7 +538,6 @@ defmodule VivvoWeb.PropertyLive.Show do
     |> assign(:property, property)
     |> assign(:contracts, contracts)
     |> assign(:contract, current_contract)
-    |> assign(:active_tab, "active_contract")
   end
 
   # Refreshes all property data when an update is received
