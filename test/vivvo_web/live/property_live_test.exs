@@ -280,9 +280,14 @@ defmodule VivvoWeb.PropertyLiveTest do
 
       # Click on view full details button should navigate to show page
       show_live
-      |> element("a[href='/properties/#{property.id}/contracts/#{contract.id}']")
+      |> element(
+        "a[href='/properties/#{property.id}/contracts/#{contract.id}?return_to=contract']"
+      )
       |> render_click()
-      |> follow_redirect(conn, ~p"/properties/#{property.id}/contracts/#{contract.id}")
+      |> follow_redirect(
+        conn,
+        ~p"/properties/#{property.id}/contracts/#{contract.id}?return_to=contract"
+      )
     end
 
     test "'Create Contract' button navigates to new form", %{conn: conn, property: property} do
@@ -293,7 +298,7 @@ defmodule VivvoWeb.PropertyLiveTest do
 
       {:ok, _new_live, html} =
         show_live
-        |> element("a[href='/properties/#{property.id}/contracts/new']")
+        |> element("a#create-contract-empty-state")
         |> render_click()
         |> follow_redirect(conn, ~p"/properties/#{property}/contracts/new")
 
