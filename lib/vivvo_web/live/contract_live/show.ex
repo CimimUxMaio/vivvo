@@ -413,7 +413,7 @@ defmodule VivvoWeb.ContractLive.Show do
     contract = Contracts.get_contract!(scope, contract_id)
 
     # Verify the contract belongs to this property
-    if contract.property_id != String.to_integer(property_id) do
+    if to_string(contract.property_id) != property_id do
       {:ok,
        socket
        |> put_flash(:error, "Contract not found for this property")
