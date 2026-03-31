@@ -32,6 +32,8 @@ defmodule VivvoWeb.CoreComponents do
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
+  import VivvoWeb.FormatHelpers, only: [format_date: 1]
+
   @doc """
   Renders a button with navigation support.
 
@@ -968,5 +970,211 @@ defmodule VivvoWeb.CoreComponents do
   """
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
+  end
+
+  # ============================================================================
+  # Contract Components
+  # ============================================================================
+
+  alias Vivvo.Contracts
+  alias VivvoWeb.Helpers.ContractHelpers
+
+  @doc """
+  Renders a contract progress bar showing progress through the contract period.
+
+  ## Examples
+
+      <.contract_progress_bar contract={@contract} />
+      <.contract_progress_bar contract={@contract} compact />
+      <.contract_progress_bar contract={@contract} show_title={false} />
+  """
+  attr :contract, :any, required: true
+  attr :compact, :boolean, default: false, doc: "Whether to render in compact mode (smaller)"
+  attr :show_title, :boolean, default: true, doc: "Whether to show the 'Contract Journey' title"
+  attr :show_status_badge, :boolean, default: true, doc: "Whether to show the status badge"
+  attr :class, :string, default: nil, doc: "Additional CSS classes"
+
+  def contract_progress_bar(assigns) do
+    contract = assigns.contract
+    today = Date.utc_today()
+
+    progress = ContractHelpers.calculate_contract_progress(contract, today)
+    today_marker = ContractHelpers.calculate_today_marker(contract, today)
+    progress_color = ContractHelpers.progress_color(progress)
+    timeline_data = ContractHelpers.calculate_timeline_data(contract, today)
+
+    assigns =
+      assign(assigns,
+        progress: progress,
+        today_marker: today_marker,
+        progress_color: progress_color,
+        days_until_start: timeline_data.days_until_start,
+        current_month: timeline_data.current_month,
+        total_months: timeline_data.total_months,
+        today: today
+      )
+
+    ~H"""
+    <div class={["space-y-4", @class]}>
+      <%= if @show_title do %>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 bg-primary/10 rounded-lg flex items-center justify-center">
+              <.icon
+                name="hero-map"
+                class={[@compact && "w-4 h-4", not @compact && "w-5 h-5", "text-primary"]}
+              />
+            </div>
+            <span class={[
+              @compact && "text-sm",
+              not @compact && "text-lg font-semibold",
+              "text-base-content"
+            ]}>
+              Contract Journey
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <%= if @show_status_badge do %>
+              <.contract_status_badge
+                status={Contracts.contract_status(@contract)}
+                size={if @compact, do: :sm, else: :md}
+              />
+            <% end %>
+            <span class="text-sm font-medium px-3 py-1 rounded-full bg-info/10 text-info">
+              {@progress}%
+            </span>
+          </div>
+        </div>
+      <% end %>
+
+      <.progress_track progress={@progress} color={@progress_color} today_marker={@today_marker} />
+
+      <.progress_labels
+        contract={@contract}
+        days_until_start={@days_until_start}
+        current_month={@current_month}
+        total_months={@total_months}
+      />
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a progress track with optional today marker.
+
+  ## Examples
+
+      <.progress_track progress={75} color="bg-success" today_marker={80} />
+  """
+  attr :progress, :integer, required: true
+  attr :color, :string, required: true
+  attr :today_marker, :integer, required: false, default: nil
+
+  def progress_track(assigns) do
+    ~H"""
+    <div class="relative h-3">
+      <%!-- Background Track --%>
+      <div class="h-3 bg-base-200 rounded-full overflow-hidden">
+        <%!-- Progress Fill --%>
+        <div
+          class={["h-full rounded-full transition-all duration-1000 ease-out", @color]}
+          style={"width: #{@progress}%"}
+        >
+        </div>
+      </div>
+
+      <%!-- Today Marker --%>
+      <%= if @today_marker do %>
+        <div
+          class="absolute top-0 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-primary flex items-center justify-center -mt-1"
+          style={"left: calc(#{@today_marker}% - 10px)"}
+          title="Today"
+        >
+          <div class="w-2 h-2 bg-primary rounded-full"></div>
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders progress labels showing start date, current position, and end date.
+
+  ## Examples
+
+      <.progress_labels contract={@contract} days_until_start={0} current_month={5} total_months={12} />
+  """
+  attr :contract, :any, required: true
+  attr :days_until_start, :integer, required: true
+  attr :current_month, :integer, required: true
+  attr :total_months, :integer, required: true
+
+  def progress_labels(assigns) do
+    ~H"""
+    <div class="flex items-center justify-between text-xs text-base-content/50">
+      <span>{format_date(@contract.start_date)}</span>
+
+      <span>
+        <%= if @days_until_start > 0 do %>
+          Starts in {@days_until_start} days
+        <% else %>
+          <%= if @current_month == 0 do %>
+            Not started
+          <% else %>
+            Month {@current_month} of {@total_months}
+          <% end %>
+        <% end %>
+      </span>
+
+      <span>{format_date(@contract.end_date)}</span>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the "Next Rent Update" field showing when the next rent update is scheduled.
+
+  ## Examples
+
+      <.next_rent_update_field contract={@contract} />
+  """
+  attr :contract, :any, required: true
+
+  def next_rent_update_field(assigns) do
+    next_update = Contracts.next_rent_update_date(assigns.contract)
+    days_until = Contracts.days_until_next_update(assigns.contract)
+
+    assigns =
+      assigns
+      |> assign(:next_update, next_update)
+      |> assign(:days_until, days_until)
+
+    ~H"""
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-base-content/60">Next Rent Update</label>
+      <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+        <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+        <div>
+          <%= if @next_update do %>
+            <p class="font-medium text-base-content">{format_date(@next_update)}</p>
+            <p class="text-xs mt-0.5">
+              <%= cond do %>
+                <% @days_until == 0 -> %>
+                  <span class="text-warning font-medium">Today</span>
+                <% @days_until < 0 -> %>
+                  <span class="text-error">Update overdue</span>
+                <% @days_until <= 30 -> %>
+                  <span class="text-warning">In {@days_until} days</span>
+                <% true -> %>
+                  <span class="text-base-content/50">In {@days_until} days</span>
+              <% end %>
+            </p>
+          <% else %>
+            <span class="font-medium text-base-content/50">-</span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+    """
   end
 end
