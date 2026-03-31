@@ -237,6 +237,13 @@ const SteppedLineChart = {
     }
   },
 
+  updated() {
+    if (this.chart) {
+      this.chart.destroy()
+    }
+    this.mounted()
+  },
+
   formatCurrency(value) {
     const num = parseFloat(value || 0)
     return new Intl.NumberFormat("en-US", {
