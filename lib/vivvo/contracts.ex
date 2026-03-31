@@ -1366,12 +1366,20 @@ defmodule Vivvo.Contracts do
   def generate_rent_chart_data(%Contract{} = contract, today \\ Date.utc_today()) do
     end_date = Enum.min([today, contract.end_date], Date)
 
-    months = generate_months_list(contract.start_date, end_date)
+    # Determine sampling interval based on contract duration
+    # Use quarterly data points for contracts longer than 5 years (60 months)
+    total_months =
+      (contract.end_date.year - contract.start_date.year) * 12 +
+        (contract.end_date.month - contract.start_date.month)
+
+    interval = if total_months > 60, do: 3, else: 1
+
+    dates = generate_chart_dates(contract.start_date, end_date, interval)
 
     {labels, values, min_value, max_value} =
-      Enum.reduce(months, {[], [], nil, nil}, fn date,
-                                                 {labels_acc, values_acc, min_acc, max_acc} ->
-        label = format_month_label(date)
+      Enum.reduce(dates, {[], [], nil, nil}, fn date,
+                                                {labels_acc, values_acc, min_acc, max_acc} ->
+        label = format_chart_label(date, interval)
         value = Decimal.to_float(current_rent_value(contract, date))
 
         new_min = if min_acc == nil or value < min_acc, do: value, else: min_acc
@@ -1388,7 +1396,16 @@ defmodule Vivvo.Contracts do
     }
   end
 
-  defp generate_months_list(start_date, end_date) do
+  defp generate_chart_dates(start_date, end_date, interval) when interval > 1 do
+    start_date
+    |> Stream.iterate(&Date.shift(&1, month: interval))
+    |> Stream.take_while(fn date ->
+      Date.compare(date, end_date) != :gt
+    end)
+    |> Enum.to_list()
+  end
+
+  defp generate_chart_dates(start_date, end_date, 1) do
     Stream.iterate(start_date, &Date.shift(&1, month: 1))
     |> Stream.take_while(fn date ->
       Date.compare(date, end_date) != :gt
@@ -1396,9 +1413,14 @@ defmodule Vivvo.Contracts do
     |> Enum.to_list()
   end
 
-  defp format_month_label(date) do
+  defp format_chart_label(date, 1) do
     month_name = Calendar.strftime(date, "%b")
     "#{month_name} #{date.year}"
+  end
+
+  defp format_chart_label(date, _interval) do
+    quarter = div(date.month - 1, 3) + 1
+    "Q#{quarter} #{date.year}"
   end
 
   @doc """
