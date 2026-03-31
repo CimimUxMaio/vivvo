@@ -31,7 +31,9 @@ defmodule VivvoWeb.ContractLive.Show do
           <%!-- LEFT: Contract Journey/Timeline (60-70% on desktop) --%>
           <div class="lg:col-span-3 space-y-6">
             <%!-- Contract Progress Bar --%>
-            <.contract_progress_bar contract={@contract} progress={@progress} today={@today} />
+            <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
+              <.contract_progress_bar contract={@contract} />
+            </div>
 
             <%!-- Timeline Container with Journey Sections --%>
             <.contract_timeline
@@ -387,103 +389,12 @@ defmodule VivvoWeb.ContractLive.Show do
   end
 
   # ============================================================================
-  # Progress Bar Component
-  # ============================================================================
-
-  defp contract_progress_bar(assigns) do
-    today_marker = calculate_today_marker(assigns.contract, assigns.today)
-
-    assigns =
-      assigns
-      |> assign(:today_marker, today_marker)
-
-    ~H"""
-    <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 bg-primary/10 rounded-lg flex items-center justify-center">
-            <.icon name="hero-map" class="w-5 h-5 text-primary" />
-          </div>
-          <h3 class="text-lg font-semibold text-base-content">Contract Journey</h3>
-        </div>
-        <div class="flex items-center gap-2">
-          <.contract_status_badge status={Contracts.contract_status(@contract)} />
-          <span class="text-sm font-medium px-3 py-1 rounded-full bg-info/10 text-info">
-            {@progress}%
-          </span>
-        </div>
-      </div>
-
-      <%!-- Progress Track with Today Marker --%>
-      <div class="relative h-3">
-        <%!-- Background Track --%>
-        <div class="h-3 bg-base-200 rounded-full overflow-hidden">
-          <%!-- Progress Fill --%>
-          <div
-            class="h-full rounded-full transition-all duration-1000 ease-out bg-primary"
-            style={"width: #{@progress}%"}
-          >
-          </div>
-        </div>
-
-        <%!-- Today Marker --%>
-        <%= if @today_marker do %>
-          <div
-            class="absolute top-0 w-5 h-5 bg-white rounded-full shadow-lg border-2 border-primary flex items-center justify-center -mt-1"
-            style={"left: calc(#{@today_marker}% - 10px)"}
-            title="Today"
-          >
-            <div class="w-2 h-2 bg-primary rounded-full"></div>
-          </div>
-        <% end %>
-      </div>
-
-      <%!-- Start and End Labels --%>
-      <div class="flex justify-between mt-3 text-xs text-base-content/50">
-        <div class="flex items-center gap-1">
-          <span>{format_date(@contract.start_date)}</span>
-        </div>
-        <div class="flex items-center gap-1">
-          <span>{format_date(@contract.end_date)}</span>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  # ============================================================================
   # Helper Functions
   # ============================================================================
 
   # Format contract period for subtitle
   defp format_contract_period(contract) do
     "#{format_date(contract.start_date)} — #{format_date(contract.end_date)}"
-  end
-
-  # Calculate contract progress percentage
-  defp calculate_contract_progress(contract, today) do
-    total_days = Date.diff(contract.end_date, contract.start_date)
-    elapsed_days = Date.diff(today, contract.start_date)
-
-    cond do
-      Date.compare(today, contract.start_date) == :lt -> 0
-      Date.compare(today, contract.end_date) == :gt -> 100
-      total_days == 0 -> 100
-      true -> round(elapsed_days / total_days * 100)
-    end
-  end
-
-  # Calculate today's position on the progress bar
-  defp calculate_today_marker(contract, today) do
-    total_days = Date.diff(contract.end_date, contract.start_date)
-    elapsed_days = Date.diff(today, contract.start_date)
-
-    cond do
-      Date.compare(today, contract.start_date) == :lt -> nil
-      Date.compare(today, contract.end_date) == :gt -> nil
-      total_days == 0 -> nil
-      true -> round(elapsed_days / total_days * 100)
-    end
   end
 
   # ============================================================================
@@ -510,7 +421,6 @@ defmodule VivvoWeb.ContractLive.Show do
        |> put_flash(:error, "Contract not found for this property")
        |> push_navigate(to: ~p"/properties/#{property_id}")}
     else
-      progress = calculate_contract_progress(contract, today)
       next_update = Contracts.next_rent_update_date(contract)
       days_until = Contracts.days_until_next_update(contract)
       current_rent = Contracts.current_rent_value(contract)
@@ -528,7 +438,6 @@ defmodule VivvoWeb.ContractLive.Show do
        |> assign(:contract, contract)
        |> assign(:property, contract.property)
        |> assign(:today, today)
-       |> assign(:progress, progress)
        |> assign(:next_update, next_update)
        |> assign(:days_until, days_until)
        |> assign(:current_rent, current_rent)

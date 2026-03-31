@@ -458,46 +458,6 @@ defmodule VivvoWeb.PropertyLive.Show do
     """
   end
 
-  # Next Rent Update Field Component
-  # Handles computation of next rent update date and status display
-  defp next_rent_update_field(assigns) do
-    next_update = Contracts.next_rent_update_date(assigns.contract)
-    days_until = Contracts.days_until_next_update(assigns.contract)
-
-    assigns =
-      assigns
-      |> assign(:next_update, next_update)
-      |> assign(:days_until, days_until)
-
-    ~H"""
-    <div class="space-y-2">
-      <label class="text-sm font-medium text-base-content/60">Next Rent Update</label>
-      <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
-        <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
-        <div>
-          <%= if @next_update do %>
-            <p class="font-medium text-base-content">{format_date(@next_update)}</p>
-            <p class="text-xs mt-0.5">
-              <%= cond do %>
-                <% @days_until == 0 -> %>
-                  <span class="text-warning font-medium">Today</span>
-                <% @days_until < 0 -> %>
-                  <span class="text-error">Update overdue</span>
-                <% @days_until <= 30 -> %>
-                  <span class="text-warning">In {@days_until} days</span>
-                <% true -> %>
-                  <span class="text-base-content/50">In {@days_until} days</span>
-              <% end %>
-            </p>
-          <% else %>
-            <span class="font-medium text-base-content/50">-</span>
-          <% end %>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     if connected?(socket) do
