@@ -152,8 +152,8 @@ const SteppedLineChart = {
     const suggestedMin = Math.max(0, minValue - padding)
     const suggestedMax = maxValue + padding
 
-    // Create the stepped line chart
-    this.chart = new Chart(canvas, {
+    // Store chart configuration
+    this.chartConfig = {
       type: "line",
       data: {
         labels: labels,
@@ -224,24 +224,21 @@ const SteppedLineChart = {
           }
         },
         animation: {
-          duration: 1000,
-          easing: "easeOutQuart",
+          y: {
+            duration: 1000,
+            easing: "easeOutQuart",
+          },
         },
       },
-    })
+    }
+
+    this.chart = new Chart(canvas, this.chartConfig)
   },
 
   destroyed() {
     if (this.chart) {
       this.chart.destroy()
     }
-  },
-
-  updated() {
-    if (this.chart) {
-      this.chart.destroy()
-    }
-    this.mounted()
   },
 
   formatCurrency(value) {
