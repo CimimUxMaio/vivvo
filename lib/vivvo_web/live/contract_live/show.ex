@@ -141,6 +141,7 @@ defmodule VivvoWeb.ContractLive.Show do
         <.link
           navigate={~p"/properties/#{@property.id}"}
           class="btn btn-ghost btn-xs text-primary"
+          aria-label="Open property details"
         >
           <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
         </.link>
