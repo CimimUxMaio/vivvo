@@ -724,6 +724,7 @@ defmodule VivvoWeb.HomeLive do
         <canvas
           id="outstanding-balances-chart"
           phx-hook="PieChart"
+          phx-update="ignore"
           data-chart-data={@chart_data_json}
         >
         </canvas>
@@ -2025,251 +2026,156 @@ defmodule VivvoWeb.HomeLive do
     """
   end
 
-  # Contract Timeline Component
-  defp contract_timeline(assigns) do
-    contract = assigns.contract
-
-    current_month = Contracts.get_current_payment_number(contract)
-    total_months = Contracts.contract_duration_months(contract)
-    days_remaining = Contracts.days_until_end(contract)
-
-    days_until_start =
-      case Date.compare(contract.start_date, Date.utc_today()) do
-        :gt -> Date.diff(contract.start_date, Date.utc_today())
-        _ -> 0
-      end
-
-    progress_pct =
-      if total_months > 0 do
-        max(0, current_month - 1) / total_months * 100
-      else
-        0.0
-      end
-
-    progress_color =
-      cond do
-        progress_pct <= 50 -> "bg-success"
-        progress_pct < 90 -> "bg-warning"
-        true -> "bg-error"
-      end
-
-    assigns =
-      assign(assigns,
-        current_month: current_month,
-        total_months: total_months,
-        progress_pct: progress_pct,
-        days_remaining: days_remaining,
-        days_until_start: days_until_start,
-        progress_color: progress_color
-      )
-
-    ~H"""
-    <div class="space-y-2">
-      <div class="flex items-center justify-between text-sm">
-        <span class="text-base-content/70">
-          <%= if @current_month == 0 do %>
-            Not started
-          <% else %>
-            <span class="sm:hidden">{@current_month}/{@total_months}</span>
-            <span class="hidden sm:inline">Month {@current_month} of {@total_months}</span>
-          <% end %>
-        </span>
-        <%= cond do %>
-          <% @days_until_start > 0 -> %>
-            <span class="text-base-content/50">Starts in {@days_until_start} days</span>
-          <% @days_remaining && @days_remaining > 0 -> %>
-            <span class="text-base-content/50">{@days_remaining} days remaining</span>
-          <% true -> %>
-            <span class="text-error">Lease ended</span>
-        <% end %>
-      </div>
-      <div class="w-full bg-base-200 rounded-full h-2 overflow-hidden">
-        <div
-          class={["h-full rounded-full transition-all duration-500", @progress_color]}
-          style={"width: #{@progress_pct}%"}
-        >
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  # Contract Quick Access Component
+  # Contract Quick Access Component - Styled to match property_live/show.ex active contract section
   defp contract_quick_access(assigns) do
     ~H"""
     <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 p-6">
-      <div class="flex items-center gap-2 mb-4">
-        <.icon name="hero-document-text" class="w-5 h-5 text-primary" />
-        <h2 class="text-lg font-semibold">Contract Details</h2>
+      <%!-- Section Header with Status --%>
+      <div class="flex items-center justify-between gap-4 pb-4 border-b border-base-200 mb-6">
+        <div class="flex items-center gap-2">
+          <div class="p-1.5 bg-success/10 rounded-lg flex items-center justify-center">
+            <.icon name="hero-document-text" class="w-5 h-5 text-success" />
+          </div>
+          <h3 class="text-lg font-semibold text-base-content">Contract Details</h3>
+        </div>
+        <.contract_status_badge status={@contract_status} />
       </div>
-      <.contract_basic_info_grid contract={@contract} />
-      <div class="mt-6 pt-6 border-t border-base-200">
-        <.contract_timeline contract={@contract} />
-      </div>
-      <.contract_notes contract={@contract} />
-    </div>
-    """
-  end
 
-  # Contract Basic Info Grid - Contains lease period, rent, payment due, indexing info, and property
-  defp contract_basic_info_grid(assigns) do
-    has_indexing =
-      not is_nil(assigns.contract.rent_period_duration) and
-        not is_nil(assigns.contract.index_type)
+      <%!-- Contract Details Grid --%>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <%!-- Lease Period --%>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-base-content/60">Lease Period</label>
+          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+            <.icon name="hero-calendar" class="w-5 h-5 text-base-content/50" />
+            <span class="font-medium text-base-content text-sm">
+              {format_date(@contract.start_date)} — {format_date(@contract.end_date)}
+            </span>
+          </div>
+        </div>
 
-    assigns = assign(assigns, has_indexing: has_indexing)
+        <%!-- Monthly Rent --%>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-base-content/60">Monthly Rent</label>
+          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+            <.icon name="hero-banknotes" class="w-5 h-5 text-base-content/50" />
+            <span class="font-semibold text-base-content flex items-center gap-2">
+              {format_currency(Contracts.current_rent_value(@contract))}
+              <%= if @contract.index_type do %>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
+                  <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
+                </span>
+              <% end %>
+            </span>
+          </div>
+        </div>
 
-    ~H"""
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      <.lease_period_item contract={@contract} />
-      <.current_rent_item contract={@contract} has_indexing={@has_indexing} />
-      <.payment_due_item contract={@contract} />
-      <.indexing_info_items :if={@has_indexing} contract={@contract} />
-      <.property_info_item contract={@contract} has_indexing={@has_indexing} />
-    </div>
-    """
-  end
+        <%!-- Payment Due --%>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-base-content/60">Payment Due</label>
+          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+            <.icon name="hero-calendar-days" class="w-5 h-5 text-base-content/50" />
+            <span class="font-medium text-base-content">
+              Day {@contract.expiration_day} of each month
+            </span>
+          </div>
+        </div>
 
-  # Lease Period Item
-  defp lease_period_item(assigns) do
-    ~H"""
-    <div>
-      <p class="text-sm text-base-content/60 mb-1">Lease Period</p>
-      <p class="font-medium">
-        {format_date(@contract.start_date)} - {format_date(@contract.end_date)}
-      </p>
-    </div>
-    """
-  end
+        <%!-- Property Info --%>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-base-content/60">Property</label>
+          <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+            <.icon name="hero-building-office" class="w-5 h-5 text-base-content/50" />
+            <div class="min-w-0">
+              <p class="font-medium text-base-content text-sm truncate">
+                {@contract.property.name}
+              </p>
+              <p class="text-xs text-base-content/60 truncate">
+                {@contract.property.address}
+              </p>
+            </div>
+          </div>
+        </div>
 
-  # Current Rent Item - Shows current rent with indexing indicator if applicable
-  defp current_rent_item(assigns) do
-    next_update = Contracts.next_rent_update_date(assigns.contract)
-    assigns = assign(assigns, next_update: next_update)
+        <%!-- Indexing Information (only shown when contract has indexing) --%>
+        <%= if @contract.index_type do %>
+          <%!-- Index Type --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Index Type</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-arrow-trending-up" class="w-5 h-5 text-base-content/50" />
+              <span class="font-medium text-base-content">
+                {index_type_label(@contract.index_type)}
+              </span>
+            </div>
+          </div>
 
-    ~H"""
-    <div>
-      <div class="flex items-center gap-2 mb-1">
-        <p class="text-sm text-base-content/60">Current Rent</p>
-        <%= if @has_indexing do %>
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
-            <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
-          </span>
+          <%!-- Update Frequency --%>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Update Frequency</label>
+            <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+              <.icon name="hero-arrow-path" class="w-5 h-5 text-base-content/50" />
+              <span class="font-medium text-base-content">
+                {rent_period_duration_label(@contract.rent_period_duration)}
+              </span>
+            </div>
+          </div>
+
+          <%!-- Next Rent Update --%>
+          <.next_rent_update_field contract={@contract} />
+
+          <%!-- Days Left --%>
+          <.days_left_field contract={@contract} />
         <% end %>
       </div>
-      <p class="font-medium text-primary">
-        {format_currency(Contracts.current_rent_value(@contract))}
-      </p>
-      <%= if @has_indexing and @next_update do %>
-        <p class="text-xs text-base-content/50 mt-1">
-          Valid until {format_date(Date.add(@next_update, -1))}
-        </p>
+
+      <%!-- Contract Progress Bar --%>
+      <div class="mt-6 pt-6 border-t border-base-200">
+        <.contract_progress_bar contract={@contract} compact show_status_badge={false} />
+      </div>
+
+      <%!-- Contract Notes --%>
+      <%= if @contract.notes && @contract.notes != "" do %>
+        <div class="mt-6 pt-6 border-t border-base-200">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-base-content/60">Notes</label>
+            <div class="p-4 bg-base-200/50 rounded-lg">
+              <div class="flex items-start gap-3">
+                <.icon
+                  name="hero-document-text"
+                  class="w-5 h-5 text-base-content/50 flex-shrink-0 mt-0.5"
+                />
+                <p class="text-sm text-base-content/80 whitespace-pre-wrap">{@contract.notes}</p>
+              </div>
+            </div>
+          </div>
+        </div>
       <% end %>
     </div>
     """
   end
 
-  # Payment Due Item
-  defp payment_due_item(assigns) do
-    ~H"""
-    <div>
-      <p class="text-sm text-base-content/60 mb-1">Payment Due</p>
-      <p class="font-medium">Day {@contract.expiration_day} of each month</p>
-    </div>
-    """
-  end
-
-  # Indexing Info Items - Group of three items: index type, frequency, next update
-  defp indexing_info_items(assigns) do
-    next_update = Contracts.next_rent_update_date(assigns.contract)
-    days_until_update = Contracts.days_until_next_update(assigns.contract)
-    index_label = index_type_label(assigns.contract.index_type)
-    duration_label = rent_period_duration_label(assigns.contract.rent_period_duration)
+  # Days Left Field Component
+  defp days_left_field(assigns) do
+    days_remaining = Contracts.days_until_end(assigns.contract)
 
     assigns =
-      assign(assigns,
-        next_update: next_update,
-        days_until_update: days_until_update,
-        index_label: index_label,
-        duration_label: duration_label
-      )
+      assign(assigns, :days_remaining, days_remaining)
 
     ~H"""
-    <.index_type_item label={@index_label} />
-    <.update_frequency_item label={@duration_label} />
-    <.next_update_item date={@next_update} days_until={@days_until_update} />
-    """
-  end
-
-  # Index Type Item
-  defp index_type_item(assigns) do
-    ~H"""
-    <div>
-      <p class="text-sm text-base-content/60 mb-1">Index Type</p>
-      <p class="font-medium">{@label}</p>
-    </div>
-    """
-  end
-
-  # Update Frequency Item
-  defp update_frequency_item(assigns) do
-    ~H"""
-    <div>
-      <p class="text-sm text-base-content/60 mb-1">Update Frequency</p>
-      <p class="font-medium">{@label}</p>
-    </div>
-    """
-  end
-
-  # Next Update Item
-  defp next_update_item(assigns) do
-    ~H"""
-    <div>
-      <p class="text-sm text-base-content/60 mb-1">Next Rent Update</p>
-      <%= if @date do %>
-        <p class="font-medium">{format_date(@date)}</p>
-        <p class="text-xs mt-1">
-          <%= cond do %>
-            <% @days_until == 0 -> %>
-              <span class="text-warning font-medium">Today</span>
-            <% @days_until < 0 -> %>
-              <span class="text-error">Update overdue</span>
-            <% @days_until <= 30 -> %>
-              <span class="text-warning">In {@days_until} days</span>
-            <% true -> %>
-              <span class="text-base-content/50">In {@days_until} days</span>
+    <div class="space-y-2">
+      <label class="text-sm font-medium text-base-content/60">Days Left</label>
+      <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+        <.icon name="hero-clock" class="w-5 h-5 text-base-content/50" />
+        <div>
+          <%= if @days_remaining do %>
+            <p class="font-medium text-base-content">{@days_remaining} days</p>
+          <% else %>
+            <span class="font-medium text-base-content/50">-</span>
           <% end %>
-        </p>
-      <% else %>
-        <p class="font-medium text-base-content/50">-</p>
-      <% end %>
-    </div>
-    """
-  end
-
-  # Property Info Item
-  defp property_info_item(assigns) do
-    ~H"""
-    <div class={[
-      "sm:col-span-2 lg:col-span-1",
-      @has_indexing && "sm:col-span-2 lg:col-span-3"
-    ]}>
-      <p class="text-sm text-base-content/60 mb-1">Property</p>
-      <p class="font-medium">{@contract.property.name}</p>
-      <p class="text-xs text-base-content/50 truncate">{@contract.property.address}</p>
-    </div>
-    """
-  end
-
-  # Contract Notes Component
-  defp contract_notes(assigns) do
-    ~H"""
-    <%= if @contract.notes && @contract.notes != "" do %>
-      <div class="mt-6 pt-6 border-t border-base-200">
-        <p class="text-sm text-base-content/60 mb-1">Notes</p>
-        <p class="text-sm text-base-content/80">{@contract.notes}</p>
+        </div>
       </div>
-    <% end %>
+    </div>
     """
   end
 

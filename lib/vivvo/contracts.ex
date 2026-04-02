@@ -65,7 +65,7 @@ defmodule Vivvo.Contracts do
   def get_contract!(%Scope{} = scope, id) do
     Contract
     |> where([c], c.id == ^id and c.user_id == ^scope.user.id and c.archived == false)
-    |> preload([:tenant, :property, :rent_periods])
+    |> preload([:tenant, :property, :user, :rent_periods])
     |> Repo.one!()
   end
 
@@ -1345,6 +1345,82 @@ defmodule Vivvo.Contracts do
 
   defp handle_rent_period_insert_result({:error, changeset}, _attrs) do
     {:error, changeset}
+  end
+
+  @doc """
+  Generates chart data for rent value over time from contract start to end.
+
+  Returns a map with :labels, :values, :min_value, and :max_value keys suitable 
+  for Chart.js stepped line chart. Data points are generated for each month from 
+  the contract start date to the minimum of the current date or contract end date.
+
+  ## Examples
+
+      iex> generate_rent_chart_data(contract)
+      %{labels: ["Jan 2026", "Feb 2026", "Mar 2026"], 
+        values: [1200.0, 1200.0, 1250.5],
+        min_value: 1200.0,
+        max_value: 1250.5}
+
+  """
+  def generate_rent_chart_data(%Contract{} = contract, today \\ Date.utc_today()) do
+    end_date = Enum.min([today, contract.end_date], Date)
+
+    # Determine sampling interval based on contract duration
+    # Use quarterly data points for contracts longer than 5 years (60 months)
+    total_months =
+      (contract.end_date.year - contract.start_date.year) * 12 +
+        (contract.end_date.month - contract.start_date.month)
+
+    interval = if total_months > 60, do: 3, else: 1
+
+    dates = generate_chart_dates(contract.start_date, end_date, interval)
+
+    {labels, values, min_value, max_value} =
+      Enum.reduce(dates, {[], [], nil, nil}, fn date,
+                                                {labels_acc, values_acc, min_acc, max_acc} ->
+        label = format_chart_label(date, interval)
+        value = Decimal.to_float(current_rent_value(contract, date))
+
+        new_min = if min_acc == nil or value < min_acc, do: value, else: min_acc
+        new_max = if max_acc == nil or value > max_acc, do: value, else: max_acc
+
+        {[label | labels_acc], [value | values_acc], new_min, new_max}
+      end)
+
+    %{
+      labels: Enum.reverse(labels),
+      values: Enum.reverse(values),
+      min_value: min_value || 0,
+      max_value: max_value || 0
+    }
+  end
+
+  defp generate_chart_dates(start_date, end_date, interval) when interval > 1 do
+    start_date
+    |> Stream.iterate(&Date.shift(&1, month: interval))
+    |> Stream.take_while(fn date ->
+      Date.compare(date, end_date) != :gt
+    end)
+    |> Enum.to_list()
+  end
+
+  defp generate_chart_dates(start_date, end_date, 1) do
+    Stream.iterate(start_date, &Date.shift(&1, month: 1))
+    |> Stream.take_while(fn date ->
+      Date.compare(date, end_date) != :gt
+    end)
+    |> Enum.to_list()
+  end
+
+  defp format_chart_label(date, 1) do
+    month_name = Calendar.strftime(date, "%b")
+    "#{month_name} #{date.year}"
+  end
+
+  defp format_chart_label(date, _interval) do
+    quarter = div(date.month - 1, 3) + 1
+    "Q#{quarter} #{date.year}"
   end
 
   @doc """

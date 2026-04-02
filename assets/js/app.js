@@ -24,10 +24,35 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/vivvo"
 import topbar from "../vendor/topbar"
-import {Chart, PieController, ArcElement, Tooltip, Legend, Title} from "chart.js"
+import {
+  Chart,
+  PieController,
+  LineController,
+  ArcElement,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Title,
+  Filler
+} from "chart.js"
 
 // Register Chart.js components
-Chart.register(PieController, ArcElement, Tooltip, Legend, Title)
+Chart.register(
+  PieController,
+  LineController,
+  ArcElement,
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Title,
+  Filler
+)
 
 /**
  * PieChart hook for rendering pie charts using Chart.js
@@ -85,6 +110,129 @@ const PieChart = {
         },
       },
     })
+  },
+
+  destroyed() {
+    if (this.chart) {
+      this.chart.destroy()
+    }
+  },
+
+  formatCurrency(value) {
+    const num = parseFloat(value || 0)
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num)
+  }
+}
+
+/**
+ * SteppedLineChart hook for rendering stepped line charts using Chart.js
+ * Expects data-chart-labels, data-chart-values, data-chart-min, and data-chart-max attributes.
+ * Used for displaying rent value evolution over time.
+ */
+const SteppedLineChart = {
+  mounted() {
+    const canvas = this.el
+    const labels = JSON.parse(canvas.dataset.chartLabels || "[]")
+    const values = JSON.parse(canvas.dataset.chartValues || "[]")
+    const minValue = parseFloat(canvas.dataset.chartMin || "0")
+    const maxValue = parseFloat(canvas.dataset.chartMax || "0")
+    const rootStyles = getComputedStyle(document.documentElement)
+
+    // Get colors from CSS variables
+    const primaryColor = rootStyles.getPropertyValue("--color-success").trim() || "#3b82f6"
+
+    // Calculate Y-axis range with padding (10% padding)
+    const range = maxValue - minValue
+    const padding = range * 0.1
+    const suggestedMin = Math.max(0, minValue - padding)
+    const suggestedMax = maxValue + padding
+
+    // Store chart configuration
+    this.chartConfig = {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          borderColor: primaryColor,
+          backgroundColor: `color-mix(in srgb, ${primaryColor} 10%, transparent)`,
+          borderWidth: 2,
+          stepped: "before",
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: primaryColor,
+          pointBorderColor: rootStyles.getPropertyValue("--color-base-100").trim() || "#ffffff",
+          pointBorderWidth: 2,
+          pointHoverRadius: 6,
+          tension: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          intersect: false,
+          mode: "index",
+        },
+        plugins: {
+          legend: {
+            display: false,
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const value = context.parsed.y || 0
+                return ` Rent: ${this.formatCurrency(value)}`
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+            ticks: {
+              color: rootStyles.getPropertyValue("--color-base-content").trim() || "#6b7280",
+              font: {
+                size: 11,
+              },
+              maxRotation: 45,
+              minRotation: 45,
+            }
+          },
+          y: {
+            suggestedMin: suggestedMin,
+            suggestedMax: suggestedMax,
+            grid: {
+              color: rootStyles.getPropertyValue("--color-base-300").trim() || "#e5e7eb",
+            },
+            ticks: {
+              color: rootStyles.getPropertyValue("--color-base-content").trim() || "#6b7280",
+              font: {
+                size: 11,
+              },
+              callback: (value) => {
+                return this.formatCurrency(value)
+              }
+            }
+          }
+        },
+        animation: {
+          y: {
+            duration: 1000,
+            easing: "easeOutQuart",
+          },
+        },
+      },
+    }
+
+    this.chart = new Chart(canvas, this.chartConfig)
   },
 
   destroyed() {
@@ -222,7 +370,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, PieChart, Flash},
+  hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash},
 })
 
 // Show progress bar on live navigation and form submits

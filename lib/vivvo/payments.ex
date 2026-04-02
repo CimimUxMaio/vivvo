@@ -716,7 +716,7 @@ defmodule Vivvo.Payments do
     today = Date.utc_today()
     received_by_month = received_income_by_month(scope)
 
-    for i <- (months_count - 1)..0//-1 do
+    for i <- 0..(months_count - 1) do
       month_date = Date.add(today, -i * 30)
       month_start = Date.beginning_of_month(month_date)
       expected = expected_income_for_month(scope, month_date)
