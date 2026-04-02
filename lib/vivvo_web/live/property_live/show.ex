@@ -382,9 +382,12 @@ defmodule VivvoWeb.PropertyLive.Show do
                 <%!-- Status Badge & View Button --%>
                 <div class="flex items-center gap-2 flex-shrink-0">
                   <.contract_status_badge status={Contracts.contract_status(contract)} />
-                  <.button navigate={
-                    ~p"/properties/#{@property.id}/contracts/#{contract.id}?return_to=history"
-                  }>
+                  <.button
+                    navigate={
+                      ~p"/properties/#{@property.id}/contracts/#{contract.id}?return_to=history"
+                    }
+                    aria-label="View contract"
+                  >
                     <.icon name="hero-eye" class="w-5 h-5" />
                     <span class="hidden sm:block">View</span>
                   </.button>
