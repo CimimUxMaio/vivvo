@@ -177,9 +177,12 @@ defmodule VivvoWeb.PropertyLive.Show do
             </div>
             <h3 class="text-lg font-semibold text-base-content">Active Contract</h3>
           </div>
-          <.button navigate={
-            ~p"/properties/#{@property.id}/contracts/#{@contract.id}?return_to=contract"
-          }>
+          <.button
+            navigate={
+              ~p"/properties/#{@property.id}/contracts/#{@contract.id}?return_to=contract"
+            }
+            aria_label="View full contract details"
+          >
             <.icon name="hero-eye" class="w-5 h-5" />
             <span class="hidden sm:block">View Full Details</span>
           </.button>
