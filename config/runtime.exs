@@ -88,6 +88,7 @@ if config_env() == :prod do
     username: mail_user,
     password: mail_password,
     tls: :always,
+    tls_options: [verify: :verify_none],
     auth: :always,
     port: 587,
     ssl: false,
