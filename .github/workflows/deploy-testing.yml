@@ -72,6 +72,8 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.TEST_POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.TEST_POSTGRES_DB }}
           SECRET_KEY_BASE: ${{ secrets.TEST_SECRET_KEY_BASE }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           TARGET_BRANCH: ${{ github.ref_name }}
         run: |
           tailscale ssh "$SSH_HOST" << EOF
@@ -84,6 +86,8 @@ jobs:
             export DATABASE_URL="ecto://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}"
             export SECRET_KEY_BASE="$SECRET_KEY_BASE"
             export PHX_HOST="$PHX_HOST"
+            export MAIL_USER="$MAIL_USER"
+            export MAIL_PASSWORD="$MAIL_PASSWORD"
 
             echo "📥 Pulling latest repository..."
             cd "apps/$APP_NAME/"
