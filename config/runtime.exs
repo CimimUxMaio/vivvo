@@ -68,17 +68,33 @@ if config_env() == :prod do
     secret_key_base: secret_key_base
 
   # Configure the mailer with Gmail SMTP
+  mail_user =
+    System.get_env("MAIL_USER") ||
+      raise """
+      environment variable MAIL_USER is missing.
+      Set it to the email address used as the sender address for outgoing mail.
+      """
+
+  mail_password =
+    System.get_env("MAIL_PASSWORD") ||
+      raise """
+      environment variable MAIL_PASSWORD is missing.
+      Set it to the password or app-specific password for your SMTP account.
+      """
+
   config :vivvo, Vivvo.Mailer,
     adapter: Swoosh.Adapters.SMTP,
     relay: "smtp.gmail.com",
-    username: System.get_env("MAIL_USER"),
-    password: System.get_env("MAIL_PASSWORD"),
+    username: mail_user,
+    password: mail_password,
     tls: :always,
     auth: :always,
     port: 587,
     ssl: false,
     retries: 3,
     no_mx_lookups: false
+
+  config :vivvo, :sender_email, mail_user
 
   # ## SSL Support
   #

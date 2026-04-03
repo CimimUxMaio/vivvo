@@ -26,9 +26,9 @@ defmodule Vivvo.Accounts.UserNotifier do
     end
   end
 
-  # Returns the sender email address from environment
+  # Returns the sender email address from application config
   defp sender_email do
-    System.get_env("MAIL_USER") || "test@example.com"
+    Application.get_env(:vivvo, :sender_email)
   end
 
   @doc """
