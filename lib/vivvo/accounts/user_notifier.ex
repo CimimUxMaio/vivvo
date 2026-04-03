@@ -17,13 +17,18 @@ defmodule Vivvo.Accounts.UserNotifier do
     email =
       new()
       |> to(recipient)
-      |> from({"Vivvo", "contact@example.com"})
+      |> from({"Vivvo", sender_email()})
       |> subject(subject)
       |> text_body(body)
 
     with {:ok, _metadata} <- Mailer.deliver(email) do
       {:ok, email}
     end
+  end
+
+  # Returns the sender email address from environment
+  defp sender_email do
+    System.get_env("MAIL_USER") || "test@example.com"
   end
 
   @doc """
