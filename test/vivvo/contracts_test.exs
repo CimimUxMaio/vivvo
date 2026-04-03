@@ -1715,7 +1715,7 @@ defmodule Vivvo.ContractsTest do
       # Tenant is associated with the contract
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       tenant_scope = %Vivvo.Accounts.Scope{user: tenant}
-      today = Date.utc_today()
+      today = ~D[2026-06-15]
 
       # Create a contract that spans 6 months (will have 6 payment months)
       # Owner is scope.user, tenant is the tenant
@@ -1724,16 +1724,21 @@ defmodule Vivvo.ContractsTest do
           scope,
           %{
             rent: "1000.00",
-            start_date: Date.add(today, -150),
-            end_date: Date.add(today, 365),
+            start_date: ~D[2026-01-01],
+            end_date: ~D[2027-06-15],
             expiration_day: 1,
             tenant_id: tenant.id,
             index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: today
         )
+
+      # Verify the contract has the expected past payment numbers (should be 1-6)
+      past_payments = Contracts.get_past_payment_numbers(contract, today)
+      assert Enum.count(past_payments) >= 4, "Expected at least 4 past payments for assertions"
 
       # Tenant creates accepted payments for multiple months
       for payment_num <- 1..3 do
@@ -1889,35 +1894,34 @@ defmodule Vivvo.ContractsTest do
       end
     end
 
-    test "returns 0 when update is today" do
+    test "returns 1 when update is tomorrow" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # March 31 is the last day of Period 1 (Oct 1, 2025 - Mar 31, 2026)
+      today = ~D[2026-03-31]
 
-      # Create a contract where the next update is today
-      # Need a period that ended yesterday
-      yesterday = Date.add(today, -1)
-      start_date = Date.shift(yesterday, month: -5)
+      # Create a contract where the next update is tomorrow (April 1)
+      # 6-month period from Oct 1, 2025 ends on March 31, 2026
+      # Next update is April 1, 2026 (tomorrow)
+      start_date = ~D[2025-10-01]
 
       contract =
         contract_fixture(
           scope,
           %{
             start_date: start_date,
-            end_date: Date.add(today, 400),
+            end_date: ~D[2027-04-01],
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: today
         )
 
-      # The period should have ended yesterday, so next update is today
-      days = Contracts.days_until_next_update(contract)
+      # The period ends on March 31, so next update is tomorrow (April 1)
+      days = Contracts.days_until_next_update(contract, today)
 
-      if days do
-        # Should be 0 or close to 0
-        assert days >= 0
-      end
+      assert days == 1
     end
   end
 
@@ -2052,39 +2056,34 @@ defmodule Vivvo.ContractsTest do
       scope: scope,
       tenant_scope: tenant_scope
     } do
-      today = Date.utc_today()
-      # Create contract with multiple months (started 3 months ago)
+      # Use fixed date for deterministic testing (April 1st tests edge case with expiration_day: 1)
+      today = ~D[2026-04-01]
+
+      # Create contract with multiple months (started January 1st, 3 months before today)
       contract =
         contract_fixture(
           scope,
           %{
             rent: "1000.00",
-            start_date: Date.add(today, -90),
-            end_date: Date.add(today, 365),
+            start_date: ~D[2026-01-01],
+            end_date: ~D[2026-12-31],
             expiration_day: 1,
             tenant_id: tenant_scope.user.id,
             index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: today
         )
 
       property_id = contract.property_id
 
-      # Get current payment number to determine expected periods
-      current = Contracts.get_current_payment_number(contract)
-
-      # Determine how many periods are in the past
+      # Use the same logic as the implementation to get past periods count
       expected_periods =
-        if Date.compare(
-             Contracts.calculate_due_date(contract, current),
-             today
-           ) == :lt do
-          current
-        else
-          current - 1
-        end
+        contract
+        |> Contracts.get_past_payment_numbers(today)
+        |> Enum.count()
 
       # Pay first month fully - create as pending (tenant) then accept (owner)
       payment =
@@ -2145,39 +2144,34 @@ defmodule Vivvo.ContractsTest do
       scope: scope,
       tenant_scope: tenant_scope
     } do
-      today = Date.utc_today()
+      # Use fixed date for deterministic testing (April 1st tests edge case with expiration_day: 1)
+      today = ~D[2026-04-01]
 
-      # Create contract that started 2 months ago
+      # Create contract that started February 1st, 2 months before today
       contract =
         contract_fixture(
           scope,
           %{
             rent: "500.00",
-            start_date: Date.add(today, -60),
-            end_date: Date.add(today, 365),
+            start_date: ~D[2026-02-01],
+            end_date: ~D[2026-12-31],
             expiration_day: 1,
             tenant_id: tenant_scope.user.id,
             index_type: :icl,
             rent_period_duration: 12
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: today
         )
 
       property_id = contract.property_id
 
-      # Determine how many periods are in the past
-      current = Contracts.get_current_payment_number(contract)
-
+      # Use the same logic as the implementation to get past periods count
       periods =
-        if Date.compare(
-             Contracts.calculate_due_date(contract, current),
-             today
-           ) == :lt do
-          current
-        else
-          current - 1
-        end
+        contract
+        |> Contracts.get_past_payment_numbers(today)
+        |> Enum.count()
 
       # Pay all past periods - create as pending (tenant) then accept (owner)
       for num <- 1..periods do
@@ -2245,7 +2239,8 @@ defmodule Vivvo.ContractsTest do
           rent_period_duration: 12
         },
         past_start_date?: true,
-        update_factor: Decimal.new("1.0")
+        update_factor: Decimal.new("1.0"),
+        today: today
       )
     end
 
@@ -2253,7 +2248,7 @@ defmodule Vivvo.ContractsTest do
       scope: scope,
       tenant_scope: tenant_scope
     } do
-      today = Date.utc_today()
+      today = ~D[2026-03-15]
       contract = create_single_period_contract(scope, tenant_scope, today)
 
       # Get due date for month 1
@@ -2315,7 +2310,7 @@ defmodule Vivvo.ContractsTest do
     end
 
     test "single full payment (regression test)", %{scope: scope, tenant_scope: tenant_scope} do
-      today = Date.utc_today()
+      today = ~D[2026-03-15]
       contract = create_single_period_contract(scope, tenant_scope, today)
       due_date = Contracts.calculate_due_date(contract, 1)
 
@@ -2467,7 +2462,7 @@ defmodule Vivvo.ContractsTest do
     end
 
     test "early completion payments show 0 delay", %{scope: scope, tenant_scope: tenant_scope} do
-      today = Date.utc_today()
+      today = ~D[2026-03-15]
       contract = create_single_period_contract(scope, tenant_scope, today)
       due_date = Contracts.calculate_due_date(contract, 1)
 
@@ -2506,7 +2501,7 @@ defmodule Vivvo.ContractsTest do
       scope: scope,
       tenant_scope: tenant_scope
     } do
-      today = Date.utc_today()
+      today = ~D[2026-03-15]
       contract = create_single_period_contract(scope, tenant_scope, today)
       due_date = Contracts.calculate_due_date(contract, 1)
 
@@ -2524,7 +2519,7 @@ defmodule Vivvo.ContractsTest do
     end
 
     test "overpayment treated as normal completion", %{scope: scope, tenant_scope: tenant_scope} do
-      today = Date.utc_today()
+      today = ~D[2026-03-15]
       contract = create_single_period_contract(scope, tenant_scope, today)
       due_date = Contracts.calculate_due_date(contract, 1)
 

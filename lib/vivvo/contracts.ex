@@ -1274,8 +1274,7 @@ defmodule Vivvo.Contracts do
       ~D[2026-04-01]
 
   """
-  def next_rent_update_date(%Contract{} = contract) do
-    today = Date.utc_today()
+  def next_rent_update_date(%Contract{} = contract, today \\ Date.utc_today()) do
     current_period = current_rent_period(contract, today)
     update_date = Date.add(current_period.end_date, 1)
 
@@ -1299,10 +1298,10 @@ defmodule Vivvo.Contracts do
       nil
 
   """
-  def days_until_next_update(%Contract{} = contract) do
-    case next_rent_update_date(contract) do
+  def days_until_next_update(%Contract{} = contract, today \\ Date.utc_today()) do
+    case next_rent_update_date(contract, today) do
       nil -> nil
-      date -> Date.diff(date, Date.utc_today())
+      date -> Date.diff(date, today)
     end
   end
 
