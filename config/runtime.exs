@@ -67,6 +67,19 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
+  # Configure the mailer with Gmail SMTP
+  config :vivvo, Vivvo.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: "smtp.gmail.com",
+    username: System.get_env("MAIL_USER"),
+    password: System.get_env("MAIL_PASSWORD"),
+    tls: :always,
+    auth: :always,
+    port: 587,
+    ssl: false,
+    retries: 3,
+    no_mx_lookups: false
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key
