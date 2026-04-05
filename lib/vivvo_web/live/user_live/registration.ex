@@ -15,19 +15,13 @@ defmodule VivvoWeb.UserLive.Registration do
       value: :owner,
       label: "Property Owner",
       icon: "hero-home",
-      variant: "primary"
+      variant: :primary
     },
     %{
       value: :tenant,
       label: "Tenant",
       icon: "hero-user",
-      variant: "info"
-    },
-    %{
-      value: :admin,
-      label: "Administrator",
-      icon: "hero-user",
-      variant: "warning"
+      variant: :info
     }
   ]
 
