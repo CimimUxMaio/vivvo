@@ -68,8 +68,7 @@ defmodule Vivvo.Accounts.User do
       :first_name,
       :last_name,
       :phone_number,
-      :preferred_roles,
-      :current_role
+      :preferred_roles
     ])
     |> validate_length(:first_name, min: 1, max: 100)
     |> validate_length(:last_name, min: 1, max: 100)
@@ -79,6 +78,7 @@ defmodule Vivvo.Accounts.User do
     |> validate_format(:phone_number, ~r/\d/, message: "must contain at least one digit")
     |> validate_length(:phone_number, min: 10, max: 20)
     |> validate_preferred_roles()
+    |> maybe_set_current_role()
     |> validate_current_role()
     |> validate_email(opts)
   end
@@ -88,6 +88,13 @@ defmodule Vivvo.Accounts.User do
       nil -> add_error(changeset, :preferred_roles, "must select at least one role")
       [] -> add_error(changeset, :preferred_roles, "must select at least one role")
       _ -> changeset
+    end
+  end
+
+  defp maybe_set_current_role(changeset) do
+    case {get_field(changeset, :current_role), get_field(changeset, :preferred_roles)} do
+      {nil, [first | _]} -> put_change(changeset, :current_role, first)
+      {_, _} -> changeset
     end
   end
 
