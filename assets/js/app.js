@@ -259,12 +259,15 @@ const SteppedLineChart = {
  */
 const MultiSelect = {
   mounted() {
-    this.handleEvent("multi_select_changed", () => {
-      // Find the first hidden input and dispatch an input event
-      const hiddenInput = this.el.querySelector('input[type="hidden"]')
-      if (hiddenInput) {
+    this.handleEvent("multi_select_changed", (payload) => {
+      // Only respond to events intended for this component instance
+      if (payload.id !== this.el.id) return
+
+      // Find the trigger hidden input and dispatch an input event
+      const triggerInput = this.el.querySelector('input[type="hidden"][name$="_trigger"]')
+      if (triggerInput) {
         // Dispatch an input event that bubbles up to trigger phx-change
-        hiddenInput.dispatchEvent(new Event("input", {bubbles: true}))
+        triggerInput.dispatchEvent(new Event("input", {bubbles: true}))
       }
     })
   }

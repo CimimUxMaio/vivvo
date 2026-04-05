@@ -16,7 +16,7 @@ defmodule VivvoWeb.Components.MultiSelect do
         label="Select Roles"
         placeholder="Select role(s)..."
         options={[
-          %{value: :owner, label: "Property Owner", icon: "hero-home"},
+          %{value: :owner, label: "Property Owner", icon: "hero-home", variant: :primary},
           %{value: :tenant, label: "Tenant", icon: "hero-user", variant: :info}
         ]}
       />
@@ -31,9 +31,9 @@ defmodule VivvoWeb.Components.MultiSelect do
     * `:value` - The option value (required, can be atom or string)
     * `:label` - The display label (required)
     * `:icon` - The hero icon name (required)
-    * `:variant` - The DaisyUI color variant for styling (optional, defaults to base-200).
-      Valid variants include: `:primary`, `:secondary`, `:accent`, `:info`, `:success`,
-      `:warning`, `:error`, or any other custom color name.
+    * `:variant` - The DaisyUI color variant atom for styling (optional, defaults to :base-200).
+      Valid variants include: `:primary`, `:secondary`, `:accent`, `:neutral`, `:info`, `:success`,
+      `:warning`, `:error`. Only atom values are supported.
   """
   use VivvoWeb, :live_component
 
@@ -64,7 +64,7 @@ defmodule VivvoWeb.Components.MultiSelect do
 
   @impl true
   def render(assigns) do
-    selected_set = MapSet.new(assigns.selected, &to_string/1)
+    selected_set = MapSet.new(assigns.selected)
 
     options =
       Enum.map(assigns.options, fn opt ->
@@ -109,11 +109,13 @@ defmodule VivvoWeb.Components.MultiSelect do
             {@placeholder}
           </span>
 
-          <%!-- Hidden inputs for form integration --%>
-          <input :if={@selected == []} class="multi-input" type="hidden" name={@name} value="" />
+          <%!-- Hidden input used only to dispatch form change events --%>
+          <input class="multi-input" type="hidden" name={"#{@id}_trigger"} value="" />
+
+          <%!-- Real form inputs are only rendered for actual selections --%>
           <input
             :for={value <- @selected}
-            class="multi-input"
+            class="multi-input-real"
             type="hidden"
             name={@name}
             value={value}
@@ -178,7 +180,7 @@ defmodule VivvoWeb.Components.MultiSelect do
      socket
      |> assign(:selected, new_selected)
      |> assign(:dropdown_open, false)
-     |> push_event("multi_select_changed", %{})}
+     |> push_event("multi_select_changed", %{id: socket.assigns.id})}
   end
 
   @impl true
@@ -190,7 +192,7 @@ defmodule VivvoWeb.Components.MultiSelect do
     {:noreply,
      socket
      |> assign(:selected, new_selected)
-     |> push_event("multi_select_changed", %{})}
+     |> push_event("multi_select_changed", %{id: socket.assigns.id})}
   end
 
   defp field_has_errors?(%Phoenix.HTML.FormField{errors: errors}), do: errors != []
@@ -208,7 +210,8 @@ defmodule VivvoWeb.Components.MultiSelect do
     assigns = assign(assigns, :class, variant_class(assigns.option.variant))
 
     ~H"""
-    <span
+    <button
+      type="button"
       class={[
         "inline-flex items-center gap-2 px-3 py-1.5 rounded-box text-sm font-medium cursor-pointer",
         @class
@@ -220,7 +223,7 @@ defmodule VivvoWeb.Components.MultiSelect do
       <.icon name={@option.icon} class="w-4 h-4 shrink-0" />
       <span class="truncate max-w-[150px] sm:max-w-[200px]">{@option.label}</span>
       <.icon name="hero-x-mark" class="w-3.5 h-3.5 shrink-0" />
-    </span>
+    </button>
     """
   end
 
@@ -266,8 +269,32 @@ defmodule VivvoWeb.Components.MultiSelect do
     """
   end
 
-  defp variant_class(nil), do: "bg-base-200/10 text-base-200 border border-base-200/20"
+  defp variant_class(nil),
+    do: "bg-base-200/10 text-base-200 border border-base-200/20"
 
-  defp variant_class(variant),
-    do: "bg-#{variant}/10 text-#{variant} border border-#{variant}/20"
+  defp variant_class(:primary),
+    do: "bg-primary/10 text-primary border border-primary/20"
+
+  defp variant_class(:secondary),
+    do: "bg-secondary/10 text-secondary border border-secondary/20"
+
+  defp variant_class(:accent),
+    do: "bg-accent/10 text-accent border border-accent/20"
+
+  defp variant_class(:neutral),
+    do: "bg-neutral/10 text-neutral border border-neutral/20"
+
+  defp variant_class(:info),
+    do: "bg-info/10 text-info border border-info/20"
+
+  defp variant_class(:success),
+    do: "bg-success/10 text-success border border-success/20"
+
+  defp variant_class(:warning),
+    do: "bg-warning/10 text-warning border border-warning/20"
+
+  defp variant_class(:error),
+    do: "bg-error/10 text-error border border-error/20"
+
+  defp variant_class(_variant), do: variant_class(nil)
 end
