@@ -253,6 +253,24 @@ const SteppedLineChart = {
 }
 
 /**
+ * MultiSelect hook for triggering phx-change events when selections change.
+ * Works with the MultiSelect LiveComponent to dispatch input events on hidden inputs,
+ * which triggers the parent form's phx-change handler.
+ */
+const MultiSelect = {
+  mounted() {
+    this.handleEvent("multi_select_changed", () => {
+      // Find the first hidden input and dispatch an input event
+      const hiddenInput = this.el.querySelector('input[type="hidden"]')
+      if (hiddenInput) {
+        // Dispatch an input event that bubbles up to trigger phx-change
+        hiddenInput.dispatchEvent(new Event("input", {bubbles: true}))
+      }
+    })
+  }
+}
+
+/**
  * Flash message hook with auto-dismiss and hover pause functionality.
  * - Auto-dismisses after configured duration
  * - Pauses timer on mouse enter
@@ -370,7 +388,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash},
+  hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash, MultiSelect},
 })
 
 // Show progress bar on live navigation and form submits
