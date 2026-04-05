@@ -105,7 +105,7 @@ defmodule VivvoWeb.UserLive.RegistrationTest do
 
       # Click on the pill to remove it
       lv
-      |> element("#role-selector span[phx-click='remove-option'][phx-value-selected='owner']")
+      |> element("#role-selector button[phx-click='remove-option'][phx-value-selected='owner']")
       |> render_click()
 
       # The pill should be gone and placeholder should be back
