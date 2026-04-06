@@ -90,3 +90,6 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Configure sender email for development
+config :vivvo, :sender_email, "noreply@example.com"

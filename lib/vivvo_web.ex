@@ -96,6 +96,7 @@ defmodule VivvoWeb do
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
+      alias VivvoWeb.Components.MultiSelect
       alias VivvoWeb.Layouts
 
       # Routes generation with the ~p sigil

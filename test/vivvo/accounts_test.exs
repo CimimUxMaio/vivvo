@@ -176,8 +176,8 @@ defmodule Vivvo.AccountsTest do
     test "returns a changeset for new registration" do
       assert %Ecto.Changeset{} = changeset = Accounts.change_user_registration(%User{})
       # Check that all required fields are present (order may vary)
+      # Note: current_role is auto-set from preferred_roles, so not required
       assert Enum.sort(changeset.required) == [
-               :current_role,
                :email,
                :first_name,
                :last_name,
