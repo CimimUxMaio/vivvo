@@ -144,7 +144,7 @@ defmodule VivvoWeb.Components.MultiSelect do
           <div
             id={"#{@id}-dropdown"}
             tabindex="-1"
-            class="dropdown-content menu bg-base-100 rounded-box z-50 w-64 p-2 shadow-sm"
+            class="dropdown-content menu bg-base-200 rounded-box z-50 w-64 p-2 shadow-lg border border-base-300"
             phx-click-away="close-dropdown"
             phx-target={@myself}
           >
