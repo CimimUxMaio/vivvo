@@ -40,8 +40,8 @@ defmodule VivvoWeb.UserLive.Login do
           <div class="p-6 sm:p-8 space-y-6">
             <%!-- Header --%>
             <div class="text-center space-y-3">
-              <div class="inline-flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl">
-                <.icon name="hero-home" class="w-6 h-6 text-primary" />
+              <div class="inline-flex items-center justify-center">
+                <.app_icon class="w-18 h-18" />
               </div>
               <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-base-content">
                 <%= if @current_scope do %>
