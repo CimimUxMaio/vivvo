@@ -338,7 +338,10 @@ defmodule VivvoWeb.CoreComponents do
   def page_header(assigns) do
     ~H"""
     <%!-- Desktop Header (sm and above) --%>
-    <div class="hidden sm:flex sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div
+      id="page-header-desktop"
+      class="hidden sm:flex sm:flex-row sm:items-center sm:justify-between gap-4"
+    >
       <div class="flex items-center gap-4">
         <%= if @back_navigate do %>
           <.link
@@ -368,7 +371,7 @@ defmodule VivvoWeb.CoreComponents do
     </div>
 
     <%!-- Mobile Header (below sm) --%>
-    <div class="flex flex-col sm:hidden gap-3">
+    <div id="page-header-mobile" class="flex flex-col sm:hidden gap-3">
       <%!-- Top row: Back button and title --%>
       <div class="flex items-center gap-3">
         <%= if @back_navigate do %>
