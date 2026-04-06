@@ -159,8 +159,8 @@ defmodule Vivvo.AccountsTest do
       assert %{preferred_roles: ["must select at least one role"]} = errors_on(changeset)
     end
 
-    test "validates current_role is in preferred_roles" do
-      {:error, changeset} =
+    test "automatically sets current_role to first preferred_role when invalid" do
+      {:ok, user} =
         Accounts.register_user(
           valid_user_attributes(%{
             preferred_roles: ["owner"],
@@ -168,7 +168,8 @@ defmodule Vivvo.AccountsTest do
           })
         )
 
-      assert %{current_role: ["must be one of the preferred roles"]} = errors_on(changeset)
+      # current_role is automatically corrected to first preferred_role
+      assert user.current_role == :owner
     end
   end
 

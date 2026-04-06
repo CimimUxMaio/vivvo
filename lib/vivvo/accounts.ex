@@ -348,6 +348,40 @@ defmodule Vivvo.Accounts do
     |> Repo.update()
   end
 
+  @doc """
+  Updates the user's profile settings including preferred_roles and current_role.
+
+  If the current_role is no longer in the preferred_roles after the update,
+  it will be automatically set to the first preferred role.
+
+  ## Examples
+
+      iex> update_user_settings(user, %{preferred_roles: [:owner, :tenant]})
+      {:ok, %User{}}
+
+      iex> update_user_settings(user, %{preferred_roles: [:tenant]})
+      {:ok, %User{}} # current_role automatically updated to :tenant
+
+  """
+  def update_user_settings(user, attrs) do
+    user
+    |> User.settings_changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing user settings.
+
+  ## Examples
+
+      iex> change_user_settings(user)
+      %Ecto.Changeset{data: %User{}}
+
+  """
+  def change_user_settings(user, attrs \\ %{}) do
+    User.settings_changeset(user, attrs)
+  end
+
   ## Token helper
 
   defp update_user_and_delete_all_tokens(changeset) do
