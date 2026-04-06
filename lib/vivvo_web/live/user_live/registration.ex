@@ -143,6 +143,8 @@ defmodule VivvoWeb.UserLive.Registration do
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
+    user_params = clean_params(user_params)
+
     case Accounts.register_user(user_params) do
       {:ok, user} ->
         {:ok, _} =
@@ -166,10 +168,17 @@ defmodule VivvoWeb.UserLive.Registration do
 
   @impl true
   def handle_event("validate", %{"user" => user_params}, socket) do
+    user_params = clean_params(user_params)
+
     changeset =
       Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, form: to_form(changeset, as: "user"))}
+  end
+
+  defp clean_params(params) do
+    params
+    |> Map.put_new("preferred_roles", [])
   end
 end
