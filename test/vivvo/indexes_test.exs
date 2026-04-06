@@ -1,5 +1,5 @@
 defmodule Vivvo.IndexesTest do
-  use Vivvo.DataCase, async: true
+  use Vivvo.DataCase
 
   alias Vivvo.Indexes
 
