@@ -70,12 +70,7 @@ defmodule VivvoWeb.Layouts do
           <%!-- Logo and Brand --%>
           <div class="flex items-center gap-4">
             <.link href={~p"/"} class="flex items-center gap-2 group">
-              <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <.icon name="hero-home" class="w-5 h-5 text-primary-content" />
-              </div>
-              <span class="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                Vivvo
-              </span>
+              <.app_logo class="h-14" />
             </.link>
 
             <%!-- Desktop Navigation --%>
