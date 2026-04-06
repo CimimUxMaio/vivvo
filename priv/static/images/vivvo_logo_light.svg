@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 60" fill="none">
+  <!-- VIVVO Full Logo - Light Theme (Icon + Wordmark with padding) -->
+  
+  <!-- Icon Group (60x60 positioned on the left) -->
+  <g transform="translate(0, 0)">
+    <!-- Background circle using light theme base-100 (white/off-white) - reduced radius for padding -->
+    <circle cx="30" cy="30" r="25" fill="#fafafa"/>
+    
+    <!-- Scaled content group (85% scale, centered) -->
+    <g transform="translate(4.5, 4.5) scale(0.85)">
+      <!-- The V shape forming house roof - using light theme primary orange/coral -->
+      <path d="M30 10L12 36H20L30 22L40 36H48L30 10Z" fill="#f97316"/>
+
+      <!-- Vertical bar representing building/foundation - slightly lighter orange -->
+      <rect x="26" y="26" width="8" height="16" rx="1" fill="#fb923c"/>
+
+      <!-- Three dots at the base representing the three roles -->
+      <circle cx="18" cy="48" r="2.5" fill="#3b82f6"/>
+      <circle cx="30" cy="48" r="2.5" fill="#22c55e"/>
+      <circle cx="42" cy="48" r="2.5" fill="#8b5cf6"/>
+    </g>
+  </g>
+  
+  <!-- Wordmark "Vivvo" positioned to the right of the icon -->
+  <!-- Using light theme base-content color for text -->
+  <text x="72" y="38"
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        font-size="28"
+        font-weight="600"
+        fill="#18181B"
+        letter-spacing="-0.5">Vivvo</text>
+</svg>
