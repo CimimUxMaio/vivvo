@@ -2,7 +2,7 @@ defmodule VivvoWeb.UserLive.Settings do
   @moduledoc """
   LiveView for user account settings.
 
-        Allows users to manage their email address, password, and preferred roles.
+  Allows users to manage their email address, password, and preferred roles.
   Requires sudo mode (recent authentication) for security.
   """
   use VivvoWeb, :live_view
@@ -313,7 +313,8 @@ defmodule VivvoWeb.UserLive.Settings do
     {:noreply, assign(socket, settings_form: settings_form)}
   end
 
-  def handle_event("update_settings", %{"user" => user_params}, socket) do
+  def handle_event("update_settings", params, socket) do
+    user_params = params["user"] || %{}
     user = socket.assigns.current_scope.user
     true = Accounts.sudo_mode?(user)
 
