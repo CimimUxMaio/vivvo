@@ -337,70 +337,72 @@ defmodule VivvoWeb.CoreComponents do
 
   def page_header(assigns) do
     ~H"""
-    <%!-- Desktop Header (sm and above) --%>
-    <div
-      id="page-header-desktop"
-      class="hidden sm:flex sm:flex-row sm:items-center sm:justify-between gap-4"
-    >
-      <div class="flex items-center gap-4">
-        <%= if @back_navigate do %>
-          <.link
-            navigate={@back_navigate}
-            class="flex items-center justify-center w-10 h-10 rounded-xl bg-base-100 border border-base-200 text-base-content/60 hover:text-primary hover:border-primary/30 transition-all"
-            aria-label="Back"
-          >
-            <.icon name="hero-arrow-left" class="w-5 h-5" />
-          </.link>
-        <% end %>
-        <div>
-          <h1 class="text-3xl font-bold text-base-content">{@title}</h1>
-          <%= if @subtitle != [] do %>
-            <p class="text-sm text-base-content/60 mt-1">
-              {render_slot(@subtitle)}
-            </p>
+    <div class="page-header-wrapper">
+      <%!-- Desktop Header (sm and above) --%>
+      <div
+        id="page-header-desktop"
+        class="hidden sm:flex sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <div class="flex items-center gap-4">
+          <%= if @back_navigate do %>
+            <.link
+              navigate={@back_navigate}
+              class="flex items-center justify-center w-10 h-10 rounded-xl bg-base-100 border border-base-200 text-base-content/60 hover:text-primary hover:border-primary/30 transition-all"
+              aria-label="Back"
+            >
+              <.icon name="hero-arrow-left" class="w-5 h-5" />
+            </.link>
           <% end %>
+          <div>
+            <h1 class="text-3xl font-bold text-base-content">{@title}</h1>
+            <%= if @subtitle != [] do %>
+              <p class="text-sm text-base-content/60 mt-1">
+                {render_slot(@subtitle)}
+              </p>
+            <% end %>
+          </div>
         </div>
+        <%= if @action != [] do %>
+          <div class="flex items-center gap-3">
+            <%= for action <- @action do %>
+              {render_slot(action)}
+            <% end %>
+          </div>
+        <% end %>
       </div>
-      <%= if @action != [] do %>
+
+      <%!-- Mobile Header (below sm) --%>
+      <div id="page-header-mobile" class="flex flex-col sm:hidden gap-3">
+        <%!-- Top row: Back button and title --%>
         <div class="flex items-center gap-3">
-          <%= for action <- @action do %>
-            {render_slot(action)}
+          <%= if @back_navigate do %>
+            <.link
+              navigate={@back_navigate}
+              class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-100 border border-base-200 text-base-content/60 hover:text-primary hover:border-primary/30 transition-all"
+              aria-label="Back"
+            >
+              <.icon name="hero-arrow-left" class="w-4 h-4" />
+            </.link>
           <% end %>
+          <h1 class="text-xl font-bold text-base-content leading-tight">{@title}</h1>
         </div>
-      <% end %>
-    </div>
 
-    <%!-- Mobile Header (below sm) --%>
-    <div id="page-header-mobile" class="flex flex-col sm:hidden gap-3">
-      <%!-- Top row: Back button and title --%>
-      <div class="flex items-center gap-3">
-        <%= if @back_navigate do %>
-          <.link
-            navigate={@back_navigate}
-            class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-100 border border-base-200 text-base-content/60 hover:text-primary hover:border-primary/30 transition-all"
-            aria-label="Back"
-          >
-            <.icon name="hero-arrow-left" class="w-4 h-4" />
-          </.link>
+        <%!-- Subtitle on mobile --%>
+        <%= if @subtitle != [] do %>
+          <p class="text-sm text-base-content/60">
+            {render_slot(@subtitle)}
+          </p>
         <% end %>
-        <h1 class="text-xl font-bold text-base-content leading-tight">{@title}</h1>
+
+        <%!-- Actions full-width on mobile --%>
+        <%= if @action != [] do %>
+          <div class="flex flex-col gap-2 pt-1">
+            <%= for action <- @action do %>
+              {render_slot(action)}
+            <% end %>
+          </div>
+        <% end %>
       </div>
-
-      <%!-- Subtitle on mobile --%>
-      <%= if @subtitle != [] do %>
-        <p class="text-sm text-base-content/60">
-          {render_slot(@subtitle)}
-        </p>
-      <% end %>
-
-      <%!-- Actions full-width on mobile --%>
-      <%= if @action != [] do %>
-        <div class="flex flex-col gap-2 pt-1">
-          <%= for action <- @action do %>
-            {render_slot(action)}
-          <% end %>
-        </div>
-      <% end %>
     </div>
     """
   end
