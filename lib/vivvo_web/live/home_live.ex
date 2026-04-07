@@ -698,7 +698,12 @@ defmodule VivvoWeb.HomeLive do
     chart_data = [
       %{label: "Current", value: assigns.outstanding_aging.current, color: "--color-info"},
       %{label: "0-7 days", value: assigns.outstanding_aging.days_0_7, color: "--color-warning"},
-      %{label: "8-30 days", value: assigns.outstanding_aging.days_8_30, color: "--color-warning"},
+      %{
+        label: "8-30 days",
+        value: assigns.outstanding_aging.days_8_30,
+        color: "--color-warning",
+        opacity: 70
+      },
       %{label: "31+ days", value: assigns.outstanding_aging.days_31_plus, color: "--color-error"}
     ]
 
