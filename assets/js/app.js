@@ -39,6 +39,7 @@ import {
   Filler
 } from "chart.js"
 import {initTheme} from "./theme"
+import chroma from "chroma-js"
 
 // Register Chart.js components
 Chart.register(
@@ -71,7 +72,11 @@ const PieChart = {
     // Extract data from chartData array
     const labels = chartData.map(item => item.label)
     const values = chartData.map(item => item.value)
-    const colors = chartData.map(item => rootStyles.getPropertyValue(item.color).trim())
+    const colors = chartData.map(item => {
+      const baseColor = rootStyles.getPropertyValue(item.color).trim()
+      const opacity = (item.opacity ?? 100) / 100
+      return chroma(baseColor).alpha(opacity).css()
+    })
 
     // Calculate total for percentage calculations
     const total = values.reduce((sum, val) => sum + parseFloat(val || 0), 0)
