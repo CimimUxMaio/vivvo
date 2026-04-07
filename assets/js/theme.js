@@ -33,8 +33,12 @@ const getStoredTheme = () => localStorage.getItem(STORAGE_KEY) || "system"
  */
 const updateFavicon = (effectiveTheme) => {
   const faviconEl = document.getElementById("favicon")
+
   if (faviconEl) {
-    faviconEl.href = `/images/vivvo_favicon_${effectiveTheme}.svg`
+    faviconEl.href = 
+      effectiveTheme === "dark" 
+        ? faviconEl.dataset.darkHref 
+        : faviconEl.dataset.lightHref
   }
 }
 
