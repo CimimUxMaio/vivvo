@@ -55,7 +55,7 @@ defmodule VivvoWeb.PropertyLiveTest do
 
       assert {:ok, form_live, _} =
                index_live
-               |> element("a", "New Property")
+               |> element("#page-header-desktop a", "New Property")
                |> render_click()
                |> follow_redirect(conn, ~p"/properties/new")
 
@@ -137,7 +137,7 @@ defmodule VivvoWeb.PropertyLiveTest do
 
       assert {:ok, form_live, _} =
                show_live
-               |> element("a", "Edit")
+               |> element("#page-header-desktop a", "Edit")
                |> render_click()
                |> follow_redirect(conn, ~p"/properties/#{property}/edit?return_to=show")
 

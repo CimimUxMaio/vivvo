@@ -159,8 +159,8 @@ defmodule Vivvo.AccountsTest do
       assert %{preferred_roles: ["must select at least one role"]} = errors_on(changeset)
     end
 
-    test "validates current_role is in preferred_roles" do
-      {:error, changeset} =
+    test "automatically sets current_role to first preferred_role when invalid" do
+      {:ok, user} =
         Accounts.register_user(
           valid_user_attributes(%{
             preferred_roles: ["owner"],
@@ -168,7 +168,61 @@ defmodule Vivvo.AccountsTest do
           })
         )
 
-      assert %{current_role: ["must be one of the preferred roles"]} = errors_on(changeset)
+      # current_role is automatically corrected to first preferred_role
+      assert user.current_role == :owner
+    end
+  end
+
+  describe "update_user_settings/2" do
+    test "updates preferred_roles successfully" do
+      user = user_fixture(%{preferred_roles: [:tenant], current_role: :tenant})
+
+      {:ok, updated_user} =
+        Accounts.update_user_settings(user, %{preferred_roles: [:owner, :tenant]})
+
+      assert updated_user.preferred_roles == [:owner, :tenant]
+      # current_role should remain unchanged since it's still valid
+      assert updated_user.current_role == :tenant
+    end
+
+    test "automatically sets current_role to first preferred_role when updated preferred_roles make it invalid" do
+      {:ok, user} =
+        Accounts.register_user(
+          valid_user_attributes(%{
+            preferred_roles: [:tenant, :owner],
+            current_role: :tenant
+          })
+        )
+
+      {:ok, updated_user} = Accounts.update_user_settings(user, %{preferred_roles: [:owner]})
+
+      assert updated_user.preferred_roles == [:owner]
+      assert updated_user.current_role == :owner
+    end
+
+    test "rejects empty preferred_roles" do
+      user = user_fixture()
+
+      {:error, changeset} = Accounts.update_user_settings(user, %{preferred_roles: []})
+
+      assert %{preferred_roles: ["must select at least one role"]} = errors_on(changeset)
+    end
+  end
+
+  describe "change_user_settings/2" do
+    test "returns a changeset for changing user settings" do
+      user = user_fixture()
+      assert %Ecto.Changeset{} = changeset = Accounts.change_user_settings(user)
+      assert changeset.data == user
+    end
+
+    test "applies given attributes to the changeset" do
+      user = user_fixture()
+
+      changeset =
+        Accounts.change_user_settings(user, %{preferred_roles: [:owner]})
+
+      assert Ecto.Changeset.get_change(changeset, :preferred_roles) == [:owner]
     end
   end
 

@@ -92,9 +92,16 @@ defmodule Vivvo.Accounts.User do
   end
 
   defp maybe_set_current_role(changeset) do
-    case {get_field(changeset, :current_role), get_field(changeset, :preferred_roles)} do
-      {nil, [first | _]} -> put_change(changeset, :current_role, first)
-      {_, _} -> changeset
+    preferred_roles = get_field(changeset, :preferred_roles)
+    current_role = get_field(changeset, :current_role)
+
+    # Only set current_role if preferred_roles is a non-empty list
+    # and current_role needs to be set or updated
+    if is_list(preferred_roles) and preferred_roles != [] and
+         (is_nil(current_role) or current_role not in preferred_roles) do
+      put_change(changeset, :current_role, List.first(preferred_roles))
+    else
+      changeset
     end
   end
 
@@ -203,6 +210,21 @@ defmodule Vivvo.Accounts.User do
     user
     |> cast(attrs, [:current_role])
     |> validate_required([:current_role])
+    |> validate_current_role()
+  end
+
+  @doc """
+  A user changeset for updating settings (preferred_roles and current_role).
+
+  Validates that preferred_roles has at least one role. If current_role
+  is not in preferred_roles (or is nil), it will be automatically set
+  to the first preferred role instead of producing a validation error.
+  """
+  def settings_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:preferred_roles, :current_role])
+    |> validate_preferred_roles()
+    |> maybe_set_current_role()
     |> validate_current_role()
   end
 
