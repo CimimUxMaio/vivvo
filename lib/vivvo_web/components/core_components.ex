@@ -26,6 +26,7 @@ defmodule VivvoWeb.CoreComponents do
       and `<.form>`, are defined there.
 
   """
+  use VivvoWeb, :verified_routes
   use Phoenix.Component
   use Gettext, backend: VivvoWeb.Gettext
 
@@ -89,7 +90,7 @@ defmodule VivvoWeb.CoreComponents do
   def app_icon(assigns) do
     ~H"""
     <img
-      src="/images/vivvo_icon_light.svg"
+      src={~p"/images/vivvo_icon_light.svg"}
       class={[
         @class,
         "[[data-theme=dark]_&]:hidden [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:hidden"
@@ -97,7 +98,7 @@ defmodule VivvoWeb.CoreComponents do
       alt="Vivvo"
     />
     <img
-      src="/images/vivvo_icon_dark.svg"
+      src={~p"/images/vivvo_icon_dark.svg"}
       class={[
         @class,
         "hidden [[data-theme=dark]_&]:block [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:block"
@@ -122,7 +123,7 @@ defmodule VivvoWeb.CoreComponents do
   def app_logo(assigns) do
     ~H"""
     <img
-      src="/images/vivvo_logo_light.svg"
+      src={~p"/images/vivvo_logo_light.svg"}
       class={[
         @class,
         "[[data-theme=dark]_&]:hidden [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:hidden"
@@ -130,7 +131,7 @@ defmodule VivvoWeb.CoreComponents do
       alt="Vivvo"
     />
     <img
-      src="/images/vivvo_logo_dark.svg"
+      src={~p"/images/vivvo_logo_dark.svg"}
       class={[
         @class,
         "hidden [[data-theme=dark]_&]:block [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:block"
