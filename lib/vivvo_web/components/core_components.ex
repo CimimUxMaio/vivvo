@@ -26,6 +26,7 @@ defmodule VivvoWeb.CoreComponents do
       and `<.form>`, are defined there.
 
   """
+  use VivvoWeb, :verified_routes
   use Phoenix.Component
   use Gettext, backend: VivvoWeb.Gettext
 
@@ -72,6 +73,72 @@ defmodule VivvoWeb.CoreComponents do
       </button>
       """
     end
+  end
+
+  @doc """
+  Renders the Vivvo app icon with automatic theme switching.
+
+  The icon automatically switches between light and dark theme versions
+  based on the `data-theme` attribute on the document root.
+
+  ## Examples
+
+      <.app_icon class="w-12 h-12" />
+  """
+  attr :class, :string, default: "w-12 h-12", doc: "CSS classes for sizing"
+
+  def app_icon(assigns) do
+    ~H"""
+    <img
+      src={~p"/images/vivvo_icon_light.svg"}
+      class={[
+        @class,
+        "[[data-theme=dark]_&]:hidden [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:hidden"
+      ]}
+      alt="Vivvo"
+    />
+    <img
+      src={~p"/images/vivvo_icon_dark.svg"}
+      class={[
+        @class,
+        "hidden [[data-theme=dark]_&]:block [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:block"
+      ]}
+      alt="Vivvo"
+    />
+    """
+  end
+
+  @doc """
+  Renders the Vivvo full logo (icon + wordmark) with automatic theme switching.
+
+  The logo automatically switches between light and dark theme versions
+  based on the `data-theme` attribute on the document root.
+
+  ## Examples
+
+      <.app_logo class="h-8" />
+  """
+  attr :class, :string, default: "h-8", doc: "CSS classes for sizing (typically height)"
+
+  def app_logo(assigns) do
+    ~H"""
+    <img
+      src={~p"/images/vivvo_logo_light.svg"}
+      class={[
+        @class,
+        "[[data-theme=dark]_&]:hidden [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:hidden"
+      ]}
+      alt="Vivvo"
+    />
+    <img
+      src={~p"/images/vivvo_logo_dark.svg"}
+      class={[
+        @class,
+        "hidden [[data-theme=dark]_&]:block [@media(prefers-color-scheme:dark)]:[[data-theme=system]_&]:block"
+      ]}
+      alt="Vivvo"
+    />
+    """
   end
 
   @doc """

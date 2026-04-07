@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" fill="none">
+  <!-- VIVVO Logo v1 - Original Design (with padding) -->
+  
+  <!-- Background circle for app icon container - reduced radius for padding -->
+  <circle cx="30" cy="30" r="25" fill="url(#bgGradient1)"/>
+  
+  <!-- Scaled content group (85% scale, centered) -->
+  <g transform="translate(4.5, 4.5) scale(0.85)">
+    <!-- The V shape that also forms a house roof -->
+    <path d="M30 10L12 36H20L30 22L40 36H48L30 10Z" fill="white"/>
+
+    <!-- Vertical bar representing building/foundation -->
+    <rect x="26" y="26" width="8" height="16" rx="1" fill="white"/>
+
+    <!-- Three dots at the base representing the three roles -->
+    <circle cx="18" cy="48" r="2.5" fill="#60A5FA"/>
+    <circle cx="30" cy="48" r="2.5" fill="#34D399"/>
+    <circle cx="42" cy="48" r="2.5" fill="#A78BFA"/>
+  </g>
+  
+  <defs>
+    <linearGradient id="bgGradient1" x1="2" y1="2" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+</svg>
