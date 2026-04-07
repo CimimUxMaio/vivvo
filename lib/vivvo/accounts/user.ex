@@ -216,8 +216,9 @@ defmodule Vivvo.Accounts.User do
   @doc """
   A user changeset for updating settings (preferred_roles and current_role).
 
-  Validates that preferred_roles has at least one role and that
-  current_role is one of the preferred_roles.
+  Validates that preferred_roles has at least one role. If current_role
+  is not in preferred_roles (or is nil), it will be automatically set
+  to the first preferred role instead of producing a validation error.
   """
   def settings_changeset(user, attrs) do
     user
