@@ -41,7 +41,7 @@ defmodule VivvoWeb.UserLive.Login do
             <%!-- Header --%>
             <div class="text-center space-y-3">
               <div class="inline-flex items-center justify-center">
-                <.app_icon class="w-18 h-18" />
+                <.app_icon class="w-20 h-20" />
               </div>
               <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-base-content">
                 <%= if @current_scope do %>
