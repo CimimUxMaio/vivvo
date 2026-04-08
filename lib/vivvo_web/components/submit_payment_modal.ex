@@ -132,8 +132,8 @@ defmodule VivvoWeb.SubmitPaymentModal do
             </div>
           <% else %>
             <%!-- Miscellaneous payment info --%>
-            <div class="mb-4 p-3 bg-info/10 border border-info/20 rounded-box flex items-start gap-3">
-              <.icon name="hero-light-bulb" class="w-5 h-5 text-info flex-shrink-0 mt-0.5" />
+            <div class="mb-4 p-3 bg-warning/10 border border-warning/20 rounded-box flex items-start gap-3">
+              <.icon name="hero-light-bulb" class="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
               <p class="text-sm text-base-content/80">
                 This is an additional payment that will not count toward your rent totals. Use this for security deposits, pet fees, or other charges.
               </p>
