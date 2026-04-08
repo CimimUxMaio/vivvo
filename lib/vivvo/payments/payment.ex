@@ -43,7 +43,7 @@ defmodule Vivvo.Payments.Payment do
       :category
     ])
     |> cast_assoc(:files)
-    |> validate_required([:amount, :contract_id])
+    |> validate_required([:amount, :contract_id, :type])
     |> validate_number(:amount, greater_than: 0)
     |> maybe_validate_payment_number()
     |> maybe_validate_category()
