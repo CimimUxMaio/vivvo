@@ -1442,7 +1442,7 @@ defmodule VivvoWeb.HomeLive do
     <%= if @has_details do %>
       <div class={[
         "overflow-hidden transition-all duration-300 ease-in-out",
-        "border-t border-base-200 bg-base-50/50",
+        "border-t border-base-200 bg-base-200/50",
         @is_expanded && "max-h-[400px] opacity-100",
         !@is_expanded && "max-h-0 opacity-0"
       ]}>
