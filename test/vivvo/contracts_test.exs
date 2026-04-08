@@ -1505,8 +1505,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
@@ -1692,8 +1691,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
@@ -2094,8 +2092,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       {:ok, _payment} = Vivvo.Payments.accept_payment(scope, payment)
@@ -2183,8 +2180,7 @@ defmodule Vivvo.ContractsTest do
           payment_fixture(tenant_scope, %{
             contract_id: contract.id,
             payment_number: num,
-            amount: "500.00",
-            status: :pending
+            amount: "500.00"
           })
 
         {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
@@ -2269,8 +2265,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "600.00",
-          status: :pending
+          amount: "600.00"
         })
 
       # Update inserted_at to simulate early payment
@@ -2290,8 +2285,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "400.00",
-          status: :pending
+          amount: "400.00"
         })
 
       Ecto.Changeset.change(payment2, %{})
@@ -2329,8 +2323,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       Ecto.Changeset.change(payment, %{})
@@ -2389,8 +2382,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       Ecto.Changeset.change(payment_1, %{})
@@ -2409,8 +2401,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       Ecto.Changeset.change(payment_2a, %{})
@@ -2426,8 +2417,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       Ecto.Changeset.change(payment_2b, %{})
@@ -2446,8 +2436,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 3,
-          amount: "600.00",
-          status: :pending
+          amount: "600.00"
         })
 
       {:ok, _} = Vivvo.Payments.accept_payment(scope, payment_3)
@@ -2481,8 +2470,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       Ecto.Changeset.change(payment, %{})
@@ -2538,8 +2526,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1500.00",
-          status: :pending
+          amount: "1500.00"
         })
 
       Ecto.Changeset.change(payment, %{})

@@ -229,12 +229,7 @@ defmodule Vivvo.PaymentsTest do
 
     test "accept_payment/2 updates status to accepted and clears rejection_reason" do
       scope = user_scope_fixture()
-
-      payment =
-        payment_fixture(scope, %{
-          status: :pending,
-          rejection_reason: "previous rejection"
-        })
+      payment = payment_fixture(scope)
 
       assert {:ok, %Payment{status: :accepted, rejection_reason: nil}} =
                Payments.accept_payment(scope, payment)
@@ -246,14 +241,14 @@ defmodule Vivvo.PaymentsTest do
     test "accept_payment/2 with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
-      payment = payment_fixture(scope, %{status: :pending})
+      payment = payment_fixture(scope)
 
       assert {:error, :unauthorized} = Payments.accept_payment(other_scope, payment)
     end
 
     test "reject_payment/3 requires and sets rejection reason" do
       scope = user_scope_fixture()
-      payment = payment_fixture(scope, %{status: :pending})
+      payment = payment_fixture(scope)
 
       assert {:ok, %Payment{status: :rejected, rejection_reason: "Invalid amount"}} =
                Payments.reject_payment(scope, payment, "Invalid amount")
@@ -265,7 +260,7 @@ defmodule Vivvo.PaymentsTest do
     test "reject_payment/3 with invalid scope returns unauthorized error" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
-      payment = payment_fixture(scope, %{status: :pending})
+      payment = payment_fixture(scope)
 
       assert {:error, :unauthorized} = Payments.reject_payment(other_scope, payment, "reason")
     end
