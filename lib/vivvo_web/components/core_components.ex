@@ -386,23 +386,41 @@ defmodule VivvoWeb.CoreComponents do
 
       <.page_header title="Properties" back_navigate={~p"/properties"}>
         <:subtitle>Manage your rental properties</:subtitle>
-        <:action>
-          <.button variant="primary" navigate={~p"/properties/new"}>
-            <.icon name="hero-plus" class="w-5 h-5 mr-2" /> New Property
-          </.button>
-        </:action>
+        <:action icon="hero-plus" label="New Property" navigate={~p"/properties/new"} />
+        <:action icon="hero-pencil-square" label="Edit" phx-click="edit" />
       </.page_header>
 
       <.page_header title="Edit Property" back_navigate={~p"/properties"}>
         <:subtitle>Update your property details</:subtitle>
       </.page_header>
   """
+  attr :id, :string, default: nil, doc: "optional DOM id for the component"
   attr :title, :string, required: true, doc: "the page title"
   attr :back_navigate, :any, default: nil, doc: "navigate path for back button (optional)"
   slot :subtitle, doc: "optional subtitle or description"
-  slot :action, doc: "action buttons displayed on the right side"
+
+  slot :action, doc: "action buttons displayed on the right side" do
+    attr :icon, :string, required: true, doc: "Heroicon name (e.g., 'hero-plus')"
+    attr :label, :string, required: true, doc: "Button label text"
+    attr :navigate, :string, doc: "Navigation path (optional)"
+    attr :"phx-click", :string, doc: "Click event name (optional)"
+  end
 
   def page_header(assigns) do
+    # Validate that each action has at least one of navigate or phx-click
+    for action <- assigns.action do
+      unless action[:navigate] || action[:"phx-click"] do
+        raise ArgumentError,
+              "page_header :action slot requires either :navigate or :\"phx-click\" attribute, got: #{inspect(action)}"
+      end
+    end
+
+    # Generate a unique id from the title if not provided
+    fab_id =
+      assigns.id || "fab-#{String.replace(String.downcase(assigns.title), ~r/[^a-z0-9]+/, "-")}"
+
+    assigns = assign(assigns, :fab_id, fab_id)
+
     ~H"""
     <div class="page-header-wrapper">
       <%!-- Desktop Header (sm and above) --%>
@@ -432,7 +450,13 @@ defmodule VivvoWeb.CoreComponents do
         <%= if @action != [] do %>
           <div class="flex items-center gap-3">
             <%= for action <- @action do %>
-              {render_slot(action)}
+              <.button
+                variant="primary"
+                navigate={action[:navigate]}
+                phx-click={action[:"phx-click"]}
+              >
+                <.icon name={action.icon} class="w-5 h-5 mr-2" /> {action.label}
+              </.button>
             <% end %>
           </div>
         <% end %>
@@ -460,16 +484,46 @@ defmodule VivvoWeb.CoreComponents do
             {render_slot(@subtitle)}
           </p>
         <% end %>
-
-        <%!-- Actions full-width on mobile --%>
-        <%= if @action != [] do %>
-          <div class="flex flex-col gap-2 pt-1">
-            <%= for action <- @action do %>
-              {render_slot(action)}
-            <% end %>
-          </div>
-        <% end %>
       </div>
+
+      <%!-- Mobile FAB Actions --%>
+      <%= if @action != [] do %>
+        <div class="fixed bottom-6 right-6 z-50 sm:hidden fab">
+          <%!-- Toggle button (64x64) --%>
+          <div
+            tabindex="0"
+            role="button"
+            class="btn btn-circle btn-primary size-14 shadow-xl"
+          >
+            <.icon name="hero-ellipsis-vertical" class="size-6" />
+          </div>
+
+          <div class="fab-close btn btn-circle btn-primary size-14 shadow-xl">
+            <.icon name="hero-x-mark" class="size-6" />
+          </div>
+
+          <%!-- Action Buttons --%>
+          <%= for action <- @action do %>
+            <.link
+              :if={action[:navigate]}
+              navigate={action[:navigate]}
+              class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
+              title={action.label}
+            >
+              <.icon name={action.icon} class="size-6" />
+            </.link>
+            <button
+              :if={action[:"phx-click"]}
+              type="button"
+              phx-click={action[:"phx-click"]}
+              class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
+              title={action.label}
+            >
+              <.icon name={action.icon} class="size-6" />
+            </button>
+          <% end %>
+        </div>
+      <% end %>
     </div>
     """
   end
@@ -612,6 +666,18 @@ defmodule VivvoWeb.CoreComponents do
         {"transition-all ease-in duration-200", "opacity-100 translate-y-0 sm:scale-100",
          "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"}
     )
+  end
+
+  @doc """
+  Toggles the FAB (Floating Action Button) menu open/closed state.
+  """
+  def toggle_fab_menu(fab_id) do
+    %JS{}
+    |> JS.toggle(to: "##{fab_id}-menu")
+    |> JS.toggle(to: "##{fab_id}-open-icon")
+    |> JS.toggle(to: "##{fab_id}-close-icon")
+    |> JS.toggle_class("opacity-0 translate-y-4", to: "##{fab_id}-menu > *")
+    |> JS.toggle_class("opacity-100 translate-y-0", to: "##{fab_id}-menu > *")
   end
 
   @contract_status_config %{
