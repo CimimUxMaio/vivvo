@@ -1505,8 +1505,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
@@ -1692,8 +1691,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
@@ -1740,25 +1738,29 @@ defmodule Vivvo.ContractsTest do
       past_payments = Contracts.get_past_payment_numbers(contract, today)
       assert Enum.count(past_payments) >= 4, "Expected at least 4 past payments for assertions"
 
-      # Tenant creates accepted payments for multiple months
+      # Tenant creates payments and owner accepts them
       for payment_num <- 1..3 do
-        {:ok, _payment} =
+        {:ok, payment} =
           Vivvo.Payments.create_payment(tenant_scope, %{
             contract_id: contract.id,
             payment_number: payment_num,
-            amount: "500.00",
-            status: :accepted
+            amount: "500.00"
           })
+
+        # Owner accepts the payment
+        {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
 
         # Add a second payment for month 1 to test aggregation
         if payment_num == 1 do
-          {:ok, _payment2} =
+          {:ok, payment2} =
             Vivvo.Payments.create_payment(tenant_scope, %{
               contract_id: contract.id,
               payment_number: 1,
-              amount: "500.00",
-              status: :accepted
+              amount: "500.00"
             })
+
+          # Owner accepts the second payment too
+          {:ok, _} = Vivvo.Payments.accept_payment(scope, payment2)
         end
       end
 
@@ -2090,8 +2092,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       {:ok, _payment} = Vivvo.Payments.accept_payment(scope, payment)
@@ -2179,8 +2180,7 @@ defmodule Vivvo.ContractsTest do
           payment_fixture(tenant_scope, %{
             contract_id: contract.id,
             payment_number: num,
-            amount: "500.00",
-            status: :pending
+            amount: "500.00"
           })
 
         {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
@@ -2265,8 +2265,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "600.00",
-          status: :pending
+          amount: "600.00"
         })
 
       # Update inserted_at to simulate early payment
@@ -2286,8 +2285,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "400.00",
-          status: :pending
+          amount: "400.00"
         })
 
       Ecto.Changeset.change(payment2, %{})
@@ -2325,8 +2323,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       Ecto.Changeset.change(payment, %{})
@@ -2385,8 +2382,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       Ecto.Changeset.change(payment_1, %{})
@@ -2405,8 +2401,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       Ecto.Changeset.change(payment_2a, %{})
@@ -2422,8 +2417,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "500.00",
-          status: :pending
+          amount: "500.00"
         })
 
       Ecto.Changeset.change(payment_2b, %{})
@@ -2442,8 +2436,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 3,
-          amount: "600.00",
-          status: :pending
+          amount: "600.00"
         })
 
       {:ok, _} = Vivvo.Payments.accept_payment(scope, payment_3)
@@ -2477,8 +2470,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :pending
+          amount: "1000.00"
         })
 
       Ecto.Changeset.change(payment, %{})
@@ -2534,8 +2526,7 @@ defmodule Vivvo.ContractsTest do
         payment_fixture(tenant_scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1500.00",
-          status: :pending
+          amount: "1500.00"
         })
 
       Ecto.Changeset.change(payment, %{})

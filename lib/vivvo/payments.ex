@@ -322,16 +322,27 @@ defmodule Vivvo.Payments do
   @doc """
   List all payments for a specific contract with files preloaded.
 
+  ## Options
+    * `:type` - Filter by payment type (`:rent` or `:miscellaneous`)
+
   ## Examples
 
       iex> list_payments_for_contract(scope, contract_id)
       [%Payment{files: [...]}, ...]
 
+      iex> list_payments_for_contract(scope, contract_id, type: :rent)
+      [%Payment{type: :rent, files: [...]}, ...]
+
   """
-  def list_payments_for_contract(%Scope{} = scope, contract_id) do
+  def list_payments_for_contract(%Scope{} = scope, contract_id, opts \\ []) do
+    type_filter = Keyword.get(opts, :type)
+
     Payment
     |> where([p], p.contract_id == ^contract_id)
     |> where([p], p.user_id == ^scope.user.id)
+    |> then(fn query ->
+      if type_filter, do: where(query, [p], p.type == ^type_filter), else: query
+    end)
     |> order_by([p], desc: p.inserted_at)
     |> preload(:files)
     |> Repo.all()
@@ -356,6 +367,7 @@ defmodule Vivvo.Payments do
     |> where([p], p.contract_id == ^contract_id)
     |> where([p, c], c.user_id == ^scope.user.id)
     |> where([p], p.status == :accepted)
+    |> where([p], p.type == :rent)
     |> order_by([p], asc: p.payment_number, asc: p.inserted_at)
     |> Repo.all()
     |> Enum.group_by(& &1.payment_number)
@@ -422,6 +434,7 @@ defmodule Vivvo.Payments do
     |> where([p], p.user_id == ^scope.user.id)
     |> where([p], p.payment_number == ^payment_number)
     |> where([p], p.status == :accepted)
+    |> where([p], p.type == :rent)
     |> select([p], sum(p.amount))
     |> Repo.one() || @decimal_zero
   end
@@ -449,6 +462,7 @@ defmodule Vivvo.Payments do
       |> where([p, c], c.user_id == ^scope.user.id)
       |> where([p], p.payment_number in ^payment_numbers)
       |> where([p], p.status == :accepted)
+      |> where([p], p.type == :rent)
       |> select([p], sum(p.amount))
       |> Repo.one() || @decimal_zero
     end
@@ -469,6 +483,7 @@ defmodule Vivvo.Payments do
     |> where([p], p.user_id == ^scope.user.id)
     |> where([p], p.payment_number == ^payment_number)
     |> where([p], p.status == :pending)
+    |> where([p], p.type == :rent)
     |> select([p], sum(p.amount))
     |> Repo.one() || @decimal_zero
   end
@@ -657,6 +672,7 @@ defmodule Vivvo.Payments do
         join: c in assoc(p, :contract),
         where: c.user_id == ^scope.user.id,
         where: p.status == :accepted,
+        where: p.type == :rent,
         preload: [:contract]
       )
       |> Repo.all()

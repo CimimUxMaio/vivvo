@@ -1089,7 +1089,7 @@ defmodule Vivvo.Contracts do
       []
     else
       # Fetch all payments for the contract with files preloaded
-      contract_payments = Payments.list_payments_for_contract(scope, contract.id)
+      contract_payments = Payments.list_payments_for_contract(scope, contract.id, type: :rent)
       totals_by_month = calculate_totals_by_month(contract_payments)
 
       Enum.map(
@@ -1101,7 +1101,7 @@ defmodule Vivvo.Contracts do
 
   defp calculate_totals_by_month(contract_payments) do
     contract_payments
-    |> Enum.filter(&(&1.status == :accepted))
+    |> Enum.filter(&(&1.type == :rent and &1.status == :accepted))
     |> Enum.group_by(& &1.payment_number)
     |> Map.new(fn {num, payments} ->
       {num, Enum.reduce(payments, Decimal.new(0), &Decimal.add(&2, &1.amount))}
@@ -1136,7 +1136,7 @@ defmodule Vivvo.Contracts do
 
   defp get_month_payments(contract_payments, payment_num) do
     contract_payments
-    |> Enum.filter(&(&1.payment_number == payment_num))
+    |> Enum.filter(&(&1.type == :rent and &1.payment_number == payment_num))
     |> Enum.sort_by(& &1.inserted_at, :desc)
   end
 
