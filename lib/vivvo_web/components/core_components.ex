@@ -386,28 +386,41 @@ defmodule VivvoWeb.CoreComponents do
 
       <.page_header title="Properties" back_navigate={~p"/properties"}>
         <:subtitle>Manage your rental properties</:subtitle>
-        <:action>
-          <.button variant="primary" navigate={~p"/properties/new"}>
-            <.icon name="hero-plus" class="w-5 h-5 mr-2" /> New Property
-          </.button>
-        </:action>
+        <:action icon="hero-plus" label="New Property" navigate={~p"/properties/new"} />
+        <:action icon="hero-pencil-square" label="Edit" phx-click="edit" />
       </.page_header>
 
       <.page_header title="Edit Property" back_navigate={~p"/properties"}>
         <:subtitle>Update your property details</:subtitle>
       </.page_header>
   """
+  attr :id, :string, default: nil, doc: "optional DOM id for the component"
   attr :title, :string, required: true, doc: "the page title"
   attr :back_navigate, :any, default: nil, doc: "navigate path for back button (optional)"
   slot :subtitle, doc: "optional subtitle or description"
-  slot :action, doc: "action buttons displayed on the right side"
+
+  slot :action, doc: "action buttons displayed on the right side" do
+    attr :icon, :string, required: true, doc: "Heroicon name (e.g., 'hero-plus')"
+    attr :label, :string, required: true, doc: "Button label text"
+    attr :navigate, :string, doc: "Navigation path (optional)"
+    attr :"phx-click", :string, doc: "Click event name (optional)"
+    attr :rest, :list, doc: "Additional attributes for the action button"
+  end
 
   def page_header(assigns) do
+    # Validate that each action has at least one of navigate or phx-click
+    for action <- assigns.action do
+      unless action[:navigate] || action[:"phx-click"] do
+        raise ArgumentError,
+              "page_header :action slot requires either :navigate or :\"phx-click\" attribute, got: #{inspect(action)}"
+      end
+    end
+
     ~H"""
-    <div class="page-header-wrapper">
+    <div class="page-header-wrapper" id={@id}>
       <%!-- Desktop Header (sm and above) --%>
       <div
-        id="page-header-desktop"
+        id={if @id, do: "#{@id}-desktop", else: "page-header-desktop"}
         class="hidden sm:flex sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div class="flex items-center gap-4">
@@ -432,14 +445,24 @@ defmodule VivvoWeb.CoreComponents do
         <%= if @action != [] do %>
           <div class="flex items-center gap-3">
             <%= for action <- @action do %>
-              {render_slot(action)}
+              <.button
+                variant="primary"
+                navigate={action[:navigate]}
+                phx-click={action[:"phx-click"]}
+                {Keyword.new(action[:rest] || [])}
+              >
+                <.icon name={action.icon} class="w-5 h-5 mr-2" /> {action.label}
+              </.button>
             <% end %>
           </div>
         <% end %>
       </div>
 
       <%!-- Mobile Header (below sm) --%>
-      <div id="page-header-mobile" class="flex flex-col sm:hidden gap-3">
+      <div
+        id={if @id, do: "#{@id}-mobile", else: "page-header-mobile"}
+        class="flex flex-col sm:hidden gap-3"
+      >
         <%!-- Top row: Back button and title --%>
         <div class="flex items-center gap-3">
           <%= if @back_navigate do %>
@@ -460,16 +483,54 @@ defmodule VivvoWeb.CoreComponents do
             {render_slot(@subtitle)}
           </p>
         <% end %>
-
-        <%!-- Actions full-width on mobile --%>
-        <%= if @action != [] do %>
-          <div class="flex flex-col gap-2 pt-1">
-            <%= for action <- @action do %>
-              {render_slot(action)}
-            <% end %>
-          </div>
-        <% end %>
       </div>
+
+      <%!-- Mobile FAB Actions --%>
+      <%= if @action != [] do %>
+        <div class="fixed bottom-6 right-6 z-50 sm:hidden fab">
+          <div
+            tabindex="0"
+            role="button"
+            class="btn btn-circle btn-primary size-14 shadow-xl"
+            aria-label="Open actions"
+          >
+            <.icon name="hero-ellipsis-vertical" class="size-6" />
+          </div>
+
+          <div
+            role="button"
+            aria-label="Close actions"
+            class="fab-close btn btn-circle btn-primary size-14 shadow-xl"
+          >
+            <.icon name="hero-x-mark" class="size-6" />
+          </div>
+
+          <%!-- Action Buttons --%>
+          <%= for action <- @action do %>
+            <.link
+              :if={action[:navigate]}
+              navigate={action[:navigate]}
+              class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
+              title={action.label}
+              aria-label={action.label}
+              {Keyword.new(action[:rest] || [])}
+            >
+              <.icon name={action.icon} class="size-6" />
+            </.link>
+            <button
+              :if={action[:"phx-click"]}
+              type="button"
+              phx-click={action[:"phx-click"]}
+              class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
+              title={action.label}
+              aria-label={action.label}
+              {Keyword.new(action[:rest] || [])}
+            >
+              <.icon name={action.icon} class="size-6" />
+            </button>
+          <% end %>
+        </div>
+      <% end %>
     </div>
     """
   end

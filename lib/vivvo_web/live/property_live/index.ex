@@ -21,11 +21,7 @@ defmodule VivvoWeb.PropertyLive.Index do
         <%!-- Page Header --%>
         <.page_header title="Properties" back_navigate={~p"/"}>
           <:subtitle>Manage your rental properties and track their occupancy status.</:subtitle>
-          <:action>
-            <.button variant="primary" navigate={~p"/properties/new"}>
-              <.icon name="hero-plus" class="w-5 h-5 mr-2" /> New Property
-            </.button>
-          </:action>
+          <:action icon="hero-plus" label="New Property" navigate={~p"/properties/new"} />
         </.page_header>
 
         <%!-- Properties Table Container --%>
