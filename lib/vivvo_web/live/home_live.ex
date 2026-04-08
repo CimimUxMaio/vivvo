@@ -216,7 +216,7 @@ defmodule VivvoWeb.HomeLive do
   @impl true
   def handle_event(
         "show_misc_payment_modal",
-        %{"contract-id" => contract_id},
+        %{"contract_id" => contract_id},
         socket
       ) do
     scope = socket.assigns.current_scope
@@ -1421,7 +1421,12 @@ defmodule VivvoWeb.HomeLive do
 
         <%!-- Page Header with New Misc Payment Action --%>
         <.page_header title="My Rentals" back_navigate={nil}>
-          <:action icon="hero-plus" label="New Payment" phx-click="show_misc_payment_modal" />
+          <:action
+            icon="hero-plus"
+            label="New Payment"
+            phx-click="show_misc_payment_modal"
+            rest={["phx-value-contract_id": contract.id]}
+          />
         </.page_header>
 
         <%!-- Property Switcher for Multiple Contracts --%>
