@@ -470,9 +470,6 @@ defmodule VivvoWeb.HomeLive do
       <.page_header title="Dashboard" back_navigate={nil}>
         <:subtitle>
           Welcome back! Here's what's happening with your properties.
-          <span class="ml-2 text-sm text-base-content/50">
-            {@today |> Calendar.strftime("%B %d, %Y")}
-          </span>
         </:subtitle>
       </.page_header>
 
@@ -530,12 +527,12 @@ defmodule VivvoWeb.HomeLive do
       <%!-- Properties --%>
       <.link navigate={~p"/properties"} class="block">
         <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 cursor-pointer transition-colors duration-200">
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-primary/10 rounded-lg">
-              <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
+          <div class="flex items-center justify-center sm:justify-start gap-3">
+            <div class="p-2 bg-primary/10 rounded-lg flex items-center">
+              <.icon name="hero-building-office" class="size-8 text-primary" />
             </div>
             <div>
-              <p class="text-sm text-base-content/60">Properties</p>
+              <p class="hidden sm:block text-sm text-base-content/60">Properties</p>
               <p class="text-2xl font-bold">{@summary.total_properties}</p>
             </div>
           </div>
@@ -545,12 +542,12 @@ defmodule VivvoWeb.HomeLive do
       <%!-- Contracts --%>
       <.link navigate={~p"/properties"} class="block">
         <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 cursor-pointer transition-colors duration-200">
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-success/10 rounded-lg">
-              <.icon name="hero-document-text" class="w-5 h-5 text-success" />
+          <div class="flex items-center justify-center sm:justify-start gap-3">
+            <div class="p-2 bg-success/10 rounded-lg flex items-center">
+              <.icon name="hero-document-text" class="size-8 text-success" />
             </div>
             <div>
-              <p class="text-sm text-base-content/60">Contracts</p>
+              <p class="hidden sm:block text-sm text-base-content/60">Contracts</p>
               <p class="text-2xl font-bold">{@summary.total_contracts}</p>
             </div>
           </div>
@@ -558,8 +555,7 @@ defmodule VivvoWeb.HomeLive do
       </.link>
 
       <%!-- Pending --%>
-      <button
-        type="button"
+      <div
         class="cursor-pointer"
         phx-click={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
         phx-keydown={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
@@ -568,17 +564,17 @@ defmodule VivvoWeb.HomeLive do
         tabindex="0"
       >
         <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 transition-colors duration-200">
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-warning/10 rounded-lg">
-              <.icon name="hero-clock" class="w-5 h-5 text-warning" />
+          <div class="flex items-center justify-center sm:justify-start gap-3">
+            <div class="p-2 bg-warning/10 rounded-lg flex items-center">
+              <.icon name="hero-clock" class="size-8 text-warning" />
             </div>
             <div>
-              <p class="text-sm text-base-content/60">Pending</p>
+              <p class="hidden sm:block text-sm text-base-content/60">Pending</p>
               <p class="text-2xl font-bold">{@payment_counts.pending}</p>
             </div>
           </div>
         </div>
-      </button>
+      </div>
     </div>
     """
   end
@@ -746,12 +742,14 @@ defmodule VivvoWeb.HomeLive do
     ~H"""
     <div class="bg-base-100 rounded-2xl p-6 shadow-sm border border-base-200">
       <%!-- Header with total --%>
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-6 gap-3">
         <div class="flex items-center gap-2">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-primary" />
           <h2 class="text-lg font-semibold">Outstanding Balances</h2>
         </div>
-        <span class="text-2xl font-bold text-accent">{format_currency(@total_outstanding)}</span>
+        <span class="text-2xl font-bold text-accent self-center">
+          {format_currency(@total_outstanding)}
+        </span>
       </div>
 
       <%!-- Pie Chart --%>
@@ -996,7 +994,10 @@ defmodule VivvoWeb.HomeLive do
   # Payment Validation Queue Component
   defp payment_validation_queue(assigns) do
     ~H"""
-    <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 overflow-hidden">
+    <div
+      id="pending-payments"
+      class="bg-base-100 rounded-2xl shadow-sm border border-base-200 overflow-hidden"
+    >
       <div class="p-4 sm:p-6 border-b border-base-200">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
