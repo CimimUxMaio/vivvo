@@ -415,12 +415,6 @@ defmodule VivvoWeb.CoreComponents do
       end
     end
 
-    # Generate a unique id from the title if not provided
-    fab_id =
-      assigns.id || "fab-#{String.replace(String.downcase(assigns.title), ~r/[^a-z0-9]+/, "-")}"
-
-    assigns = assign(assigns, :fab_id, fab_id)
-
     ~H"""
     <div class="page-header-wrapper">
       <%!-- Desktop Header (sm and above) --%>
@@ -666,18 +660,6 @@ defmodule VivvoWeb.CoreComponents do
         {"transition-all ease-in duration-200", "opacity-100 translate-y-0 sm:scale-100",
          "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"}
     )
-  end
-
-  @doc """
-  Toggles the FAB (Floating Action Button) menu open/closed state.
-  """
-  def toggle_fab_menu(fab_id) do
-    %JS{}
-    |> JS.toggle(to: "##{fab_id}-menu")
-    |> JS.toggle(to: "##{fab_id}-open-icon")
-    |> JS.toggle(to: "##{fab_id}-close-icon")
-    |> JS.toggle_class("opacity-0 translate-y-4", to: "##{fab_id}-menu > *")
-    |> JS.toggle_class("opacity-100 translate-y-0", to: "##{fab_id}-menu > *")
   end
 
   @contract_status_config %{
