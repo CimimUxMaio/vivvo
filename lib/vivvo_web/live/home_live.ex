@@ -1023,7 +1023,7 @@ defmodule VivvoWeb.HomeLive do
           </p>
         </div>
       <% else %>
-        <div id="pending-payments" class="divide-y divide-base-200">
+        <div id="pending-payments-list" class="divide-y divide-base-200">
           <div :for={payment <- @pending_payments} id={"payment-#{payment.id}"}>
             <.pending_payment_card
               payment={payment}
