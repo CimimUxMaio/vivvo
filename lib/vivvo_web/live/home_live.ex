@@ -523,9 +523,14 @@ defmodule VivvoWeb.HomeLive do
       </.link>
 
       <%!-- Pending --%>
-      <div
-        phx-click={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
+      <button
+        type="button"
         class="cursor-pointer"
+        phx-click={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
+        phx-keydown={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
+        phx-key="enter"
+        role="link"
+        tabindex="0"
       >
         <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 transition-colors duration-200">
           <div class="flex items-center gap-3">
@@ -538,7 +543,7 @@ defmodule VivvoWeb.HomeLive do
             </div>
           </div>
         </div>
-      </div>
+      </button>
     </div>
     """
   end
