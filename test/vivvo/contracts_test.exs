@@ -1740,25 +1740,29 @@ defmodule Vivvo.ContractsTest do
       past_payments = Contracts.get_past_payment_numbers(contract, today)
       assert Enum.count(past_payments) >= 4, "Expected at least 4 past payments for assertions"
 
-      # Tenant creates accepted payments for multiple months
+      # Tenant creates payments and owner accepts them
       for payment_num <- 1..3 do
-        {:ok, _payment} =
+        {:ok, payment} =
           Vivvo.Payments.create_payment(tenant_scope, %{
             contract_id: contract.id,
             payment_number: payment_num,
-            amount: "500.00",
-            status: :accepted
+            amount: "500.00"
           })
+
+        # Owner accepts the payment
+        {:ok, _} = Vivvo.Payments.accept_payment(scope, payment)
 
         # Add a second payment for month 1 to test aggregation
         if payment_num == 1 do
-          {:ok, _payment2} =
+          {:ok, payment2} =
             Vivvo.Payments.create_payment(tenant_scope, %{
               contract_id: contract.id,
               payment_number: 1,
-              amount: "500.00",
-              status: :accepted
+              amount: "500.00"
             })
+
+          # Owner accepts the second payment too
+          {:ok, _} = Vivvo.Payments.accept_payment(scope, payment2)
         end
       end
 

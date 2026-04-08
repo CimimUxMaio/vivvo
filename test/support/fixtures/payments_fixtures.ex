@@ -22,7 +22,7 @@ defmodule Vivvo.PaymentsFixtures do
         amount: "120.5",
         notes: "some notes",
         payment_number: 42,
-        status: :pending
+        type: :rent
       })
 
     attrs =

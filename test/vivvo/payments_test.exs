@@ -60,14 +60,14 @@ defmodule Vivvo.PaymentsTest do
       payment = payment_fixture(scope)
 
       update_attrs = %{
-        status: :accepted,
         amount: "456.7",
         payment_number: 43,
         notes: "some updated notes"
       }
 
       assert {:ok, %Payment{} = payment} = Payments.update_payment(scope, payment, update_attrs)
-      assert payment.status == :accepted
+      # Status remains pending (the default)
+      assert payment.status == :pending
       assert payment.amount == Decimal.new("456.7")
       assert payment.payment_number == 43
       assert payment.notes == "some updated notes"
@@ -106,6 +106,117 @@ defmodule Vivvo.PaymentsTest do
       scope = user_scope_fixture()
       payment = payment_fixture(scope)
       assert %Ecto.Changeset{} = Payments.change_payment(scope, payment)
+    end
+
+    test "create_payment/2 with type :other and valid category creates a miscellaneous payment" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope, %{tenant_id: scope.user.id})
+
+      valid_attrs = %{
+        status: :pending,
+        amount: "250.00",
+        notes: "Security deposit",
+        contract_id: contract.id,
+        type: :other,
+        category: :deposit
+      }
+
+      assert {:ok, %Payment{} = payment} = Payments.create_payment(scope, valid_attrs)
+      assert payment.status == :pending
+      assert payment.amount == Decimal.new("250.00")
+      assert payment.notes == "Security deposit"
+      assert payment.type == :other
+      assert payment.category == :deposit
+      assert payment.payment_number == nil
+      assert payment.user_id == scope.user.id
+      assert payment.contract_id == contract.id
+    end
+
+    test "create_payment/2 with type :other and missing category returns error" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope, %{tenant_id: scope.user.id})
+
+      invalid_attrs = %{
+        status: :pending,
+        amount: "250.00",
+        notes: "Security deposit",
+        contract_id: contract.id,
+        type: :other
+      }
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Payments.create_payment(scope, invalid_attrs)
+
+      assert "can't be blank" in errors_on(changeset).category
+    end
+
+    test "create_payment/2 with type :rent ignores category and sets it to nil" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope, %{tenant_id: scope.user.id})
+
+      attrs = %{
+        status: :pending,
+        amount: "1200.00",
+        payment_number: 1,
+        notes: "Monthly rent",
+        contract_id: contract.id,
+        type: :rent,
+        category: :deposit
+      }
+
+      assert {:ok, %Payment{} = payment} = Payments.create_payment(scope, attrs)
+      assert payment.type == :rent
+      assert payment.category == nil
+      assert payment.payment_number == 1
+    end
+
+    test "miscellaneous payments are excluded from rent financial analytics" do
+      scope = user_scope_fixture()
+      contract = contract_fixture(scope, %{tenant_id: scope.user.id, rent: "1000.00"})
+
+      # Create an accepted rent payment
+      {:ok, rent_payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          amount: "500.00",
+          payment_number: 1,
+          type: :rent
+        })
+
+      # Accept the rent payment
+      {:ok, _} = Payments.accept_payment(scope, rent_payment)
+
+      # Create a miscellaneous (other) payment for same amount
+      {:ok, misc_payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          amount: "500.00",
+          type: :other,
+          category: :deposit
+        })
+
+      # Accept the misc payment
+      {:ok, _} = Payments.accept_payment(scope, misc_payment)
+
+      # total_accepted_for_month should only count the rent payment
+      assert Decimal.equal?(
+               Payments.total_accepted_for_month(scope, contract.id, 1),
+               Decimal.new("500.00")
+             )
+
+      # total_rent_collected should only count the rent payment
+      # (misc payments have no payment_number, so they won't be included in past periods)
+      assert Decimal.equal?(
+               Payments.total_rent_collected(scope, contract),
+               Decimal.new("500.00")
+             )
+
+      # received_income_by_month should only include rent payments
+      income_by_month = Payments.received_income_by_month(scope)
+      assert map_size(income_by_month) == 1
+
+      {_month, total} = Enum.at(income_by_month, 0)
+      assert Decimal.equal?(total, Decimal.new("500.00"))
     end
   end
 
@@ -209,27 +320,29 @@ defmodule Vivvo.PaymentsTest do
       scope = user_scope_fixture()
       contract = contract_fixture(scope, %{tenant_id: scope.user.id, rent: "1000.00"})
 
-      payment_fixture(scope, %{
-        contract_id: contract.id,
-        payment_number: 1,
-        amount: "500.00",
-        status: :accepted
-      })
+      {:ok, accepted} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "500.00"
+        })
+
+      {:ok, _} = Payments.accept_payment(scope, accepted)
 
       payment_fixture(scope, %{
         contract_id: contract.id,
         payment_number: 1,
-        amount: "300.00",
-        status: :pending
+        amount: "300.00"
       })
 
-      payment_fixture(scope, %{
-        contract_id: contract.id,
-        payment_number: 1,
-        amount: "100.00",
-        status: :rejected,
-        rejection_reason: "Invalid amount"
-      })
+      {:ok, rejected} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "100.00"
+        })
+
+      {:ok, _} = Payments.reject_payment(scope, rejected, "Invalid amount")
 
       assert Decimal.equal?(
                Payments.total_accepted_for_month(scope, contract.id, 1),
@@ -256,12 +369,14 @@ defmodule Vivvo.PaymentsTest do
           rent: "1000.00"
         })
 
-      payment_fixture(scope, %{
-        contract_id: contract.id,
-        payment_number: 1,
-        amount: "1000.00",
-        status: :accepted
-      })
+      {:ok, payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "1000.00"
+        })
+
+      {:ok, _} = Payments.accept_payment(scope, payment)
 
       assert Payments.month_fully_paid?(scope, contract, 1)
     end
@@ -275,12 +390,14 @@ defmodule Vivvo.PaymentsTest do
           rent: "1000.00"
         })
 
-      payment_fixture(scope, %{
-        contract_id: contract.id,
-        payment_number: 1,
-        amount: "500.00",
-        status: :accepted
-      })
+      {:ok, payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "500.00"
+        })
+
+      {:ok, _} = Payments.accept_payment(scope, payment)
 
       refute Payments.month_fully_paid?(scope, contract, 1)
     end
@@ -294,12 +411,14 @@ defmodule Vivvo.PaymentsTest do
           rent: "1000.00"
         })
 
-      payment_fixture(scope, %{
-        contract_id: contract.id,
-        payment_number: 1,
-        amount: "1000.00",
-        status: :accepted
-      })
+      {:ok, payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "1000.00"
+        })
+
+      {:ok, _} = Payments.accept_payment(scope, payment)
 
       assert Payments.get_month_status(scope, contract, 1) == :paid
     end
@@ -313,12 +432,14 @@ defmodule Vivvo.PaymentsTest do
           rent: "1000.00"
         })
 
-      payment_fixture(scope, %{
-        contract_id: contract.id,
-        payment_number: 1,
-        amount: "500.00",
-        status: :accepted
-      })
+      {:ok, payment} =
+        Payments.create_payment(scope, %{
+          contract_id: contract.id,
+          payment_number: 1,
+          amount: "500.00"
+        })
+
+      {:ok, _} = Payments.accept_payment(scope, payment)
 
       assert Payments.get_month_status(scope, contract, 1) == :partial
     end
@@ -462,32 +583,35 @@ defmodule Vivvo.PaymentsTest do
           update_factor: Decimal.new("0.0")
         )
 
-      # January payment (on time)
-      {:ok, _jan_payment} =
+      # January payment (on time) - create and accept
+      {:ok, jan_payment} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :accepted
+          amount: "1000.00"
         })
 
-      # February payment (late, submitted in March)
-      {:ok, _feb_payment} =
+      {:ok, _} = Payments.accept_payment(scope, jan_payment)
+
+      # February payment (late, submitted in March) - create and accept
+      {:ok, feb_payment} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "800.00",
-          status: :accepted
+          amount: "800.00"
         })
 
-      # Another partial payment for February
-      {:ok, _feb_payment2} =
+      {:ok, _} = Payments.accept_payment(scope, feb_payment)
+
+      # Another partial payment for February - create and accept
+      {:ok, feb_payment2} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "200.00",
-          status: :accepted
+          amount: "200.00"
         })
+
+      {:ok, _} = Payments.accept_payment(scope, feb_payment2)
 
       # Check that January has correct income
       january_income =
@@ -522,14 +646,15 @@ defmodule Vivvo.PaymentsTest do
           update_factor: Decimal.new("0.0")
         )
 
-      # Partial payment for February (payment_number 1)
-      {:ok, _payment} =
+      # Partial payment for February (payment_number 1) - create and accept
+      {:ok, payment} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "700.00",
-          status: :accepted
+          amount: "700.00"
         })
+
+      {:ok, _} = Payments.accept_payment(scope, payment)
 
       # Expected: 1000, Received: 700, Rate: 70%
       rate =
@@ -558,14 +683,15 @@ defmodule Vivvo.PaymentsTest do
           update_factor: Decimal.new("0.0")
         )
 
-      # Partial payment for February
-      {:ok, _payment} =
+      # Partial payment for February - create and accept
+      {:ok, payment} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "400.00",
-          status: :accepted
+          amount: "400.00"
         })
+
+      {:ok, _} = Payments.accept_payment(scope, payment)
 
       # Outstanding should be 1000 - 400 = 600
       outstanding =
@@ -594,30 +720,33 @@ defmodule Vivvo.PaymentsTest do
           update_factor: Decimal.new("0.0")
         )
 
-      # Create payments for different months
-      {:ok, _} =
+      # Create and accept payments for different months
+      {:ok, payment1} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 1,
-          amount: "1000.00",
-          status: :accepted
+          amount: "1000.00"
         })
 
-      {:ok, _} =
+      {:ok, _} = Payments.accept_payment(scope, payment1)
+
+      {:ok, payment2} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "500.00",
-          status: :accepted
+          amount: "500.00"
         })
 
-      {:ok, _} =
+      {:ok, _} = Payments.accept_payment(scope, payment2)
+
+      {:ok, payment3} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           payment_number: 2,
-          amount: "500.00",
-          status: :accepted
+          amount: "500.00"
         })
+
+      {:ok, _} = Payments.accept_payment(scope, payment3)
 
       income_by_month = Payments.received_income_by_month(scope)
 
