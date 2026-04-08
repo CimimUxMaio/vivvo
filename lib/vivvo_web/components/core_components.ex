@@ -404,6 +404,7 @@ defmodule VivvoWeb.CoreComponents do
     attr :label, :string, required: true, doc: "Button label text"
     attr :navigate, :string, doc: "Navigation path (optional)"
     attr :"phx-click", :string, doc: "Click event name (optional)"
+    attr :rest, :list, doc: "Additional attributes for the action button"
   end
 
   def page_header(assigns) do
@@ -416,10 +417,10 @@ defmodule VivvoWeb.CoreComponents do
     end
 
     ~H"""
-    <div class="page-header-wrapper">
+    <div class="page-header-wrapper" id={@id}>
       <%!-- Desktop Header (sm and above) --%>
       <div
-        id="page-header-desktop"
+        id={if @id, do: "#{@id}-desktop", else: "page-header-desktop"}
         class="hidden sm:flex sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div class="flex items-center gap-4">
@@ -448,6 +449,7 @@ defmodule VivvoWeb.CoreComponents do
                 variant="primary"
                 navigate={action[:navigate]}
                 phx-click={action[:"phx-click"]}
+                {Keyword.new(action[:rest] || [])}
               >
                 <.icon name={action.icon} class="w-5 h-5 mr-2" /> {action.label}
               </.button>
@@ -457,7 +459,10 @@ defmodule VivvoWeb.CoreComponents do
       </div>
 
       <%!-- Mobile Header (below sm) --%>
-      <div id="page-header-mobile" class="flex flex-col sm:hidden gap-3">
+      <div
+        id={if @id, do: "#{@id}-mobile", else: "page-header-mobile"}
+        class="flex flex-col sm:hidden gap-3"
+      >
         <%!-- Top row: Back button and title --%>
         <div class="flex items-center gap-3">
           <%= if @back_navigate do %>
@@ -483,16 +488,20 @@ defmodule VivvoWeb.CoreComponents do
       <%!-- Mobile FAB Actions --%>
       <%= if @action != [] do %>
         <div class="fixed bottom-6 right-6 z-50 sm:hidden fab">
-          <%!-- Toggle button (64x64) --%>
           <div
             tabindex="0"
             role="button"
             class="btn btn-circle btn-primary size-14 shadow-xl"
+            aria-label="Open actions"
           >
             <.icon name="hero-ellipsis-vertical" class="size-6" />
           </div>
 
-          <div class="fab-close btn btn-circle btn-primary size-14 shadow-xl">
+          <div
+            role="button"
+            aria-label="Close actions"
+            class="fab-close btn btn-circle btn-primary size-14 shadow-xl"
+          >
             <.icon name="hero-x-mark" class="size-6" />
           </div>
 
@@ -503,6 +512,8 @@ defmodule VivvoWeb.CoreComponents do
               navigate={action[:navigate]}
               class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
               title={action.label}
+              aria-label={action.label}
+              {Keyword.new(action[:rest] || [])}
             >
               <.icon name={action.icon} class="size-6" />
             </.link>
@@ -512,6 +523,8 @@ defmodule VivvoWeb.CoreComponents do
               phx-click={action[:"phx-click"]}
               class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
               title={action.label}
+              aria-label={action.label}
+              {Keyword.new(action[:rest] || [])}
             >
               <.icon name={action.icon} class="size-6" />
             </button>
