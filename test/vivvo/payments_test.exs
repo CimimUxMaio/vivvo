@@ -108,7 +108,7 @@ defmodule Vivvo.PaymentsTest do
       assert %Ecto.Changeset{} = Payments.change_payment(scope, payment)
     end
 
-    test "create_payment/2 with type :other and valid category creates a miscellaneous payment" do
+    test "create_payment/2 with type :miscellaneous and valid category creates a miscellaneous payment" do
       scope = user_scope_fixture()
       contract = contract_fixture(scope, %{tenant_id: scope.user.id})
 
@@ -117,7 +117,7 @@ defmodule Vivvo.PaymentsTest do
         amount: "250.00",
         notes: "Security deposit",
         contract_id: contract.id,
-        type: :other,
+        type: :miscellaneous,
         category: :deposit
       }
 
@@ -125,14 +125,14 @@ defmodule Vivvo.PaymentsTest do
       assert payment.status == :pending
       assert payment.amount == Decimal.new("250.00")
       assert payment.notes == "Security deposit"
-      assert payment.type == :other
+      assert payment.type == :miscellaneous
       assert payment.category == :deposit
       assert payment.payment_number == nil
       assert payment.user_id == scope.user.id
       assert payment.contract_id == contract.id
     end
 
-    test "create_payment/2 with type :other and missing category returns error" do
+    test "create_payment/2 with type :miscellaneous and missing category returns error" do
       scope = user_scope_fixture()
       contract = contract_fixture(scope, %{tenant_id: scope.user.id})
 
@@ -141,7 +141,7 @@ defmodule Vivvo.PaymentsTest do
         amount: "250.00",
         notes: "Security deposit",
         contract_id: contract.id,
-        type: :other
+        type: :miscellaneous
       }
 
       assert {:error, %Ecto.Changeset{} = changeset} =
@@ -186,12 +186,12 @@ defmodule Vivvo.PaymentsTest do
       # Accept the rent payment
       {:ok, _} = Payments.accept_payment(scope, rent_payment)
 
-      # Create a miscellaneous (other) payment for same amount
+      # Create a miscellaneous payment for same amount
       {:ok, misc_payment} =
         Payments.create_payment(scope, %{
           contract_id: contract.id,
           amount: "500.00",
-          type: :other,
+          type: :miscellaneous,
           category: :deposit
         })
 

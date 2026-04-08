@@ -323,7 +323,7 @@ defmodule Vivvo.Payments do
   List all payments for a specific contract with files preloaded.
 
   ## Options
-    * `:type` - Filter by payment type (`:rent` or `:other`)
+    * `:type` - Filter by payment type (`:rent` or `:miscellaneous`)
 
   ## Examples
 

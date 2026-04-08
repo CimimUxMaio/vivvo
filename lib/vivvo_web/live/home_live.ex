@@ -234,7 +234,7 @@ defmodule VivvoWeb.HomeLive do
 
     if contract do
       # Miscellaneous payment - no payment_number needed
-      initial_attrs = %{"amount" => "", "type" => :other}
+      initial_attrs = %{"amount" => "", "type" => :miscellaneous}
 
       changeset =
         Payments.change_payment(
@@ -245,7 +245,7 @@ defmodule VivvoWeb.HomeLive do
 
       {:noreply,
        socket
-       |> assign(:submitting_payment, {contract, nil, :other})
+       |> assign(:submitting_payment, {contract, nil, :miscellaneous})
        |> assign(:payment_form, to_form(changeset))
        |> assign(:payment_summary, nil)}
     else

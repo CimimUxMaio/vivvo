@@ -4,7 +4,7 @@ defmodule Vivvo.Payments.Payment do
 
   Supports two types:
   - `:rent` — periodic rental payments tied to a contract payment number
-  - `:other` — miscellaneous payments (deposits, maintenance, services, etc.)
+  - `:miscellaneous` — miscellaneous payments (deposits, maintenance, services, etc.)
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -19,7 +19,7 @@ defmodule Vivvo.Payments.Payment do
     field :notes, :string
     field :status, Ecto.Enum, values: [:pending, :accepted, :rejected], default: :pending
     field :rejection_reason, :string
-    field :type, Ecto.Enum, values: [:rent, :other], default: :rent
+    field :type, Ecto.Enum, values: [:rent, :miscellaneous], default: :rent
     field :category, Ecto.Enum, values: [:services, :deposit, :maintenance, :other]
 
     belongs_to :contract, Contract
@@ -53,7 +53,7 @@ defmodule Vivvo.Payments.Payment do
 
   # Conditionally validates payment_number based on type
   # - If type is :rent, payment_number is required and must be > 0
-  # - If type is :other, payment_number is set to nil
+  # - If type is :miscellaneous, payment_number is set to nil
   defp maybe_validate_payment_number(changeset) do
     type = get_field(changeset, :type)
 
@@ -69,7 +69,7 @@ defmodule Vivvo.Payments.Payment do
 
   # Conditionally validates category based on type
   # - If type is :rent, category is set to nil
-  # - If type is :other, category is required (Ecto.Enum validates valid values)
+  # - If type is :miscellaneous, category is required (Ecto.Enum validates valid values)
   defp maybe_validate_category(changeset) do
     type = get_field(changeset, :type)
 
