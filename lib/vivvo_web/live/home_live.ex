@@ -37,12 +37,7 @@ defmodule VivvoWeb.HomeLive do
        |> assign(:expanded_payment_items, MapSet.new())
        |> assign(:submitting_payment, nil)
        |> assign(:payment_form, nil)
-       |> assign(:payment_summary, %{
-         rent: nil,
-         accepted_total: nil,
-         pending_total: nil,
-         remaining: nil
-       })
+       |> assign(:payment_summary, nil)
        |> allow_upload(:files,
          accept: Enum.map(@file_config[:allowed_extensions], &".#{&1}"),
          max_entries: @file_config[:max_files_per_payment],
@@ -208,7 +203,7 @@ defmodule VivvoWeb.HomeLive do
 
       # Pre-populate with minimum of rent or remaining allowance
       initial_amount = Decimal.min(summary.rent, summary.remaining)
-      initial_attrs = %{"amount" => initial_amount}
+      initial_attrs = %{"amount" => initial_amount, "type" => :rent}
 
       changeset =
         Payments.change_payment(
@@ -220,9 +215,39 @@ defmodule VivvoWeb.HomeLive do
 
       {:noreply,
        socket
-       |> assign(:submitting_payment, {contract, month_num})
+       |> assign(:submitting_payment, {contract, month_num, :rent})
        |> assign(:payment_form, to_form(changeset))
        |> assign(:payment_summary, summary)}
+    else
+      {:noreply, put_flash(socket, :error, "Contract not found")}
+    end
+  end
+
+  @impl true
+  def handle_event(
+        "show_misc_payment_modal",
+        %{"contract-id" => contract_id},
+        socket
+      ) do
+    scope = socket.assigns.current_scope
+    contract = Contracts.get_contract_for_tenant(scope, contract_id)
+
+    if contract do
+      # Miscellaneous payment - no payment_number needed
+      initial_attrs = %{"amount" => "", "type" => :other}
+
+      changeset =
+        Payments.change_payment(
+          scope,
+          %Vivvo.Payments.Payment{},
+          initial_attrs
+        )
+
+      {:noreply,
+       socket
+       |> assign(:submitting_payment, {contract, nil, :other})
+       |> assign(:payment_form, to_form(changeset))
+       |> assign(:payment_summary, nil)}
     else
       {:noreply, put_flash(socket, :error, "Contract not found")}
     end
@@ -248,23 +273,26 @@ defmodule VivvoWeb.HomeLive do
   @impl true
   def handle_event("validate_payment", %{"payment" => params}, socket) do
     scope = socket.assigns.current_scope
-    {contract, month} = socket.assigns.submitting_payment
+    {_contract, _month, payment_type} = socket.assigns.submitting_payment
 
-    summary = calculate_payment_summary(contract, month)
+    # Only validate with remaining allowance for rent payments
+    opts =
+      if payment_type == :rent,
+        do: [remaining_allowance: socket.assigns.payment_summary.remaining],
+        else: []
 
     changeset =
       Payments.change_payment(
         scope,
         %Vivvo.Payments.Payment{},
         params,
-        remaining_allowance: summary.remaining
+        opts
       )
       |> Map.put(:action, :validate)
 
     {:noreply,
      socket
-     |> assign(payment_form: to_form(changeset))
-     |> assign(:payment_summary, summary)}
+     |> assign(payment_form: to_form(changeset))}
   end
 
   @impl true
@@ -275,22 +303,35 @@ defmodule VivvoWeb.HomeLive do
   @impl true
   def handle_event("submit_payment", %{"payment" => params}, socket) do
     scope = socket.assigns.current_scope
-    {contract, month} = socket.assigns.submitting_payment
+    {contract, month, payment_type} = socket.assigns.submitting_payment
 
-    summary = calculate_payment_summary(contract, month)
-
+    # Build attrs based on payment type
     attrs =
       params
       |> Map.put("contract_id", contract.id)
-      |> Map.put("payment_number", month)
+      |> then(fn a ->
+        # Only add payment_number for rent payments
+        if payment_type == :rent do
+          Map.put(a, "payment_number", month)
+        else
+          a
+        end
+      end)
+
+    # Only validate remaining allowance for rent payments
+    opts =
+      if payment_type == :rent do
+        summary = calculate_payment_summary(contract, month)
+        [remaining_allowance: summary.remaining]
+      else
+        []
+      end
 
     # Collect uploaded files
     uploaded_files =
       consume_uploaded_entries(socket, :files, &process_upload_entry/2)
 
-    case Payments.create_payment(scope, attrs, uploaded_files,
-           remaining_allowance: summary.remaining
-         ) do
+    case Payments.create_payment(scope, attrs, uploaded_files, opts) do
       {:ok, _payment} ->
         clear_upload_files(uploaded_files)
 
@@ -300,6 +341,11 @@ defmodule VivvoWeb.HomeLive do
           Enum.find(contracts, &(to_string(&1.id) == to_string(contract.id))) ||
             List.first(contracts)
 
+        success_message =
+          if payment_type == :rent,
+            do: "Payment submitted successfully!",
+            else: "Miscellaneous payment submitted successfully!"
+
         {:noreply,
          socket
          |> assign(:submitting_payment, nil)
@@ -307,7 +353,7 @@ defmodule VivvoWeb.HomeLive do
          |> assign(:payment_summary, nil)
          |> assign(:contracts, contracts)
          |> assign(:selected_contract, selected_contract)
-         |> put_flash(:info, "Payment submitted successfully!")}
+         |> put_flash(:info, success_message)}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, payment_form: to_form(changeset))}
@@ -435,21 +481,14 @@ defmodule VivvoWeb.HomeLive do
     ~H"""
     <div class="space-y-6 sm:space-y-8">
       <%!-- Page Header --%>
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-base-content">
-            Dashboard
-          </h1>
-          <p class="mt-1 text-sm text-base-content/70">
-            Welcome back! Here's what's happening with your properties.
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-base-content/60">
+      <.page_header title="Dashboard" back_navigate={nil}>
+        <:subtitle>
+          Welcome back! Here's what's happening with your properties.
+          <span class="ml-2 text-sm text-base-content/50">
             {@today |> Calendar.strftime("%B %d, %Y")}
           </span>
-        </div>
-      </div>
+        </:subtitle>
+      </.page_header>
 
       <%!-- Summary Stats Row --%>
       <.summary_stats summary={@dashboard_summary} payment_counts={@payment_counts} />
@@ -967,7 +1006,7 @@ defmodule VivvoWeb.HomeLive do
           </div>
           <%= if not @pending_payments_empty? do %>
             <span class="px-2.5 py-1 bg-warning/10 text-warning rounded-full text-xs sm:text-sm font-medium">
-              pending
+              Pending
             </span>
           <% end %>
         </div>
@@ -1006,270 +1045,365 @@ defmodule VivvoWeb.HomeLive do
 
   defp pending_payment_row(assigns) do
     contract = assigns.payment.contract
-    tenant = contract.tenant
-    property = contract.property
+    is_misc_payment = assigns.payment.type != :rent
 
-    due_date = Contracts.calculate_due_date(contract, assigns.payment.payment_number)
-    expected_amount = Contracts.current_rent_value(contract, due_date)
-    paid_amount = assigns.payment.amount
+    # Only calculate expected amounts for rent payments
+    {_due_date, expected_amount, payment_status} =
+      if is_misc_payment do
+        {nil, nil, :misc}
+      else
+        due_date = Contracts.calculate_due_date(contract, assigns.payment.payment_number)
+        expected_amount = Contracts.current_rent_value(contract, due_date)
+        paid_amount = assigns.payment.amount
 
-    payment_status =
-      cond do
-        Decimal.eq?(paid_amount, expected_amount) -> :correct
-        Decimal.gt?(paid_amount, expected_amount) -> :overpaid
-        true -> :underpaid
+        status =
+          cond do
+            Decimal.eq?(paid_amount, expected_amount) -> :correct
+            Decimal.gt?(paid_amount, expected_amount) -> :overpaid
+            true -> :underpaid
+          end
+
+        {due_date, expected_amount, status}
       end
 
-    # Expansion logic
     is_expanded = MapSet.member?(assigns.expanded_pending_payments, assigns.payment.id)
+
+    assigns =
+      assign(assigns,
+        is_misc_payment: is_misc_payment,
+        expected_amount: expected_amount,
+        payment_status: payment_status,
+        is_expanded: is_expanded
+      )
+
+    ~H"""
+    <div class="group">
+      <.pending_payment_summary {assigns} />
+      <.pending_payment_details payment={@payment} is_expanded={@is_expanded} />
+    </div>
+    """
+  end
+
+  # Clickable header/summary section for pending payment row
+  attr :payment, :map, required: true
+  attr :is_misc_payment, :boolean, required: true
+  attr :expected_amount, :any, required: true
+  attr :payment_status, :atom, required: true
+  attr :is_expanded, :boolean, required: true
+
+  defp pending_payment_summary(assigns) do
+    has_details =
+      (assigns.payment.notes && assigns.payment.notes != "") ||
+        (assigns.payment.files && assigns.payment.files != [])
+
+    assigns = assign(assigns, has_details: has_details)
+
+    ~H"""
+    <div
+      phx-click="toggle_pending_payment"
+      phx-value-payment_id={@payment.id}
+      class={[
+        "px-4 py-4 hover:bg-base-200/30 transition-colors",
+        @has_details && "cursor-pointer",
+        @is_expanded && "bg-base-200/20"
+      ]}
+    >
+      <%!-- Mobile Layout (stacked) --%>
+      <.pending_payment_mobile_summary {assigns} />
+
+      <%!-- Desktop/Tablet Layout (9-column grid) --%>
+      <.pending_payment_desktop_summary {assigns} />
+    </div>
+    """
+  end
+
+  # Mobile summary layout for pending payment row
+  attr :payment, :map, required: true
+  attr :is_misc_payment, :boolean, required: true
+  attr :expected_amount, :any, required: true
+  attr :payment_status, :atom, required: true
+  attr :is_expanded, :boolean, required: true
+  attr :has_details, :boolean, required: true
+
+  defp pending_payment_mobile_summary(assigns) do
+    tenant = assigns.payment.contract.tenant
+    property = assigns.payment.contract.property
+
+    assigns =
+      assigns
+      |> assign(:tenant, tenant)
+      |> assign(:property, property)
+
+    ~H"""
+    <div class="flex flex-col sm:hidden gap-3">
+      <%!-- Tenant & Property + Amount --%>
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1">
+          <p class="font-medium text-sm truncate">
+            {@tenant.first_name} {@tenant.last_name}
+          </p>
+          <p class="text-xs text-base-content/60 truncate">
+            {@property.name}
+          </p>
+        </div>
+        <div class="text-right">
+          <p class={[
+            "text-base font-bold",
+            @payment_status == :correct && "text-success",
+            @payment_status == :underpaid && "text-warning",
+            @payment_status == :overpaid && "text-info"
+          ]}>
+            {format_currency(@payment.amount)}
+          </p>
+        </div>
+      </div>
+
+      <%!-- Period & Status --%>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3 text-xs text-base-content/70">
+          <%= if @is_misc_payment do %>
+            <span class="inline-flex items-center gap-1">
+              <.icon name="hero-wallet" class="w-3.5 h-3.5" /> {format_category(@payment.category)}
+            </span>
+          <% else %>
+            <span class="inline-flex items-center gap-1">
+              <.icon name="hero-calendar" class="w-3.5 h-3.5" /> Period {@payment.payment_number}
+            </span>
+          <% end %>
+          <span>{@payment.inserted_at |> Calendar.strftime("%b %d")}</span>
+        </div>
+        <%!-- Payment status indicator --%>
+        <%= case @payment_status do %>
+          <% :correct -> %>
+            <span class="text-xs text-success font-medium">Matches</span>
+          <% :underpaid -> %>
+            <span class="text-xs text-warning font-medium">
+              -{format_currency(Decimal.sub(@expected_amount, @payment.amount))}
+            </span>
+          <% :overpaid -> %>
+            <span class="text-xs text-info font-medium">
+              +{format_currency(Decimal.sub(@payment.amount, @expected_amount))}
+            </span>
+          <% :misc -> %>
+            <%!-- No status indicator for miscellaneous payments --%>
+        <% end %>
+      </div>
+
+      <%!-- Actions + Expansion indicator --%>
+      <div class="flex items-center gap-2 mt-1">
+        <div phx-click-stop class="flex-1 flex items-center gap-2">
+          <.button
+            phx-click="accept_payment"
+            phx-value-id={@payment.id}
+            class="btn-success btn-sm flex-1"
+          >
+            <.icon name="hero-check" class="w-4 h-4" />
+          </.button>
+          <.button
+            phx-click="show_reject_modal"
+            phx-value-payment-id={@payment.id}
+            class="btn-error btn-sm flex-1"
+          >
+            <.icon name="hero-x-mark" class="w-4 h-4" />
+          </.button>
+        </div>
+        <%!-- Mobile expansion indicator --%>
+        <%= if @has_details do %>
+          <div class={[
+            "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200",
+            @is_expanded && "bg-primary/10 rotate-180",
+            !@is_expanded && "bg-base-200"
+          ]}>
+            <.icon
+              name="hero-chevron-down"
+              class={[
+                "w-5 h-5 transition-colors",
+                @is_expanded && "text-primary",
+                !@is_expanded && "text-base-content/50"
+              ]}
+            />
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  # Desktop/Tablet summary layout for pending payment row (9-column grid)
+  attr :payment, :map, required: true
+  attr :is_misc_payment, :boolean, required: true
+  attr :expected_amount, :any, required: true
+  attr :payment_status, :atom, required: true
+  attr :is_expanded, :boolean, required: true
+  attr :has_details, :boolean, required: true
+
+  defp pending_payment_desktop_summary(assigns) do
+    tenant = assigns.payment.contract.tenant
+    property = assigns.payment.contract.property
+    assigns = assign(assigns, tenant: tenant, property: property)
+
+    ~H"""
+    <div class="hidden sm:grid sm:grid-cols-9 sm:items-center sm:gap-4">
+      <%!-- Tenant Column (col-span-2) --%>
+      <div class="col-span-2 flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+          <span class="text-xs font-bold text-primary">
+            {String.first(@tenant.first_name)}{String.first(@tenant.last_name)}
+          </span>
+        </div>
+        <div class="min-w-0">
+          <p class="font-medium text-sm truncate">
+            {@tenant.first_name} {@tenant.last_name}
+          </p>
+          <p class="text-xs text-base-content/60 truncate">
+            {@property.name}
+          </p>
+        </div>
+      </div>
+
+      <%!-- Period Column (col-span-1) --%>
+      <div class="col-span-1 text-sm">
+        <%= if @is_misc_payment do %>
+          <p class="font-medium">{format_category(@payment.category)}</p>
+        <% else %>
+          <p class="font-medium">Period {@payment.payment_number}</p>
+        <% end %>
+        <p class="text-xs text-base-content/60">
+          {@payment.inserted_at |> Calendar.strftime("%b %d, %Y")}
+        </p>
+      </div>
+
+      <%!-- Amount Column (col-span-2) --%>
+      <div class="col-span-2">
+        <p class={[
+          "text-base font-bold",
+          @payment_status == :correct && "text-success",
+          @payment_status == :underpaid && "text-warning",
+          @payment_status == :overpaid && "text-info"
+        ]}>
+          {format_currency(@payment.amount)}
+        </p>
+        <p class="text-xs text-base-content/60">
+          <%= case @payment_status do %>
+            <% :correct -> %>
+              <span class="text-success">Matches expected</span>
+            <% :underpaid -> %>
+              <span class="text-warning">
+                Under by {format_currency(Decimal.sub(@expected_amount, @payment.amount))}
+              </span>
+            <% :overpaid -> %>
+              <span class="text-info">
+                Over by {format_currency(Decimal.sub(@payment.amount, @expected_amount))}
+              </span>
+            <% :misc -> %>
+              <span class="text-base-content/50">No expected amount</span>
+          <% end %>
+        </p>
+      </div>
+
+      <%!-- Expected Amount Column (col-span-1) --%>
+      <div class="col-span-1 text-sm">
+        <%= if @is_misc_payment do %>
+          <p class="font-medium text-base-content/50">-</p>
+          <p class="text-xs text-base-content/60">N/A</p>
+        <% else %>
+          <p class="font-medium">{format_currency(@expected_amount)}</p>
+          <p class="text-xs text-base-content/60">Expected</p>
+        <% end %>
+      </div>
+
+      <%!-- Actions Column (col-span-2) with phx-click-stop --%>
+      <div phx-click-stop class="col-span-2 flex items-center gap-2 justify-center">
+        <.button
+          phx-click="accept_payment"
+          phx-value-id={@payment.id}
+          class="btn-success btn-sm"
+        >
+          <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept
+        </.button>
+        <.button
+          phx-click="show_reject_modal"
+          phx-value-payment-id={@payment.id}
+          class="btn-error btn-sm"
+        >
+          <.icon name="hero-x-mark" class="w-4 h-4 mr-1" /> Reject
+        </.button>
+      </div>
+
+      <%!-- Expansion Toggle (col-span-1) --%>
+      <div class="col-span-1 flex items-center justify-end">
+        <%= if @has_details do %>
+          <div class={[
+            "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200",
+            @is_expanded && "bg-primary/10 rotate-180",
+            !@is_expanded && "bg-base-200 group-hover:bg-base-300"
+          ]}>
+            <.icon
+              name="hero-chevron-down"
+              class={[
+                "w-5 h-5 transition-colors",
+                @is_expanded && "text-primary",
+                !@is_expanded && "text-base-content/50"
+              ]}
+            />
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  # Expandable details section for pending payment row (notes and files)
+  attr :payment, :map, required: true
+  attr :is_expanded, :boolean, required: true
+
+  defp pending_payment_details(assigns) do
     has_notes = assigns.payment.notes && assigns.payment.notes != ""
     has_files = assigns.payment.files && assigns.payment.files != []
     has_details = has_notes || has_files
 
     assigns =
       assign(assigns,
-        tenant: tenant,
-        property: property,
-        expected_amount: expected_amount,
-        payment_status: payment_status,
-        is_expanded: is_expanded,
-        has_details: has_details,
         has_notes: has_notes,
-        has_files: has_files
+        has_files: has_files,
+        has_details: has_details
       )
 
     ~H"""
-    <div class="group">
-      <%!-- Always Visible: Clickable Header Row --%>
-      <div
-        phx-click="toggle_pending_payment"
-        phx-value-payment_id={@payment.id}
-        class={[
-          "px-4 py-4 hover:bg-base-200/30 transition-colors",
-          @has_details && "cursor-pointer",
-          @is_expanded && "bg-base-200/20"
-        ]}
-      >
-        <%!-- Mobile Layout (stacked) --%>
-        <div class="flex flex-col sm:hidden gap-3">
-          <%!-- Tenant & Property + Amount --%>
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <p class="font-medium text-sm truncate">
-                {@tenant.first_name} {@tenant.last_name}
-              </p>
-              <p class="text-xs text-base-content/60 truncate">
-                {@property.name}
+    <%= if @has_details do %>
+      <div class={[
+        "overflow-hidden transition-all duration-300 ease-in-out",
+        "border-t border-base-200",
+        @is_expanded && "max-h-[400px] opacity-100",
+        !@is_expanded && "max-h-0 opacity-0"
+      ]}>
+        <div class="p-2.5 sm:p-3 bg-base-200/50 space-y-3">
+          <%!-- Notes --%>
+          <%= if @has_notes do %>
+            <div>
+              <p class="text-xs text-base-content/60">
+                <span class="font-medium">Notes:</span> {@payment.notes}
               </p>
             </div>
-            <div class="text-right">
-              <p class={[
-                "text-base font-bold",
-                @payment_status == :correct && "text-success",
-                @payment_status == :underpaid && "text-warning",
-                @payment_status == :overpaid && "text-info"
-              ]}>
-                {format_currency(@payment.amount)}
-              </p>
-            </div>
-          </div>
+          <% end %>
 
-          <%!-- Period & Status --%>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3 text-xs text-base-content/70">
-              <span class="inline-flex items-center gap-1">
-                <.icon name="hero-calendar" class="w-3.5 h-3.5" /> Period {@payment.payment_number}
-              </span>
-              <span>{@payment.inserted_at |> Calendar.strftime("%b %d")}</span>
-            </div>
-            <%!-- Payment status indicator --%>
-            <%= case @payment_status do %>
-              <% :correct -> %>
-                <span class="text-xs text-success font-medium">Matches</span>
-              <% :underpaid -> %>
-                <span class="text-xs text-warning font-medium">
-                  -{format_currency(Decimal.sub(@expected_amount, @payment.amount))}
-                </span>
-              <% :overpaid -> %>
-                <span class="text-xs text-info font-medium">
-                  +{format_currency(Decimal.sub(@payment.amount, @expected_amount))}
-                </span>
-            <% end %>
-          </div>
-
-          <%!-- Actions + Expansion indicator --%>
-          <div class="flex items-center gap-2 mt-1">
-            <div phx-click-stop class="flex-1 flex items-center gap-2">
-              <.button
-                phx-click="accept_payment"
-                phx-value-id={@payment.id}
-                class="btn-success btn-sm flex-1"
-              >
-                <.icon name="hero-check" class="w-4 h-4" />
-              </.button>
-              <.button
-                phx-click="show_reject_modal"
-                phx-value-payment-id={@payment.id}
-                class="btn-error btn-sm flex-1"
-              >
-                <.icon name="hero-x-mark" class="w-4 h-4" />
-              </.button>
-            </div>
-            <%!-- Mobile expansion indicator --%>
-            <%= if @has_details do %>
-              <div class={[
-                "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200",
-                @is_expanded && "bg-primary/10 rotate-180",
-                !@is_expanded && "bg-base-200"
-              ]}>
-                <.icon
-                  name="hero-chevron-down"
-                  class={[
-                    "w-5 h-5 transition-colors",
-                    @is_expanded && "text-primary",
-                    !@is_expanded && "text-base-content/50"
-                  ]}
-                />
+          <%!-- Attached Files --%>
+          <%= if @has_files do %>
+            <% file_count = length(@payment.files) %>
+            <div>
+              <p class="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
+                <.icon name="hero-paper-clip" class="w-3.5 h-3.5" /> Attached Files ({file_count})
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <%= for file <- @payment.files do %>
+                  <.file_chip file={file} />
+                <% end %>
               </div>
-            <% end %>
-          </div>
-        </div>
-
-        <%!-- Desktop/Tablet Layout (9-column grid) --%>
-        <div class="hidden sm:grid sm:grid-cols-9 sm:items-center sm:gap-4">
-          <%!-- Tenant Column (col-span-2) --%>
-          <div class="col-span-2 flex items-center gap-3 min-w-0">
-            <div class="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <span class="text-xs font-bold text-primary">
-                {String.first(@tenant.first_name)}{String.first(@tenant.last_name)}
-              </span>
             </div>
-            <div class="min-w-0">
-              <p class="font-medium text-sm truncate">
-                {@tenant.first_name} {@tenant.last_name}
-              </p>
-              <p class="text-xs text-base-content/60 truncate">
-                {@property.name}
-              </p>
-            </div>
-          </div>
-
-          <%!-- Period Column (col-span-1) --%>
-          <div class="col-span-1 text-sm">
-            <p class="font-medium">Period {@payment.payment_number}</p>
-            <p class="text-xs text-base-content/60">
-              {@payment.inserted_at |> Calendar.strftime("%b %d, %Y")}
-            </p>
-          </div>
-
-          <%!-- Amount Column (col-span-2) --%>
-          <div class="col-span-2">
-            <p class={[
-              "text-base font-bold",
-              @payment_status == :correct && "text-success",
-              @payment_status == :underpaid && "text-warning",
-              @payment_status == :overpaid && "text-info"
-            ]}>
-              {format_currency(@payment.amount)}
-            </p>
-            <p class="text-xs text-base-content/60">
-              <%= case @payment_status do %>
-                <% :correct -> %>
-                  <span class="text-success">Matches expected</span>
-                <% :underpaid -> %>
-                  <span class="text-warning">
-                    Under by {format_currency(Decimal.sub(@expected_amount, @payment.amount))}
-                  </span>
-                <% :overpaid -> %>
-                  <span class="text-info">
-                    Over by {format_currency(Decimal.sub(@payment.amount, @expected_amount))}
-                  </span>
-              <% end %>
-            </p>
-          </div>
-
-          <%!-- Expected Amount Column (col-span-1) --%>
-          <div class="col-span-1 text-sm">
-            <p class="font-medium">{format_currency(@expected_amount)}</p>
-            <p class="text-xs text-base-content/60">Expected</p>
-          </div>
-
-          <%!-- Actions Column (col-span-2) with phx-click-stop --%>
-          <div phx-click-stop class="col-span-2 flex items-center gap-2 justify-center">
-            <.button
-              phx-click="accept_payment"
-              phx-value-id={@payment.id}
-              class="btn-success btn-sm"
-            >
-              <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept
-            </.button>
-            <.button
-              phx-click="show_reject_modal"
-              phx-value-payment-id={@payment.id}
-              class="btn-error btn-sm"
-            >
-              <.icon name="hero-x-mark" class="w-4 h-4 mr-1" /> Reject
-            </.button>
-          </div>
-
-          <%!-- Expansion Toggle (col-span-1) --%>
-          <div class="col-span-1 flex items-center justify-end">
-            <%= if @has_details do %>
-              <div class={[
-                "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200",
-                @is_expanded && "bg-primary/10 rotate-180",
-                !@is_expanded && "bg-base-200 group-hover:bg-base-300"
-              ]}>
-                <.icon
-                  name="hero-chevron-down"
-                  class={[
-                    "w-5 h-5 transition-colors",
-                    @is_expanded && "text-primary",
-                    !@is_expanded && "text-base-content/50"
-                  ]}
-                />
-              </div>
-            <% end %>
-          </div>
+          <% end %>
         </div>
       </div>
-
-      <%!-- Expandable Details Section --%>
-      <%= if @has_details do %>
-        <div class={[
-          "overflow-hidden transition-all duration-300 ease-in-out",
-          "border-t border-base-200",
-          @is_expanded && "max-h-[400px] opacity-100",
-          !@is_expanded && "max-h-0 opacity-0"
-        ]}>
-          <div class="p-2.5 sm:p-3 bg-base-200/50 space-y-3">
-            <%!-- Notes --%>
-            <%= if @has_notes do %>
-              <div>
-                <p class="text-xs text-base-content/60">
-                  <span class="font-medium">Notes:</span> {@payment.notes}
-                </p>
-              </div>
-            <% end %>
-
-            <%!-- Attached Files --%>
-            <%= if @has_files do %>
-              <% file_count = length(@payment.files) %>
-              <div>
-                <p class="text-xs font-medium text-base-content/60 mb-2 flex items-center gap-1">
-                  <.icon name="hero-paper-clip" class="w-3.5 h-3.5" /> Attached Files ({file_count})
-                </p>
-                <div class="flex flex-wrap gap-2">
-                  <%= for file <- @payment.files do %>
-                    <.file_chip file={file} />
-                  <% end %>
-                </div>
-              </div>
-            <% end %>
-          </div>
-        </div>
-      <% end %>
-    </div>
+    <% end %>
     """
   end
 
@@ -1278,11 +1412,6 @@ defmodule VivvoWeb.HomeLive do
     ~H"""
     <div class="space-y-6 sm:space-y-8">
       <%= if @contracts != [] do %>
-        <%!-- Property Switcher for Multiple Contracts --%>
-        <%= if length(@contracts) > 1 do %>
-          <.property_switcher contracts={@contracts} selected_contract={@selected_contract} />
-        <% end %>
-
         <% contract = @selected_contract || List.first(@contracts)
         contract_status = Contracts.contract_status(contract)
         payment_status = Contracts.contract_payment_status(@current_scope, contract)
@@ -1290,6 +1419,24 @@ defmodule VivvoWeb.HomeLive do
         earliest_due = Contracts.earliest_due_date(@current_scope, contract)
         payment_statuses = Contracts.get_payment_statuses(@current_scope, contract)
         next_due_date = Contracts.next_payment_date(contract) %>
+
+        <%!-- Page Header with New Misc Payment Action --%>
+        <.page_header title="My Rentals" back_navigate={nil}>
+          <:action>
+            <.button
+              phx-click="show_misc_payment_modal"
+              phx-value-contract-id={contract.id}
+              variant="primary"
+            >
+              <.icon name="hero-plus" class="w-4 h-4 mr-1" /> New Payment
+            </.button>
+          </:action>
+        </.page_header>
+
+        <%!-- Property Switcher for Multiple Contracts --%>
+        <%= if length(@contracts) > 1 do %>
+          <.property_switcher contracts={@contracts} selected_contract={@selected_contract} />
+        <% end %>
 
         <%!-- A. Header: Current Situation Snapshot --%>
         <.situation_snapshot
@@ -1323,20 +1470,16 @@ defmodule VivvoWeb.HomeLive do
         <.contract_quick_access contract={contract} contract_status={contract_status} />
 
         <%!-- Submit Payment Modal --%>
-        <%= if @submitting_payment && @payment_summary do %>
-          <% {contract, month} = @submitting_payment %>
+        <%= if @submitting_payment do %>
           <.submit_payment_modal
             id="submit-payment-modal"
             uploads={@uploads}
-            contract={contract}
-            month={month}
+            submitting_payment={@submitting_payment}
+            payment_summary={@payment_summary}
             form={@payment_form}
             submit_event="submit_payment"
             close_event="close_payment_modal"
-            rent={@payment_summary.rent}
-            accepted_total={@payment_summary.accepted_total}
-            pending_total={@payment_summary.pending_total}
-            remaining={@payment_summary.remaining}
+            validation_event="validate_payment"
           />
         <% end %>
       <% else %>
@@ -2285,7 +2428,7 @@ defmodule VivvoWeb.HomeLive do
   # Returns {accepted_total, pending_total} to avoid N+1 queries.
   defp calculate_payment_totals(contract, month) do
     contract.payments
-    |> Enum.filter(&(&1.payment_number == month))
+    |> Enum.filter(&(&1.type == :rent and &1.payment_number == month))
     |> Enum.reduce({Decimal.new(0), Decimal.new(0)}, fn payment, {accepted, pending} ->
       case payment.status do
         :accepted -> {Decimal.add(accepted, payment.amount), pending}
@@ -2319,5 +2462,15 @@ defmodule VivvoWeb.HomeLive do
       remaining: remaining,
       due_date: due_date
     }
+  end
+
+  # Formats a payment category atom into a human-readable string.
+  # Capitalizes the first letter and handles nil cases.
+  defp format_category(nil), do: "Other"
+
+  defp format_category(category) when is_atom(category) do
+    category
+    |> Atom.to_string()
+    |> String.capitalize()
   end
 end
