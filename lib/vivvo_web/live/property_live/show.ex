@@ -24,15 +24,16 @@ defmodule VivvoWeb.PropertyLive.Show do
             {@property.address}
           </:subtitle>
 
-          <:action>
-            <.button variant="primary" navigate={~p"/properties/#{@property}/edit?return_to=show"}>
-              <.icon name="hero-pencil-square" class="w-5 h-5 mr-1" /> Edit
-            </.button>
-
-            <.button variant="primary" navigate={~p"/properties/#{@property}/contracts/new"}>
-              <.icon name="hero-plus" class="w-5 h-5 mr-2" /> Create Contract
-            </.button>
-          </:action>
+          <:action
+            icon="hero-pencil-square"
+            label="Edit"
+            navigate={~p"/properties/#{@property}/edit?return_to=show"}
+          />
+          <:action
+            icon="hero-plus"
+            label="Create Contract"
+            navigate={~p"/properties/#{@property}/contracts/new"}
+          />
         </.page_header>
 
         <%!-- Main Two-Column Layout --%>
@@ -120,9 +121,9 @@ defmodule VivvoWeb.PropertyLive.Show do
                       <span>Active Contract</span>
                       <%= if @contract do %>
                         <span class={[
-                          "w-1.5 h-1.5 rounded-full",
-                          Contracts.contract_status(@contract) == :active && "bg-success",
-                          Contracts.contract_status(@contract) == :upcoming && "bg-info"
+                          "status",
+                          Contracts.contract_status(@contract) == :active && "status-success",
+                          Contracts.contract_status(@contract) == :upcoming && "status-info"
                         ]}>
                         </span>
                       <% end %>
