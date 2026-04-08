@@ -271,9 +271,17 @@ defmodule VivvoWeb.HomeLive do
   end
 
   @impl true
+  def handle_event("cancel_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :files, ref)}
+  end
+
+  @impl true
   def handle_event("validate_payment", %{"payment" => params}, socket) do
     scope = socket.assigns.current_scope
-    {_contract, _month, payment_type} = socket.assigns.submitting_payment
+    {_contract, month, payment_type} = socket.assigns.submitting_payment
+
+    # Normalize params with server-side payment type enforcement
+    params = normalize_payment_params(params, payment_type, month)
 
     # Only validate with remaining allowance for rent payments
     opts =
@@ -296,27 +304,15 @@ defmodule VivvoWeb.HomeLive do
   end
 
   @impl true
-  def handle_event("cancel_upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :files, ref)}
-  end
-
-  @impl true
   def handle_event("submit_payment", %{"payment" => params}, socket) do
     scope = socket.assigns.current_scope
     {contract, month, payment_type} = socket.assigns.submitting_payment
 
-    # Build attrs based on payment type
+    # Normalize params with server-side payment type enforcement
     attrs =
       params
       |> Map.put("contract_id", contract.id)
-      |> then(fn a ->
-        # Only add payment_number for rent payments
-        if payment_type == :rent do
-          Map.put(a, "payment_number", month)
-        else
-          a
-        end
-      end)
+      |> normalize_payment_params(payment_type, month)
 
     # Only validate remaining allowance for rent payments
     opts =
@@ -2462,6 +2458,16 @@ defmodule VivvoWeb.HomeLive do
       remaining: remaining,
       due_date: due_date
     }
+  end
+
+  # Normalizes payment parameters based on payment type.
+  # Enforces server-side payment type and sets appropriate payment_number.
+  # - For rent payments: sets payment_number to the month
+  # - For misc payments: sets payment_number to nil
+  defp normalize_payment_params(params, payment_type, month) do
+    params
+    |> Map.put("type", to_string(payment_type))
+    |> Map.put("payment_number", if(payment_type == :rent, do: month))
   end
 
   # Formats a payment category atom into a human-readable string.
