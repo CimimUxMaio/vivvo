@@ -5,6 +5,7 @@ defmodule Vivvo.Payments.Payment do
   Supports two types:
   - `:rent` — periodic rental payments tied to a contract payment number
   - `:miscellaneous` — miscellaneous payments (deposits, maintenance, services, etc.)
+
   """
   use Ecto.Schema
   import Ecto.Changeset
