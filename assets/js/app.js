@@ -393,6 +393,17 @@ const Flash = {
   }
 }
 
+/**
+ * Scroll handler for JS.dispatch scroll_to events
+ * Scrolls smoothly to the element with the given ID
+ */
+window.addEventListener("scroll_to", (e) => {
+  const element = document.getElementById(e.detail.id)
+  if (element) {
+    element.scrollIntoView({behavior: "smooth", block: "start"})
+  }
+})
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,

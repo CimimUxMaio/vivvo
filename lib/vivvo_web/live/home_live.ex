@@ -165,16 +165,6 @@ defmodule VivvoWeb.HomeLive do
   end
 
   @impl true
-  def handle_event("scroll_to_payments", _params, socket) do
-    {:noreply, push_event(socket, "scroll_to", %{id: "current-payments"})}
-  end
-
-  @impl true
-  def handle_event("scroll_to_upcoming", _params, socket) do
-    {:noreply, push_event(socket, "scroll_to", %{id: "upcoming-payments"})}
-  end
-
-  @impl true
   def handle_event("show_reject_modal", %{"payment-id" => payment_id}, socket) do
     scope = socket.assigns.current_scope
 
@@ -501,54 +491,59 @@ defmodule VivvoWeb.HomeLive do
   # Summary Stats Component
   defp summary_stats(assigns) do
     ~H"""
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-primary/10 rounded-lg">
-            <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <p class="text-sm text-base-content/60">Properties</p>
-            <p class="text-2xl font-bold">{@summary.total_properties}</p>
+    <div class="grid grid-cols-3 gap-4">
+      <%!-- Properties --%>
+      <.link navigate={~p"/properties"} class="block">
+        <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 cursor-pointer transition-colors duration-200">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-primary/10 rounded-lg">
+              <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p class="text-sm text-base-content/60">Properties</p>
+              <p class="text-2xl font-bold">{@summary.total_properties}</p>
+            </div>
           </div>
         </div>
-      </div>
+      </.link>
 
-      <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-success/10 rounded-lg">
-            <.icon name="hero-document-text" class="w-5 h-5 text-success" />
-          </div>
-          <div>
-            <p class="text-sm text-base-content/60">Contracts</p>
-            <p class="text-2xl font-bold">{@summary.total_contracts}</p>
+      <%!-- Contracts --%>
+      <.link navigate={~p"/properties"} class="block">
+        <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 cursor-pointer transition-colors duration-200">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-success/10 rounded-lg">
+              <.icon name="hero-document-text" class="w-5 h-5 text-success" />
+            </div>
+            <div>
+              <p class="text-sm text-base-content/60">Contracts</p>
+              <p class="text-2xl font-bold">{@summary.total_contracts}</p>
+            </div>
           </div>
         </div>
-      </div>
+      </.link>
 
-      <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-info/10 rounded-lg">
-            <.icon name="hero-users" class="w-5 h-5 text-info" />
-          </div>
-          <div>
-            <p class="text-sm text-base-content/60">Tenants</p>
-            <p class="text-2xl font-bold">{@summary.total_tenants}</p>
+      <%!-- Pending --%>
+      <button
+        type="button"
+        class="cursor-pointer"
+        phx-click={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
+        phx-keydown={JS.dispatch("scroll_to", detail: %{id: "pending-payments"})}
+        phx-key="enter"
+        role="link"
+        tabindex="0"
+      >
+        <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200 hover:bg-base-200/50 transition-colors duration-200">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-warning/10 rounded-lg">
+              <.icon name="hero-clock" class="w-5 h-5 text-warning" />
+            </div>
+            <div>
+              <p class="text-sm text-base-content/60">Pending</p>
+              <p class="text-2xl font-bold">{@payment_counts.pending}</p>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
-        <div class="flex items-center gap-3">
-          <div class="p-2 bg-warning/10 rounded-lg">
-            <.icon name="hero-clock" class="w-5 h-5 text-warning" />
-          </div>
-          <div>
-            <p class="text-sm text-base-content/60">Pending</p>
-            <p class="text-2xl font-bold">{@payment_counts.pending}</p>
-          </div>
-        </div>
-      </div>
+      </button>
     </div>
     """
   end
@@ -816,7 +811,10 @@ defmodule VivvoWeb.HomeLive do
             </thead>
             <tbody class="divide-y divide-base-200">
               <%= for metric <- @property_metrics do %>
-                <tr class="hover:bg-base-200/30 transition-colors">
+                <tr
+                  phx-click={JS.navigate(~p"/properties/#{metric.property.id}")}
+                  class="hover:bg-base-200/50 transition-colors cursor-pointer"
+                >
                   <td class="px-4 py-3 min-w-[180px]">
                     <div class="font-medium whitespace-nowrap">{metric.property.name}</div>
                     <div class="text-xs text-base-content/50 truncate max-w-[200px]">
@@ -1597,7 +1595,7 @@ defmodule VivvoWeb.HomeLive do
             </.button>
           <% else %>
             <.button
-              phx-click="scroll_to_payments"
+              phx-click={JS.dispatch("scroll_to", detail: %{id: "current-payments"})}
               variant="primary"
               class="shadow-lg shadow-primary/25 whitespace-nowrap"
             >
