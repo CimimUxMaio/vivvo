@@ -539,7 +539,7 @@ defmodule VivvoWeb.HomeLive do
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
         <div class="flex items-center gap-3">
-          <div class="p-2 bg-primary/10 rounded-lg">
+          <div class="p-2 bg-primary/10 rounded-lg flex items-center">
             <.icon name="hero-building-office" class="w-5 h-5 text-primary" />
           </div>
           <div>
@@ -551,7 +551,7 @@ defmodule VivvoWeb.HomeLive do
 
       <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
         <div class="flex items-center gap-3">
-          <div class="p-2 bg-success/10 rounded-lg">
+          <div class="p-2 bg-success/10 rounded-lg flex items-center">
             <.icon name="hero-document-text" class="w-5 h-5 text-success" />
           </div>
           <div>
@@ -563,7 +563,7 @@ defmodule VivvoWeb.HomeLive do
 
       <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
         <div class="flex items-center gap-3">
-          <div class="p-2 bg-info/10 rounded-lg">
+          <div class="p-2 bg-info/10 rounded-lg flex items-center">
             <.icon name="hero-users" class="w-5 h-5 text-info" />
           </div>
           <div>
@@ -575,7 +575,7 @@ defmodule VivvoWeb.HomeLive do
 
       <div class="bg-base-100 rounded-xl p-4 shadow-sm border border-base-200">
         <div class="flex items-center gap-3">
-          <div class="p-2 bg-warning/10 rounded-lg">
+          <div class="p-2 bg-warning/10 rounded-lg flex items-center">
             <.icon name="hero-clock" class="w-5 h-5 text-warning" />
           </div>
           <div>
@@ -748,10 +748,10 @@ defmodule VivvoWeb.HomeLive do
       <%!-- Header with total --%>
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-2">
-          <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-warning" />
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-primary" />
           <h2 class="text-lg font-semibold">Outstanding Balances</h2>
         </div>
-        <span class="text-2xl font-bold">{format_currency(@total_outstanding)}</span>
+        <span class="text-2xl font-bold text-accent">{format_currency(@total_outstanding)}</span>
       </div>
 
       <%!-- Pie Chart --%>
@@ -997,15 +997,8 @@ defmodule VivvoWeb.HomeLive do
       <div class="p-4 sm:p-6 border-b border-base-200">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <div class="p-2 bg-primary/10 rounded-lg">
-              <.icon name="hero-clipboard-document-check" class="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 class="text-base sm:text-lg font-semibold">Payment Validation Queue</h2>
-              <p class="text-xs text-base-content/50 hidden sm:block">
-                Review and approve pending payments
-              </p>
-            </div>
+            <.icon name="hero-clipboard-document-check" class="w-5 h-5 text-primary" />
+            <h2 class="text-base sm:text-lg font-semibold">Payment Validation Queue</h2>
           </div>
           <%= if not @pending_payments_empty? do %>
             <span class="px-3 py-1.5 bg-warning/10 text-warning rounded-full text-sm font-medium">
@@ -1453,7 +1446,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Notes Section --%>
           <%= if @has_notes do %>
             <div class="flex items-start gap-3">
-              <div class="p-1.5 bg-info/10 rounded-lg flex-shrink-0 mt-0.5">
+              <div class="p-1.5 bg-info/10 rounded-lg flex-shrink-0 mt-0.5 flex items-center">
                 <.icon name="hero-document-text" class="w-4 h-4 text-info" />
               </div>
               <div class="flex-1 min-w-0">
@@ -1466,7 +1459,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Attached Files Section --%>
           <%= if @has_files do %>
             <div class="flex items-start gap-3">
-              <div class="p-1.5 bg-primary/10 rounded-lg flex-shrink-0 mt-0.5">
+              <div class="p-1.5 bg-primary/10 rounded-lg flex-shrink-0 mt-0.5 flex items-center">
                 <.icon name="hero-paper-clip" class="w-4 h-4 text-primary" />
               </div>
               <div class="flex-1 min-w-0">
