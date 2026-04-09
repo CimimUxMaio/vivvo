@@ -172,7 +172,7 @@ Deploys the testing environment with a complete reset:
 4. Starts all services
 5. Runs database migrations
 6. **Runs database seeds** (repopulates data)
-7. Cleans unused Docker images
+7. Cleans old dangling Docker images
 
 **Use case:** Fresh testing environment with clean data.
 
@@ -184,7 +184,7 @@ Deploys the production environment preserving data:
 2. Stops all services
 3. Starts all services (with new image)
 4. Runs database migrations
-5. Cleans unused Docker images
+5. Cleans old dangling Docker images
 
 **Use case:** Production deployments where data must be preserved.
 
@@ -349,5 +349,4 @@ Before the deployment system will work, ensure:
 - [ ] Target servers have Docker and Docker Compose installed
 - [ ] `APP_NAME` environment variable is set on target servers (e.g., `export APP_NAME=vivvo` in `~/.bashrc` or `~/.profile`)
 - [ ] Target servers have the repository cloned at `~/apps/<APP_NAME>/` using sparse checkout (see [Server Setup](#server-setup))
-- [ ] Target servers have Docker and Docker Compose installed
 - [ ] Target servers have the Makefile and docker-compose.yml in the `deploy/` directory

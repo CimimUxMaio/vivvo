@@ -138,7 +138,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
           MAIL_USER: ${{ vars.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          RAW_REF: ${{ github.event.inputs.ref || github.ref_name }}
+          RAW_REF: ${{ github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref_name }}
           DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
         run: |
           tailscale ssh "$SSH_HOST" << EOF
@@ -160,12 +160,16 @@ jobs:
             export TARGET_REF
 
             echo "📥 Pulling latest repository..."
-            cd "apps/$APP_NAME/"
+            cd "$HOME/apps/$APP_NAME/"
             git fetch origin --prune
             git fetch origin --tags --force
 
-            # Handle both branches and tags correctly
-            if git rev-parse -q --verify "refs/tags/$TARGET_REF" >/dev/null 2>&1; then
+            # Handle SHA (workflow_run), tags, and branches correctly
+            if [[ "$TARGET_REF" =~ ^[a-f0-9]{40}$ ]]; then
+              # TARGET_REF is a SHA (40-character hex), use detached checkout
+              echo "📋 Checking out commit: $TARGET_REF"
+              git checkout --force "$TARGET_REF"
+            elif git rev-parse -q --verify "refs/tags/$TARGET_REF" >/dev/null 2>&1; then
               echo "📋 Checking out tag: $TARGET_REF"
               git checkout --force "refs/tags/$TARGET_REF"
             else
