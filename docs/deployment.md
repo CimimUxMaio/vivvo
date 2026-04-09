@@ -33,7 +33,7 @@ GitHub Repository
 
 - **Environment Isolation**: Testing and production use separate GitHub Environments with isolated secrets and variables
 - **Immutable Deployments**: Each deployment pulls the latest code from the repository and builds a new Docker image
-- **Zero-Downtime**: Services are briefly stopped and restarted during deployment
+- **Brief Downtime During Deployments**: Services are briefly stopped and restarted during deployment
 - **Data Preservation**: Production deployments preserve database and volume data; testing deployments reset all data
 
 ## Environments
