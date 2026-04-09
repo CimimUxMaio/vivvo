@@ -7,7 +7,7 @@
 .DEFAULT_GOAL := help
 
 APP_NAME ?= $(shell echo $$APP_NAME)
-DEPLOY_CONTAINER_NAME := vivvo
+DEPLOY_CONTAINER_NAME := $(if $(APP_NAME),$(APP_NAME),vivvo)
 DB_CONTAINER_NAME := vivvo-postgres
 COMPOSE_FILE := docker-compose.yml
 POSTGRES_USER ?= $(shell echo $$POSTGRES_USER)
@@ -34,8 +34,8 @@ deploy.testing:
 	@echo "⚠️  Running database seeds..."
 	$(MAKE) db.seed
 
-	@echo "🧹 Cleaning unused Docker images..."
-	docker image prune -af --filter "until=72h"
+	@echo "🧹 Cleaning dangling Docker images..."
+	docker image prune -f --filter "until=72h"
 
 	@echo "✅ Deployment successful"
 
@@ -54,8 +54,8 @@ deploy.production:
 	@echo "⚠️  Running database migrations..."
 	$(MAKE) db.migrate
 
-	@echo "🧹 Cleaning unused Docker images..."
-	docker image prune -af --filter "until=72h"
+	@echo "🧹 Cleaning dangling Docker images..."
+	docker image prune -f --filter "until=72h"
 
 	@echo "✅ Production deployment successful"
 
