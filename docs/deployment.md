@@ -132,7 +132,9 @@ Configure these in **Settings → Environments** for each environment (`testing`
 2. Select the environment:
    - **testing**: Can use any branch or tag
    - **production**: Must use a tag (releases only)
-3. Enter the branch or tag name (e.g., `main`, `v1.2.3`)
+3. Enter the branch or tag to deploy:
+   - **testing** examples: `main`, `v1.2.3`, `refs/tags/v1.2.3`
+   - **production** examples: `v1.2.3`, `refs/tags/v1.2.3` (must be a release tag)
 4. Click **Run workflow**
 
 **What happens:**
@@ -280,6 +282,6 @@ Before the deployment system will work, ensure:
 - [ ] `testing` environment created in GitHub with variables and secrets
 - [ ] `production` environment created in GitHub with variables and secrets
 - [ ] Target servers have Tailscale installed and configured
-- [ ] Target servers have the repository cloned at `~/apps/vivvo/`
+- [ ] Target servers have the repository cloned at `~/apps/<APP_NAME>/` (for example, `~/apps/vivvo/` when `APP_NAME=vivvo`)
 - [ ] Target servers have Docker and Docker Compose installed
 - [ ] Target servers have the Makefile and docker-compose.yml in the `deploy/` directory

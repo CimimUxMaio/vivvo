@@ -34,7 +34,7 @@ env:
   IMAGE_NAME: vivvo
   # IMAGE_TAG logic: testing always "testing"; release uses the release tag name;
   # manual production deployments use the selected dispatch ref (strip refs/tags/ prefix)
-  IMAGE_TAG: ${{ github.event_name == 'release' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' && github.event.inputs.ref) || 'testing' }}
+  IMAGE_TAG: ${{ github.event_name == 'release' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' && (contains(github.event.inputs.ref, 'refs/tags/') && replace(github.event.inputs.ref, 'refs/tags/', '') || github.event.inputs.ref)) || 'testing' }}
 
 jobs:
   deploy:
@@ -43,12 +43,12 @@ jobs:
     # - Always run for release trigger
     # - For workflow_dispatch:
     #   - Always run if environment is testing
-    #   - Only run if environment is production AND ref is a tag
+    #   - Only run if environment is production AND ref looks like a tag (starts with refs/tags/ or matches tag pattern)
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push') ||
       github.event_name == 'release' ||
       (github.event.inputs.environment == 'testing') ||
-      (github.event.inputs.environment == 'production' && startsWith(github.event.inputs.ref, 'refs/tags/'))
+      (github.event.inputs.environment == 'production' && (startsWith(github.event.inputs.ref, 'refs/tags/') || startsWith(github.event.inputs.ref, 'v')))
 
     runs-on: ubuntu-latest
     
@@ -59,13 +59,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref }}
 
       - name: Validate production deployment is a tag
-        if: github.event.inputs.environment == 'production' && !startsWith(github.event.inputs.ref, 'refs/tags/')
+        if: github.event.inputs.environment == 'production'
         run: |
-          echo "❌ Production deployments must use a release tag"
-          exit 1
+          REF="${{ github.event.inputs.ref }}"
+          if [[ ! "$REF" =~ ^refs/tags/ ]] && [[ ! "$REF" =~ ^v[0-9]+\. ]]; then
+            echo "❌ Production deployments must use a release tag (e.g., v1.2.3 or refs/tags/v1.2.3)"
+            echo "   Provided ref: $REF"
+            exit 1
+          fi
+          echo "✅ Production deployment ref validated: $REF"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -110,7 +115,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
           MAIL_USER: ${{ vars.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          TARGET_REF: ${{ github.event.inputs.ref || github.ref_name }}
+          RAW_REF: ${{ github.event.inputs.ref || github.ref_name }}
           DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
         run: |
           tailscale ssh "$SSH_HOST" << EOF
@@ -125,6 +130,11 @@ jobs:
             export PHX_HOST="$PHX_HOST"
             export MAIL_USER="$MAIL_USER"
             export MAIL_PASSWORD="$MAIL_PASSWORD"
+
+            # Normalize TARGET_REF by stripping refs/tags/ prefix if present
+            TARGET_REF="$RAW_REF"
+            TARGET_REF="${TARGET_REF#refs/tags/}"
+            export TARGET_REF
 
             echo "📥 Pulling latest repository..."
             cd "apps/$APP_NAME/"
