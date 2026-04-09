@@ -32,9 +32,6 @@ concurrency:
 
 env:
   IMAGE_NAME: vivvo
-  # IMAGE_TAG logic: testing always "testing"; release uses the release tag name;
-  # manual production deployments use the selected dispatch ref (strip refs/tags/ prefix)
-  IMAGE_TAG: ${{ github.event_name == 'release' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' && (contains(github.event.inputs.ref, 'refs/tags/') && replace(github.event.inputs.ref, 'refs/tags/', '') || github.event.inputs.ref)) || 'testing' }}
 
 jobs:
   deploy:
@@ -60,6 +57,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref }}
+
+      - name: Determine image tag
+        id: image_tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # For releases, use the release tag name
+            IMAGE_TAG="${{ github.ref_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            # For manual production deployments, strip refs/tags/ prefix if present
+            RAW_REF="${{ github.event.inputs.ref }}"
+            IMAGE_TAG="${RAW_REF#refs/tags/}"
+          else
+            # Default to testing for all other cases
+            IMAGE_TAG="testing"
+          fi
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "📦 Image tag: $IMAGE_TAG"
 
       - name: Validate production deployment is a tag
         if: github.event.inputs.environment == 'production'
@@ -90,7 +104,7 @@ jobs:
           context: .
           push: true
           platforms: linux/arm64
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -108,7 +122,7 @@ jobs:
           APP_PORT: ${{ vars.APP_PORT }}
           PHX_HOST: ${{ vars.PHX_HOST }}
           SSH_HOST: ${{ vars.SERVER_TAILSCALE_HOST }}
-          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
@@ -164,4 +178,4 @@ jobs:
         run: |
           echo "✅ Deployment completed successfully"
           echo "Environment: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}"
-          echo "Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          echo "Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}"
