@@ -38,14 +38,11 @@ jobs:
     # Conditional logic:
     # - For workflow_run: only run if CI was successful and on main branch push
     # - Always run for release trigger
-    # - For workflow_dispatch:
-    #   - Always run if environment is testing
-    #   - Only run if environment is production AND ref looks like a tag (starts with refs/tags/ or matches tag pattern)
+    # - Always run for workflow_dispatch (validation happens in a dedicated step)
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push') ||
       github.event_name == 'release' ||
-      (github.event.inputs.environment == 'testing') ||
-      (github.event.inputs.environment == 'production' && (startsWith(github.event.inputs.ref, 'refs/tags/') || startsWith(github.event.inputs.ref, 'v')))
+      github.event_name == 'workflow_dispatch'
 
     runs-on: ubuntu-latest
     
@@ -72,6 +69,12 @@ jobs:
             # Default to testing for all other cases
             IMAGE_TAG="testing"
           fi
+          # Validate that IMAGE_TAG doesn't contain slashes (invalid for Docker tags)
+          if [[ "$IMAGE_TAG" == */* ]]; then
+            echo "❌ Invalid Docker image tag: $IMAGE_TAG"
+            echo "   Tags cannot contain '/' characters"
+            exit 1
+          fi
           echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
           echo "📦 Image tag: $IMAGE_TAG"
 
@@ -79,12 +82,18 @@ jobs:
         if: github.event.inputs.environment == 'production'
         run: |
           REF="${{ github.event.inputs.ref }}"
-          if [[ ! "$REF" =~ ^refs/tags/ ]] && [[ ! "$REF" =~ ^v[0-9]+\. ]]; then
-            echo "❌ Production deployments must use a release tag (e.g., v1.2.3 or refs/tags/v1.2.3)"
+          # Accept both full refs (refs/tags/v1.2.3) and plain tags (v1.2.3)
+          if [[ "$REF" =~ ^refs/tags/ ]]; then
+            TAG_NAME="${REF#refs/tags/}"
+          elif [[ "$REF" =~ ^v[0-9]+\. ]]; then
+            TAG_NAME="$REF"
+          else
+            echo "❌ Production deployments must use a release tag"
+            echo "   Accepted formats: refs/tags/v1.2.3 or v1.2.3"
             echo "   Provided ref: $REF"
             exit 1
           fi
-          echo "✅ Production deployment ref validated: $REF"
+          echo "✅ Production deployment ref validated: $TAG_NAME"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

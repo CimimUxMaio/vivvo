@@ -6,8 +6,12 @@
 
 .DEFAULT_GOAL := help
 
-APP_NAME ?= $(shell echo $$APP_NAME)
-DEPLOY_CONTAINER_NAME := $(if $(APP_NAME),$(APP_NAME),vivvo)
+# Validate that APP_NAME is set
+ifeq ($(APP_NAME),)
+  $(error APP_NAME is not set. Please set the APP_NAME environment variable before running make commands)
+endif
+
+DEPLOY_CONTAINER_NAME := $(APP_NAME)
 DB_CONTAINER_NAME := vivvo-postgres
 COMPOSE_FILE := docker-compose.yml
 POSTGRES_USER ?= $(shell echo $$POSTGRES_USER)

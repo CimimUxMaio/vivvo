@@ -133,8 +133,8 @@ Configure these in **Settings → Environments** for each environment (`testing`
    - **testing**: Can use any branch or tag
    - **production**: Must use a tag (releases only)
 3. Enter the branch or tag to deploy:
-   - **testing** examples: `main`, `v1.2.3`, `refs/tags/v1.2.3`
-   - **production** examples: `v1.2.3`, `refs/tags/v1.2.3` (must be a release tag)
+   - **testing** examples: `main`, `feature/my-branch`, `v1.2.3`, `refs/tags/v1.2.3`
+   - **production** examples: `v1.2.3`, `refs/tags/v1.2.3` (must be a release tag; plain tags like `v1.2.3` are accepted)
 4. Click **Run workflow**
 
 **What happens:**
@@ -225,9 +225,13 @@ The deployment workflow uses different image tagging strategies based on the env
 
 ### Deployment Fails with "Production deployments must use a release tag"
 
-**Cause:** You tried to deploy to production using a branch name instead of a tag.
+**Cause:** You tried to deploy to production using a branch name or invalid tag format.
 
-**Solution:** Create a release/tag first, then deploy using that tag.
+**Solution:** Create a release/tag first, then deploy using the tag. Accepted formats are:
+- Plain tag: `v1.2.3`
+- Full ref: `refs/tags/v1.2.3`
+
+Branch names (like `main` or `feature/xyz`) are not accepted for production deployments.
 
 ### Container Fails to Start
 
@@ -283,6 +287,7 @@ This section describes how to set up a target server for deployments.
 - Docker and Docker Compose installed
 - Tailscale installed and authenticated
 - SSH access configured
+- `APP_NAME` environment variable configured (must match the value set in GitHub environment variables)
 
 ### Repository Setup
 
@@ -290,7 +295,11 @@ The deployment process only needs the `deploy/` directory from the repository. U
 
 ```bash
 # Set your application name (must match APP_NAME in GitHub environment variables)
+# IMPORTANT: This environment variable is required and must be persisted!
 export APP_NAME=vivvo
+
+# Add to ~/.bashrc or ~/.profile to persist across sessions
+echo 'export APP_NAME=vivvo' >> ~/.bashrc
 
 # Create the apps directory
 mkdir -p ~/apps
@@ -337,6 +346,8 @@ Before the deployment system will work, ensure:
 - [ ] `testing` environment created in GitHub with variables and secrets
 - [ ] `production` environment created in GitHub with variables and secrets
 - [ ] Target servers have Tailscale installed and configured
+- [ ] Target servers have Docker and Docker Compose installed
+- [ ] `APP_NAME` environment variable is set on target servers (e.g., `export APP_NAME=vivvo` in `~/.bashrc` or `~/.profile`)
 - [ ] Target servers have the repository cloned at `~/apps/<APP_NAME>/` using sparse checkout (see [Server Setup](#server-setup))
 - [ ] Target servers have Docker and Docker Compose installed
 - [ ] Target servers have the Makefile and docker-compose.yml in the `deploy/` directory
