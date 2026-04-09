@@ -27,27 +27,28 @@ on:
     types: [published]
 
 concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'testing' }}
+  group: deploy-${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
   cancel-in-progress: true
 
 env:
   IMAGE_NAME: vivvo
-  # IMAGE_TAG logic: testing always "testing", production uses the tag/branch name
-  IMAGE_TAG: ${{ (github.event_name == 'release' || github.event.inputs.environment == 'production') && github.ref_name || 'testing' }}
+  # IMAGE_TAG logic: testing always "testing"; release uses the release tag name;
+  # manual production deployments use the selected dispatch ref (strip refs/tags/ prefix)
+  IMAGE_TAG: ${{ github.event_name == 'release' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' && github.event.inputs.ref) || 'testing' }}
 
 jobs:
   deploy:
     # Conditional logic:
-    # - Always run for workflow_run (CI success trigger)
+    # - For workflow_run: only run if CI was successful and on main branch push
     # - Always run for release trigger
     # - For workflow_dispatch:
     #   - Always run if environment is testing
     #   - Only run if environment is production AND ref is a tag
     if: |
-      github.event_name == 'workflow_run' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push') ||
       github.event_name == 'release' ||
       (github.event.inputs.environment == 'testing') ||
-      (github.event.inputs.environment == 'production' && startsWith(github.ref, 'refs/tags/'))
+      (github.event.inputs.environment == 'production' && startsWith(github.event.inputs.ref, 'refs/tags/'))
 
     runs-on: ubuntu-latest
     
@@ -61,7 +62,7 @@ jobs:
           ref: ${{ github.event.inputs.ref || github.ref }}
 
       - name: Validate production deployment is a tag
-        if: github.event.inputs.environment == 'production' && !startsWith(github.ref, 'refs/tags/')
+        if: github.event.inputs.environment == 'production' && !startsWith(github.event.inputs.ref, 'refs/tags/')
         run: |
           echo "❌ Production deployments must use a release tag"
           exit 1
@@ -109,7 +110,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
           MAIL_USER: ${{ vars.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          TARGET_BRANCH: ${{ github.event.inputs.ref || github.ref_name }}
+          TARGET_REF: ${{ github.event.inputs.ref || github.ref_name }}
           DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
         run: |
           tailscale ssh "$SSH_HOST" << EOF
@@ -127,9 +128,18 @@ jobs:
 
             echo "📥 Pulling latest repository..."
             cd "apps/$APP_NAME/"
-            git fetch origin "$TARGET_BRANCH"
-            git checkout --force "$TARGET_BRANCH"
-            git reset --hard "origin/$TARGET_BRANCH"
+            git fetch origin --prune
+            git fetch origin --tags --force
+
+            # Handle both branches and tags correctly
+            if git rev-parse -q --verify "refs/tags/$TARGET_REF" >/dev/null 2>&1; then
+              echo "📋 Checking out tag: $TARGET_REF"
+              git checkout --force "refs/tags/$TARGET_REF"
+            else
+              echo "📋 Checking out branch: $TARGET_REF"
+              git checkout --force "$TARGET_REF"
+              git reset --hard "origin/$TARGET_REF"
+            fi
 
             cd deploy/
             
