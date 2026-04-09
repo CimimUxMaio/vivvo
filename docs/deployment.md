@@ -274,6 +274,61 @@ make db.rollback
 4. **Monitoring**: Monitor the production deployment after each release
 5. **Rollback Plan**: Keep previous release tags available for quick rollback if needed
 
+## Server Setup
+
+This section describes how to set up a target server for deployments.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Tailscale installed and authenticated
+- SSH access configured
+
+### Repository Setup
+
+The deployment process only needs the `deploy/` directory from the repository. Use sparse checkout to clone only the necessary files:
+
+```bash
+# Set your application name (must match APP_NAME in GitHub environment variables)
+export APP_NAME=vivvo
+
+# Create the apps directory
+mkdir -p ~/apps
+cd ~/apps
+
+# Clone with sparse checkout to only get the deploy/ directory
+git clone --filter=blob:none --sparse https://github.com/CimimUxMaio/vivvo.git "$APP_NAME"
+cd "$APP_NAME"
+
+# Configure sparse checkout to only include the deploy directory
+git sparse-checkout set deploy
+
+# Verify the files are present
+ls -la deploy/
+```
+
+### Required Directory Structure
+
+After setup, your server should have:
+
+```
+~/apps/
+└── vivvo/                    # APP_NAME directory
+    ├── deploy/
+    │   ├── docker-compose.yml
+    │   └── Makefile
+    └── .git/                 # Git metadata (sparse checkout)
+```
+
+### Updating Server Files
+
+When the deploy configuration changes in the repository, update the server:
+
+```bash
+cd ~/apps/$APP_NAME
+git pull
+```
+
 ## Configuration Checklist
 
 Before the deployment system will work, ensure:
@@ -282,6 +337,6 @@ Before the deployment system will work, ensure:
 - [ ] `testing` environment created in GitHub with variables and secrets
 - [ ] `production` environment created in GitHub with variables and secrets
 - [ ] Target servers have Tailscale installed and configured
-- [ ] Target servers have the repository cloned at `~/apps/<APP_NAME>/` (for example, `~/apps/vivvo/` when `APP_NAME=vivvo`)
+- [ ] Target servers have the repository cloned at `~/apps/<APP_NAME>/` using sparse checkout (see [Server Setup](#server-setup))
 - [ ] Target servers have Docker and Docker Compose installed
 - [ ] Target servers have the Makefile and docker-compose.yml in the `deploy/` directory
