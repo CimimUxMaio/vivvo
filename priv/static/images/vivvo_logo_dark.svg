@@ -2,12 +2,12 @@
   <!-- VIVVO Full Logo - Dark Theme (Icon + Wordmark with padding) -->
   
   <!-- Icon Group (60x60 positioned on the left) -->
-  <g transform="translate(0, 0)">
-    <!-- Background circle using dark theme base-100 - reduced radius for padding -->
-    <circle cx="30" cy="30" r="25" fill="#292F37"/>
-    
-    <!-- Scaled content group (85% scale, centered) -->
-    <g transform="translate(4.5, 4.5) scale(0.85)">
+  <g>
+    <!-- Background circle using dark theme base-100 - fills entire 60x60 viewBox -->
+    <circle cx="30" cy="30" r="30" fill="#292F37"/>
+
+    <!-- Content group centered (no scaling, native size) -->
+    <g>
       <!-- The V shape forming house roof - using dark theme primary purple -->
       <path d="M30 10L12 36H20L30 22L40 36H48L30 10Z" fill="#7c6ef5"/>
 
