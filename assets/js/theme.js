@@ -8,21 +8,6 @@ const STORAGE_KEY = "phx:theme"
 const SYSTEM_THEME_QUERY = "(prefers-color-scheme: dark)"
 
 /**
- * Get the system theme preference
- * @returns {"light" | "dark"}
- */
-const getSystemTheme = () =>
-  window.matchMedia(SYSTEM_THEME_QUERY).matches ? "dark" : "light"
-
-/**
- * Get the effective theme (resolves "system" to actual light/dark)
- * @param {"system" | "light" | "dark"} theme
- * @returns {"light" | "dark"}
- */
-const getEffectiveTheme = (theme) =>
-  theme === "system" ? getSystemTheme() : theme
-
-/**
  * Get the stored theme preference from localStorage
  * @returns {"system" | "light" | "dark"}
  */
