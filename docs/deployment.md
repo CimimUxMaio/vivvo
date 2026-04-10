@@ -296,25 +296,10 @@ This section describes how to set up a target server for deployments.
 The deployment process only needs the `deploy/` directory from the repository. Use sparse checkout to clone only the necessary files:
 
 ```bash
-# Set your application name (must match APP_NAME in GitHub environment variables)
-# IMPORTANT: This environment variable is required and must be persisted!
-export APP_NAME=vivvo
-
-# Add to ~/.bashrc or ~/.profile to persist across sessions
-echo 'export APP_NAME=vivvo' >> ~/.bashrc
-
-# Create the apps directory
-mkdir -p ~/apps
-cd ~/apps
-
-# Clone with sparse checkout to only get the deploy/ directory
-git clone --filter=blob:none --sparse https://github.com/CimimUxMaio/vivvo.git "$APP_NAME"
-cd "$APP_NAME"
-
-# Configure sparse checkout to only include the deploy directory
-git sparse-checkout set deploy
-
-# Verify the files are present
+mkdir -p ~/apps && cd ~/apps && \
+git clone --filter=blob:none --sparse https://github.com/CimimuxMaio/vivvo.git "$APP_NAME" && \
+cd "$APP_NAME" && \
+git sparse-checkout set deploy && \
 ls -la deploy/
 ```
 
