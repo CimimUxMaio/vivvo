@@ -1,6 +1,7 @@
 /**
  * Theme management module for handling light/dark/system theme preferences.
- * Manages localStorage, data-theme attribute, and favicon updates.
+ * Manages localStorage and data-theme attribute.
+ * Note: favicon adapts automatically via CSS prefers-color-scheme in favicon.svg
  */
 
 const STORAGE_KEY = "phx:theme"
@@ -28,21 +29,6 @@ const getEffectiveTheme = (theme) =>
 const getStoredTheme = () => localStorage.getItem(STORAGE_KEY) || "system"
 
 /**
- * Update favicon based on effective theme
- * @param {"light" | "dark"} effectiveTheme
- */
-const updateFavicon = (effectiveTheme) => {
-  const faviconEl = document.getElementById("favicon")
-
-  if (faviconEl) {
-    faviconEl.href = 
-      effectiveTheme === "dark" 
-        ? faviconEl.dataset.darkHref 
-        : faviconEl.dataset.lightHref
-  }
-}
-
-/**
  * Set the theme and update all related UI elements
  * @param {"system" | "light" | "dark"} theme
  */
@@ -56,9 +42,6 @@ const setTheme = (theme) => {
 
   // Apply theme to document (DaisyUI handles "system" correctly)
   document.documentElement.setAttribute("data-theme", theme)
-
-  // Update favicon based on effective theme
-  updateFavicon(getEffectiveTheme(theme))
 }
 
 /**
