@@ -45,7 +45,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
 
     runs-on: ubuntu-latest
-    
+
     # Set the GitHub Environment for proper secret/variable scoping
     environment: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
 
@@ -161,7 +161,7 @@ jobs:
             export TARGET_REF
 
             echo "📥 Pulling latest repository..."
-            cd "$HOME/apps/$APP_NAME/"
+            cd "\$HOME/apps/$APP_NAME/"
             git fetch origin --prune
             git fetch origin --tags --force
 
@@ -180,7 +180,7 @@ jobs:
             fi
 
             cd deploy/
-            
+
             if [ "$DEPLOY_ENV" = "production" ]; then
               make deploy.production
             else
