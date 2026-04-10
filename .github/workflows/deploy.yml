@@ -131,6 +131,7 @@ jobs:
           APP_PORT: ${{ vars.APP_PORT }}
           PHX_HOST: ${{ vars.PHX_HOST }}
           SSH_HOST: ${{ vars.SERVER_TAILSCALE_HOST }}
+          SSH_USER: ${{ vars.SERVER_USER }}
           IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -141,7 +142,7 @@ jobs:
           RAW_REF: ${{ github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref_name }}
           DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
         run: |
-          tailscale ssh "$SSH_HOST" << EOF
+          tailscale ssh "$SSH_USER@$SSH_HOST" << EOF
             export APP_NAME="$APP_NAME"
             export APP_PORT="$APP_PORT"
             export IMAGE="$IMAGE"

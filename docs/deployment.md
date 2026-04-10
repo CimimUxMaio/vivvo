@@ -93,6 +93,7 @@ Configure these in **Settings → Environments** for each environment (`testing`
 | `APP_PORT` | Port exposed on the host | `4000` | `4000` |
 | `PHX_HOST` | Phoenix/Elixir host URL | `test.vivvo.app` | `vivvo.app` |
 | `SERVER_TAILSCALE_HOST` | Tailscale hostname of the deployment server | `testing-server.tailnet-name.ts.net` | `prod-server.tailnet-name.ts.net` |
+| `SERVER_USER` | Username for SSH access on the deployment server | `pi` | `ubuntu` |
 | `MAIL_USER` | SMTP username for sending emails | `noreply@example.com` | `noreply@example.com` |
 
 #### Environment Secrets
@@ -261,6 +262,7 @@ make db.rollback
 1. Tailscale OAuth client has correct permissions
 2. Target server is online in Tailscale
 3. `SERVER_TAILSCALE_HOST` variable is correctly set
+4. `SERVER_USER` variable matches a valid user on the target server (e.g., `pi`, `ubuntu`, `admin`)
 
 ## Security Considerations
 
@@ -349,4 +351,5 @@ Before the deployment system will work, ensure:
 - [ ] Target servers have Docker and Docker Compose installed
 - [ ] `APP_NAME` environment variable is set on target servers (e.g., `export APP_NAME=vivvo` in `~/.bashrc` or `~/.profile`)
 - [ ] Target servers have the repository cloned at `~/apps/<APP_NAME>/` using sparse checkout (see [Server Setup](#server-setup))
+- [ ] `SERVER_USER` GitHub environment variable is set to a valid user on the target server (e.g., `pi`, `ubuntu`, `admin`)
 - [ ] Target servers have the Makefile and docker-compose.yml in the `deploy/` directory
