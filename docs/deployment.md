@@ -80,7 +80,6 @@ These secrets are used across all environments and should be configured at the r
 | `DOCKERHUB_TOKEN` | DockerHub access token | DockerHub → Account Settings → Security |
 | `TAILSCALE_CLIENT_ID` | Tailscale OAuth client ID | Tailscale Admin Console → OAuth clients |
 | `TAILSCALE_CLIENT_SECRET` | Tailscale OAuth client secret | Generated when creating OAuth client |
-| `MAIL_PASSWORD` | SMTP password for sending emails | Your email provider |
 
 ### Environment-Specific Configuration
 
@@ -104,6 +103,7 @@ Configure these in **Settings → Environments** for each environment (`testing`
 | `POSTGRES_PASSWORD` | PostgreSQL database password | *(strong generated password)* |
 | `POSTGRES_DB` | PostgreSQL database name | `vivvo_test` |
 | `SECRET_KEY_BASE` | Phoenix secret key base (run `mix phx.gen.secret`) | *(64-byte secret)* |
+| `MAIL_PASSWORD` | SMTP password for sending emails | Your email provider |
 
 ## Deployment Process
 
