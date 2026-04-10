@@ -165,7 +165,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
           MAIL_USER: ${{ vars.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          RAW_REF: ${{ steps.deploy_ref.outputs.deploy_ref_name }}
+          RAW_REF: ${{ steps.deploy_ref.outputs.deploy_ref }}
           DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
         run: |
           tailscale ssh "$SSH_USER@$SSH_HOST" << EOF
