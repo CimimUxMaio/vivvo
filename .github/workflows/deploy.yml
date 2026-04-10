@@ -46,9 +46,6 @@ jobs:
     environment: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Determine deployment ref
         id: deploy_ref
         run: |
@@ -94,6 +91,11 @@ jobs:
           echo "🏷️ Ref name: $DEPLOY_REF_NAME"
           echo "🔖 Is tag: $IS_TAG"
           echo "🚀 Is production: $IS_PRODUCTION"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.deploy_ref.outputs.deploy_ref }}
 
       - name: Determine image tag
         id: image_tag
