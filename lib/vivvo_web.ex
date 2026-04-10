@@ -17,7 +17,7 @@ defmodule VivvoWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt manifest.json)
+  def static_paths, do: ~w(assets fonts images pwa robots.txt)
 
   def router do
     quote do
