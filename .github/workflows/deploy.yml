@@ -50,7 +50,6 @@ jobs:
         id: deploy_ref
         run: |
           TRIGGER="${{ github.event_name }}"
-          ENVIRONMENT="${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}"
 
           if [ "$TRIGGER" = "workflow_run" ]; then
             # For auto-deploy after CI, use the commit SHA
@@ -73,24 +72,14 @@ jobs:
             fi
           fi
 
-          # Determine if production
-          if [ "$ENVIRONMENT" = "production" ]; then
-            IS_PRODUCTION="true"
-          else
-            IS_PRODUCTION="false"
-          fi
-
           echo "deploy_ref=$DEPLOY_REF" >> "$GITHUB_OUTPUT"
           echo "deploy_ref_name=$DEPLOY_REF_NAME" >> "$GITHUB_OUTPUT"
           echo "is_tag=$IS_TAG" >> "$GITHUB_OUTPUT"
-          echo "is_production=$IS_PRODUCTION" >> "$GITHUB_OUTPUT"
 
           echo "🎯 Trigger: $TRIGGER"
-          echo "🌍 Environment: $ENVIRONMENT"
           echo "📋 Deploy ref: $DEPLOY_REF"
           echo "🏷️ Ref name: $DEPLOY_REF_NAME"
           echo "🔖 Is tag: $IS_TAG"
-          echo "🚀 Is production: $IS_PRODUCTION"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -100,7 +89,9 @@ jobs:
       - name: Determine image tag
         id: image_tag
         run: |
-          if [ "${{ steps.deploy_ref.outputs.is_production }}" = "true" ] && [ "${{ steps.deploy_ref.outputs.is_tag }}" = "true" ]; then
+          ENVIRONMENT="${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}"
+
+          if [ "$ENVIRONMENT" = "production" ] && [ "${{ steps.deploy_ref.outputs.is_tag }}" = "true" ]; then
             # For production, use the tag name
             IMAGE_TAG="${{ steps.deploy_ref.outputs.deploy_ref_name }}"
           else
@@ -119,7 +110,7 @@ jobs:
           echo "📦 Image tag: $IMAGE_TAG"
 
       - name: Validate production deployment is a tag
-        if: steps.deploy_ref.outputs.is_production == 'true'
+        if: ${{ github.event.inputs.environment == 'production' || github.event_name == 'release' }}
         run: |
           if [ "${{ steps.deploy_ref.outputs.is_tag }}" != "true" ]; then
             echo "❌ Production deployments must use a release tag"
