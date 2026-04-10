@@ -17,10 +17,6 @@ on:
         options:
           - testing
           - production
-      ref:
-        description: 'Branch or tag to deploy'
-        required: true
-        default: 'main'
 
   # Trigger 3: Auto-deploy to production on release
   release:
@@ -52,48 +48,85 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref }}
+
+      - name: Determine deployment ref
+        id: deploy_ref
+        run: |
+          TRIGGER="${{ github.event_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}"
+
+          if [ "$TRIGGER" = "workflow_run" ]; then
+            # For auto-deploy after CI, use the commit SHA
+            DEPLOY_REF="${{ github.event.workflow_run.head_sha }}"
+            DEPLOY_REF_NAME="${{ github.event.workflow_run.head_branch }}"
+            IS_TAG="false"
+          else
+            # For manual dispatch and releases, use github.ref
+            FULL_REF="${{ github.ref }}"
+            DEPLOY_REF="$FULL_REF"
+            # Strip refs/heads/ or refs/tags/ prefix
+            DEPLOY_REF_NAME="${FULL_REF#refs/heads/}"
+            DEPLOY_REF_NAME="${DEPLOY_REF_NAME#refs/tags/}"
+
+            # Check if it's a tag
+            if [[ "$FULL_REF" == refs/tags/* ]]; then
+              IS_TAG="true"
+            else
+              IS_TAG="false"
+            fi
+          fi
+
+          # Determine if production
+          if [ "$ENVIRONMENT" = "production" ]; then
+            IS_PRODUCTION="true"
+          else
+            IS_PRODUCTION="false"
+          fi
+
+          echo "deploy_ref=$DEPLOY_REF" >> "$GITHUB_OUTPUT"
+          echo "deploy_ref_name=$DEPLOY_REF_NAME" >> "$GITHUB_OUTPUT"
+          echo "is_tag=$IS_TAG" >> "$GITHUB_OUTPUT"
+          echo "is_production=$IS_PRODUCTION" >> "$GITHUB_OUTPUT"
+
+          echo "🎯 Trigger: $TRIGGER"
+          echo "🌍 Environment: $ENVIRONMENT"
+          echo "📋 Deploy ref: $DEPLOY_REF"
+          echo "🏷️ Ref name: $DEPLOY_REF_NAME"
+          echo "🔖 Is tag: $IS_TAG"
+          echo "🚀 Is production: $IS_PRODUCTION"
 
       - name: Determine image tag
         id: image_tag
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            # For releases, use the release tag name
-            IMAGE_TAG="${{ github.ref_name }}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.environment }}" = "production" ]; then
-            # For manual production deployments, strip refs/tags/ prefix if present
-            RAW_REF="${{ github.event.inputs.ref }}"
-            IMAGE_TAG="${RAW_REF#refs/tags/}"
+          if [ "${{ steps.deploy_ref.outputs.is_production }}" = "true" ] && [ "${{ steps.deploy_ref.outputs.is_tag }}" = "true" ]; then
+            # For production, use the tag name
+            IMAGE_TAG="${{ steps.deploy_ref.outputs.deploy_ref_name }}"
           else
             # Default to testing for all other cases
             IMAGE_TAG="testing"
           fi
+
           # Validate that IMAGE_TAG doesn't contain slashes (invalid for Docker tags)
           if [[ "$IMAGE_TAG" == */* ]]; then
             echo "❌ Invalid Docker image tag: $IMAGE_TAG"
             echo "   Tags cannot contain '/' characters"
             exit 1
           fi
+
           echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
           echo "📦 Image tag: $IMAGE_TAG"
 
       - name: Validate production deployment is a tag
-        if: github.event.inputs.environment == 'production'
+        if: steps.deploy_ref.outputs.is_production == 'true'
         run: |
-          REF="${{ github.event.inputs.ref }}"
-          # Accept both full refs (refs/tags/v1.2.3) and plain tags (v1.2.3)
-          if [[ "$REF" =~ ^refs/tags/ ]]; then
-            TAG_NAME="${REF#refs/tags/}"
-          elif [[ "$REF" =~ ^v[0-9]+\. ]]; then
-            TAG_NAME="$REF"
-          else
+          if [ "${{ steps.deploy_ref.outputs.is_tag }}" != "true" ]; then
             echo "❌ Production deployments must use a release tag"
-            echo "   Accepted formats: refs/tags/v1.2.3 or v1.2.3"
-            echo "   Provided ref: $REF"
+            echo "   Current ref: ${{ steps.deploy_ref.outputs.deploy_ref }}"
+            echo "   Please select a tag from the 'Use workflow from' dropdown"
             exit 1
           fi
-          echo "✅ Production deployment ref validated: $TAG_NAME"
+
+          echo "✅ Production deployment ref validated: ${{ steps.deploy_ref.outputs.deploy_ref_name }}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -139,7 +172,7 @@ jobs:
           SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
           MAIL_USER: ${{ vars.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          RAW_REF: ${{ github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref_name }}
+          RAW_REF: ${{ steps.deploy_ref.outputs.deploy_ref_name }}
           DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
         run: |
           tailscale ssh "$SSH_USER@$SSH_HOST" << EOF
