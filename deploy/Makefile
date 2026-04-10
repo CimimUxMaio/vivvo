@@ -6,10 +6,14 @@
 
 .DEFAULT_GOAL := help
 
-APP_NAME ?= $(shell echo $$APP_NAME)
-DEPLOY_CONTAINER_NAME := vivvo
+# Validate that APP_NAME is set
+ifeq ($(APP_NAME),)
+  $(error APP_NAME is not set. Please set the APP_NAME environment variable before running make commands)
+endif
+
+DEPLOY_CONTAINER_NAME := $(APP_NAME)
 DB_CONTAINER_NAME := vivvo-postgres
-COMPOSE_FILE := docker-compose.testing.yml
+COMPOSE_FILE := docker-compose.yml
 POSTGRES_USER ?= $(shell echo $$POSTGRES_USER)
 POSTGRES_DB ?= $(shell echo $$POSTGRES_DB)
 
@@ -34,10 +38,30 @@ deploy.testing:
 	@echo "⚠️  Running database seeds..."
 	$(MAKE) db.seed
 
-	@echo "🧹 Cleaning unused Docker images..."
-	docker image prune -af --filter "until=72h"
+	@echo "🧹 Cleaning dangling Docker images..."
+	docker image prune -f --filter "until=72h"
 
 	@echo "✅ Deployment successful"
+
+.PHONY: deploy.production
+## Deploy the production environment (preserves data, runs migrations only)
+deploy.production:
+	@echo "🐳 Pulling latest Docker images..."
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) pull
+
+	@echo "⬇️  Stopping all services..."
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) down
+
+	@echo "🚀 Starting all services..."
+	APP_ROOT_DIR=$(HOME)/apps/$(APP_NAME) docker compose -f $(COMPOSE_FILE) up -d --wait --wait-timeout 60
+
+	@echo "⚠️  Running database migrations..."
+	$(MAKE) db.migrate
+
+	@echo "🧹 Cleaning dangling Docker images..."
+	docker image prune -f --filter "until=72h"
+
+	@echo "✅ Production deployment successful"
 
 .PHONY: db.migrate
 ## Run database migrations on the deployed container
@@ -71,7 +95,8 @@ help:
 	@echo "Deploy Commands:"
 	@echo ""
 	@echo "Deployment:"
-	@echo "  deploy.testing  Deploy the testing environment"
+	@echo "  deploy.testing    Deploy the testing environment (resets data)"
+	@echo "  deploy.production Deploy the production environment (preserves data)"
 	@echo ""
 	@echo "Database:"
 	@echo "  db.migrate        Run database migrations on the deployed container"

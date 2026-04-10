@@ -1,0 +1,195 @@
+name: Deploy
+
+on:
+  # Trigger 1: Auto-deploy to testing after successful CI on main
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+  # Trigger 2: Manual dispatch with environment selection
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'testing'
+        type: choice
+        options:
+          - testing
+          - production
+      ref:
+        description: 'Branch or tag to deploy'
+        required: true
+        default: 'main'
+
+  # Trigger 3: Auto-deploy to production on release
+  release:
+    types: [published]
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: vivvo
+
+jobs:
+  deploy:
+    # Conditional logic:
+    # - For workflow_run: only run if CI was successful and on main branch push
+    # - Always run for release trigger
+    # - Always run for workflow_dispatch (validation happens in a dedicated step)
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push') ||
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_dispatch'
+
+    runs-on: ubuntu-latest
+
+    # Set the GitHub Environment for proper secret/variable scoping
+    environment: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref }}
+
+      - name: Determine image tag
+        id: image_tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # For releases, use the release tag name
+            IMAGE_TAG="${{ github.ref_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            # For manual production deployments, strip refs/tags/ prefix if present
+            RAW_REF="${{ github.event.inputs.ref }}"
+            IMAGE_TAG="${RAW_REF#refs/tags/}"
+          else
+            # Default to testing for all other cases
+            IMAGE_TAG="testing"
+          fi
+          # Validate that IMAGE_TAG doesn't contain slashes (invalid for Docker tags)
+          if [[ "$IMAGE_TAG" == */* ]]; then
+            echo "❌ Invalid Docker image tag: $IMAGE_TAG"
+            echo "   Tags cannot contain '/' characters"
+            exit 1
+          fi
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "📦 Image tag: $IMAGE_TAG"
+
+      - name: Validate production deployment is a tag
+        if: github.event.inputs.environment == 'production'
+        run: |
+          REF="${{ github.event.inputs.ref }}"
+          # Accept both full refs (refs/tags/v1.2.3) and plain tags (v1.2.3)
+          if [[ "$REF" =~ ^refs/tags/ ]]; then
+            TAG_NAME="${REF#refs/tags/}"
+          elif [[ "$REF" =~ ^v[0-9]+\. ]]; then
+            TAG_NAME="$REF"
+          else
+            echo "❌ Production deployments must use a release tag"
+            echo "   Accepted formats: refs/tags/v1.2.3 or v1.2.3"
+            echo "   Provided ref: $REF"
+            exit 1
+          fi
+          echo "✅ Production deployment ref validated: $TAG_NAME"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_CLIENT_SECRET }}
+          tags: tag:ci
+          version: latest
+
+      - name: Trigger Deployment
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          APP_PORT: ${{ vars.APP_PORT }}
+          PHX_HOST: ${{ vars.PHX_HOST }}
+          SSH_HOST: ${{ vars.SERVER_TAILSCALE_HOST }}
+          SSH_USER: ${{ vars.SERVER_USER }}
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
+          MAIL_USER: ${{ vars.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          RAW_REF: ${{ github.event.workflow_run.head_sha || github.event.inputs.ref || github.ref_name }}
+          DEPLOY_ENV: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
+        run: |
+          tailscale ssh "$SSH_USER@$SSH_HOST" << EOF
+            export APP_NAME="$APP_NAME"
+            export APP_PORT="$APP_PORT"
+            export IMAGE="$IMAGE"
+            export POSTGRES_USER="$POSTGRES_USER"
+            export POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
+            export POSTGRES_DB="$POSTGRES_DB"
+            export DATABASE_URL="ecto://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}"
+            export SECRET_KEY_BASE="$SECRET_KEY_BASE"
+            export PHX_HOST="$PHX_HOST"
+            export MAIL_USER="$MAIL_USER"
+            export MAIL_PASSWORD="$MAIL_PASSWORD"
+
+            # Normalize TARGET_REF by stripping refs/tags/ prefix if present
+            TARGET_REF="$RAW_REF"
+            TARGET_REF="${TARGET_REF#refs/tags/}"
+            export TARGET_REF
+
+            echo "📥 Pulling latest repository..."
+            cd "\$HOME/apps/$APP_NAME/"
+            git fetch origin --prune
+            git fetch origin --tags --force
+
+            # Handle SHA (workflow_run), tags, and branches correctly
+            if [[ "$TARGET_REF" =~ ^[a-f0-9]{40}$ ]]; then
+              # TARGET_REF is a SHA (40-character hex), use detached checkout
+              echo "📋 Checking out commit: $TARGET_REF"
+              git checkout --force "$TARGET_REF"
+            elif git rev-parse -q --verify "refs/tags/$TARGET_REF" >/dev/null 2>&1; then
+              echo "📋 Checking out tag: $TARGET_REF"
+              git checkout --force "refs/tags/$TARGET_REF"
+            else
+              echo "📋 Checking out branch: $TARGET_REF"
+              git checkout --force "$TARGET_REF"
+              git reset --hard "origin/$TARGET_REF"
+            fi
+
+            cd deploy/
+
+            if [ "$DEPLOY_ENV" = "production" ]; then
+              make deploy.production
+            else
+              make deploy.testing
+            fi
+          EOF
+
+      - name: Deployment Summary
+        run: |
+          echo "✅ Deployment completed successfully"
+          echo "Environment: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}"
+          echo "Image: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.image_tag.outputs.image_tag }}"
