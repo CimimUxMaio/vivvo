@@ -64,12 +64,30 @@ jobs:
 
           if [[ "${{ env.ENVIRONMENT }}" == "production" ]] && ! [[ "$REF" == refs/tags/* ]]; then
               echo "❌ Invalid production ref: $REF"
-              echo "   Ref should be a github tag."
+              echo "   Ref should be a GitHub tag."
               exit 1
           fi
 
           if [[ "${{ env.ENVIRONMENT }}" == "production" ]]; then
             IMAGE_TAG="${REF#refs/tags/}"
+
+            if [[ -z "$IMAGE_TAG" ]]; then
+              echo "❌ Invalid Docker image tag derived from ref: $REF"
+              echo "   Tag name cannot be empty."
+              exit 1
+            fi
+
+            if [[ "$IMAGE_TAG" == *"/"* ]]; then
+              echo "❌ Invalid Docker image tag derived from ref: $REF"
+              echo "   Docker tags must not contain '/'."
+              exit 1
+            fi
+
+            if ! [[ "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "❌ Invalid Docker image tag derived from ref: $REF"
+              echo "   Tag '$IMAGE_TAG' must match ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+              exit 1
+            fi
           else
             IMAGE_TAG="testing"
           fi
@@ -150,8 +168,14 @@ jobs:
             git fetch origin --prune
             git fetch origin --tags --force
 
-            echo "📋 Checking out ref: $REF"
-            git checkout --force "$REF"
+            if [[ "$REF" == refs/heads/* ]]; then
+              BRANCH="${REF#refs/heads/}"
+              echo "📋 Checking out branch from origin: $BRANCH"
+              git checkout --force -B "$BRANCH" "origin/$BRANCH"
+            else
+              echo "📋 Checking out ref: $REF"
+              git checkout --force "$REF"
+            fi
 
             cd deploy/
 
