@@ -22,13 +22,13 @@ on:
   release:
     types: [published]
 
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
+  cancel-in-progress: true
+
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment || (github.event_name == 'release' && 'production') || 'testing' }}
   IMAGE_NAME: vivvo
-
-concurrency:
-  group: deploy-${{ env.ENVIRONMENT }}
-  cancel-in-progress: true
 
 jobs:
   deploy:
