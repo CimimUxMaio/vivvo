@@ -187,16 +187,18 @@ defmodule VivvoWeb.PropertyLive.Index do
 
                 <%!-- Card Actions --%>
                 <div class="flex items-center gap-2 pt-3 border-t border-base-200" phx-stop>
-                  <.link
+                  <.button
                     navigate={~p"/properties/#{property}/edit"}
-                    class="btn btn-outline btn-sm flex-1"
+                    variant="primary"
+                    class="btn-sm flex-1"
                   >
                     <.icon name="hero-pencil" class="w-4 h-4 mr-1" /> Edit
-                  </.link>
+                  </.button>
+
                   <button
                     phx-click={JS.push("delete", value: %{id: property.id})}
                     data-confirm="Are you sure you want to delete this property?"
-                    class="btn btn-error btn-outline btn-sm flex-1"
+                    class="btn btn-soft btn-error btn-sm flex-1"
                   >
                     <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete
                   </button>
