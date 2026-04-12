@@ -999,7 +999,7 @@ defmodule VivvoWeb.CoreComponents do
     <div id={@id} class={["flex p-1 relative", @class]} data-selected={@value}>
       <%!-- Sliding background indicator --%>
       <div
-        class="absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-lg shadow-sm transition-all duration-300 ease-out top-1"
+        class="absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-box shadow-sm transition-all duration-300 ease-out top-1"
         style={"width: calc(#{@option_width}% - 0.5rem); left: calc(#{@indicator_left}% + 0.25rem);"}
       />
 
@@ -1009,7 +1009,7 @@ defmodule VivvoWeb.CoreComponents do
           phx-click={@on_select}
           phx-value-selected={option.value}
           class={[
-            "flex-1 relative z-10 py-1.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer",
+            "flex-1 relative z-10 py-1.5 px-4 text-sm font-medium rounded-box transition-colors duration-200 cursor-pointer",
             "flex items-center justify-center gap-2",
             @value == option.value && "text-primary",
             @value != option.value && "text-base-content/60 hover:text-base-content"
