@@ -113,8 +113,12 @@ defmodule VivvoWeb.Layouts do
                   />
                 <% end %>
 
-                <div class="relative group">
-                  <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200 transition-colors cursor-pointer">
+                <div class="dropdown dropdown-end dropdown-hover">
+                  <div
+                    tabindex="0"
+                    role="button"
+                    class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                  >
                     <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <span class="text-sm font-bold text-primary">
                         {String.first(@current_scope.user.first_name || "U")}
@@ -124,46 +128,47 @@ defmodule VivvoWeb.Layouts do
                       {@current_scope.user.first_name}
                     </span>
                     <.icon name="hero-chevron-down" class="w-4 h-4" />
-                  </button>
+                  </div>
 
                   <%!-- Dropdown Menu --%>
-                  <div class="absolute right-0 mt-2 w-56 bg-base-100 rounded-xl shadow-lg border border-base-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div class="p-2">
-                      <%!-- User Info --%>
-                      <div class="px-3 py-2 border-b border-base-200 mb-1">
-                        <p class="font-medium text-sm">
-                          {@current_scope.user.first_name} {@current_scope.user.last_name}
-                        </p>
-                        <p class="text-xs text-base-content/60 truncate">
-                          {@current_scope.user.email}
-                        </p>
-                      </div>
-
-                      <%!-- Theme Selector --%>
-                      <div class="px-3 py-2">
-                        <p class="text-xs font-medium text-base-content/60 mb-2 uppercase tracking-wider">
-                          Theme
-                        </p>
-                        <.theme_toggle_compact />
-                      </div>
-
-                      <div class="border-t border-base-200 my-1"></div>
-
-                      <%!-- Menu Items --%>
-                      <.link
-                        href={~p"/users/settings"}
-                        class="flex items-center gap-2 px-3 py-2 text-sm text-base-content hover:bg-base-200 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
-                      </.link>
-                      <.link
-                        href={~p"/users/log-out"}
-                        method="delete"
-                        class="flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
-                      </.link>
+                  <div
+                    tabindex="-1"
+                    class="dropdown-content bg-base-100 rounded-xl shadow-lg border border-base-200 z-1 w-56 p-2"
+                  >
+                    <%!-- User Info --%>
+                    <div class="px-3 py-2 border-b border-base-200 mb-1">
+                      <p class="font-medium text-sm">
+                        {@current_scope.user.first_name} {@current_scope.user.last_name}
+                      </p>
+                      <p class="text-xs text-base-content/60 truncate">
+                        {@current_scope.user.email}
+                      </p>
                     </div>
+
+                    <%!-- Theme Selector --%>
+                    <div class="px-3 py-2">
+                      <p class="text-xs font-medium text-base-content/60 mb-2 uppercase tracking-wider">
+                        Theme
+                      </p>
+                      <.theme_toggle_compact />
+                    </div>
+
+                    <div class="border-t border-base-200 my-1"></div>
+
+                    <%!-- Menu Items --%>
+                    <.link
+                      href={~p"/users/settings"}
+                      class="flex items-center gap-2 px-3 py-2 text-sm text-base-content hover:bg-base-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
+                    </.link>
+                    <.link
+                      href={~p"/users/log-out"}
+                      method="delete"
+                      class="flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+                    </.link>
                   </div>
                 </div>
               <% else %>
