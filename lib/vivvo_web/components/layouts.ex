@@ -62,7 +62,7 @@ defmodule VivvoWeb.Layouts do
   def navbar(assigns) do
     ~H"""
     <header
-      class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm transition-all duration-300 ease-in-out"
+      class="sticky top-0 z-40 bg-base-100 border-b border-base-200 shadow-sm transition-all duration-300 ease-in-out relative"
       id="main-header"
     >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -189,7 +189,7 @@ defmodule VivvoWeb.Layouts do
       <%!-- Mobile Menu --%>
       <div
         id="mobile-menu"
-        class="md:hidden border-t border-base-200 bg-base-100 overflow-hidden transition-all duration-300 ease-in-out max-h-0"
+        class="md:hidden absolute top-full left-0 right-0 border-t border-base-200 bg-base-100 shadow-lg overflow-hidden transition-all duration-300 ease-in-out max-h-0"
       >
         <div class="px-4 py-3 space-y-2">
           <%= if @current_scope && Scope.owner?(@current_scope) do %>
