@@ -78,7 +78,7 @@ defmodule VivvoWeb.Layouts do
               <%= if @current_scope && Scope.owner?(@current_scope) do %>
                 <.link
                   href={~p"/properties"}
-                  class="px-3 py-2 text-sm font-medium text-base-content/70 hover:text-primary rounded-lg hover:bg-base-200/50 transition-colors"
+                  class="px-3 py-2 text-sm font-medium text-base-content/70 hover:text-primary rounded-lg hover:bg-base-200 transition-colors"
                 >
                   <span class="flex items-center gap-2">
                     <.icon name="hero-building-office" class="w-4 h-4" /> Properties
@@ -114,7 +114,7 @@ defmodule VivvoWeb.Layouts do
                 <% end %>
 
                 <div class="relative group">
-                  <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200/50 transition-colors cursor-pointer">
+                  <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-base-content/70 hover:text-base-content rounded-lg hover:bg-base-200 transition-colors cursor-pointer">
                     <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <span class="text-sm font-bold text-primary">
                         {String.first(@current_scope.user.first_name || "U")}
@@ -210,6 +210,19 @@ defmodule VivvoWeb.Layouts do
                 </p>
                 <p class="text-sm text-base-content/60">{@current_scope.user.email}</p>
               </div>
+
+              <%= if length(@current_scope.user.preferred_roles) > 1 do %>
+                <div class="px-3 py-2">
+                  <p class="text-xs font-medium text-base-content/60 mb-2 uppercase tracking-wider">
+                    Role
+                  </p>
+                  <.live_component
+                    module={VivvoWeb.Components.RoleSelector}
+                    id="menu-role-selector"
+                    user={@current_scope.user}
+                  />
+                </div>
+              <% end %>
 
               <%!-- Mobile Theme Selector --%>
               <div class="px-3 py-2">
@@ -346,7 +359,7 @@ defmodule VivvoWeb.Layouts do
   """
   def theme_toggle_compact(assigns) do
     ~H"""
-    <div class="relative grid grid-cols-3 gap-1 bg-base-200/50 rounded-lg p-1">
+    <div class="relative grid grid-cols-3 gap-1 bg-base-200 rounded-lg p-1">
       <%!-- Sliding background indicator --%>
       <div class={[
         "absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-md shadow-sm transition-all duration-300 ease-out top-1",

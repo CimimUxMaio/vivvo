@@ -13,43 +13,25 @@ defmodule VivvoWeb.Components.RoleSelector do
 
   @impl true
   def render(assigns) do
-    assigns = assign(assigns, :role_count, length(assigns.user.preferred_roles))
-
     ~H"""
-    <div id={@id} class="relative">
-      <div class="relative flex items-center bg-base-200/50 rounded-lg p-1 gap-0.5">
-        <%!-- Sliding background indicator --%>
-        <div
-          class={[
-            "absolute h-[calc(100%-0.5rem)] bg-base-100 rounded-md shadow-sm transition-all duration-300 ease-out",
-            "top-1"
-          ]}
-          style={slider_position_style(@user.current_role, @user.preferred_roles)}
-        />
-
-        <%= for role <- @user.preferred_roles do %>
-          <button
-            type="button"
-            phx-click="switch_role"
-            phx-value-role={role}
-            phx-target={@myself}
-            class={[
-              "relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-200 cursor-pointer",
-              @user.current_role == role && "text-primary",
-              @user.current_role != role && "text-base-content/60 hover:text-base-content"
-            ]}
-          >
-            <.role_icon role={role} />
-            <span>{format_role_name(role)}</span>
-          </button>
-        <% end %>
-      </div>
+    <div id={@id}>
+      <.sliding_selector
+        value={to_string(@user.current_role)}
+        on_select="switch_role"
+        phx-target={@myself}
+        class="bg-base-200 rounded-lg"
+      >
+        <:option :for={role <- @user.preferred_roles} value={to_string(role)}>
+          <.role_icon role={role} />
+          <span>{format_role_name(role)}</span>
+        </:option>
+      </.sliding_selector>
     </div>
     """
   end
 
   @impl true
-  def handle_event("switch_role", %{"role" => role}, socket) do
+  def handle_event("switch_role", %{"selected" => role}, socket) do
     user = socket.assigns.user
 
     # Only update if the role is valid and different from current
@@ -75,18 +57,6 @@ defmodule VivvoWeb.Components.RoleSelector do
     role
     |> Atom.to_string()
     |> String.capitalize()
-  end
-
-  defp slider_position_style(current_role, preferred_roles) do
-    # Calculate the position of the active role
-    role_index = Enum.find_index(preferred_roles, &(&1 == current_role)) || 0
-    role_count = length(preferred_roles)
-
-    # Each role takes equal width
-    width_percentage = 100 / role_count
-    left_position = role_index * width_percentage
-
-    "width: calc(#{width_percentage}% - 0.5rem); left: calc(#{left_position}% + 0.25rem);"
   end
 
   defp role_icon(assigns) do
