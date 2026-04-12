@@ -976,6 +976,7 @@ defmodule VivvoWeb.CoreComponents do
   attr :value, :string, required: true, doc: "the currently selected option value"
   attr :on_select, :any, required: true, doc: "phx-click event name or JS command for selection"
   attr :class, :string, default: "bg-base-200 rounded-xl", doc: "container CSS classes"
+  attr :rest, :global, doc: "additional attributes to pass to each option button"
 
   slot :option, required: true do
     attr :value, :string, required: true, doc: "the option value"
@@ -1008,11 +1009,12 @@ defmodule VivvoWeb.CoreComponents do
           phx-click={@on_select}
           phx-value-selected={option.value}
           class={[
-            "flex-1 relative z-10 py-2.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer",
+            "flex-1 relative z-10 py-1.5 px-4 text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer",
             "flex items-center justify-center gap-2",
             @value == option.value && "text-primary",
             @value != option.value && "text-base-content/60 hover:text-base-content"
           ]}
+          {@rest}
         >
           {render_slot(option)}
         </button>
