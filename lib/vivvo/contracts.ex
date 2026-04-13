@@ -1477,22 +1477,31 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
-  Returns a list of contracts whose latest rent period ends in the given month
+  Returns a list of contracts whose latest rent period ended in the previous month
   and need a new rent period created. Used by the monthly scheduler worker.
+
+  The function automatically calculates the previous month from the given date,
+  so when called on the 1st of a month, it finds contracts whose latest period
+  ended in the previous month and need a new period created.
 
   Filters for:
   - Non-archived contracts that haven't ended
   - Contracts with index_type and rent_period_duration configured
-  - Latest rent period ends in the current month
+  - Latest rent period ends in the previous month (relative to today)
   - Contract extends beyond the latest period's end date
 
   ## Examples
 
-      iex> contracts_needing_update(~D[2026-05-25])
+      iex> contracts_needing_update(~D[2026-05-01])  # Finds periods ending in April
       [1, 2, 3, ...]
 
   """
   def contracts_needing_update(%Date{} = today) do
+    # Calculate the last day of the previous month
+    # On April 1st, this gives us March 31st
+    # Contracts needing update are those whose latest period ended in March
+    previous_month_reference = Date.add(today, -today.day)
+
     # Subquery to get the latest rent period end_date for each contract
     latest_periods_query =
       from(rp in RentPeriod,
@@ -1510,9 +1519,19 @@ defmodule Vivvo.Contracts do
       where: c.end_date > ^today,
       where: not is_nil(c.rent_period_duration),
       where: not is_nil(c.index_type),
-      # Latest period ends in current month
-      where: fragment("EXTRACT(YEAR FROM ?) = ?", latest.latest_end_date, ^today.year),
-      where: fragment("EXTRACT(MONTH FROM ?) = ?", latest.latest_end_date, ^today.month),
+      # Latest period ends in the previous month
+      where:
+        fragment(
+          "EXTRACT(YEAR FROM ?) = ?",
+          latest.latest_end_date,
+          ^previous_month_reference.year
+        ),
+      where:
+        fragment(
+          "EXTRACT(MONTH FROM ?) = ?",
+          latest.latest_end_date,
+          ^previous_month_reference.month
+        ),
       # Contract extends beyond the latest period's end date
       where: c.end_date > latest.latest_end_date
     )
