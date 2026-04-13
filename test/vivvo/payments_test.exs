@@ -101,6 +101,26 @@ defmodule Vivvo.PaymentsTest do
       assert {:error, :contract_needs_update} = Payments.create_payment(scope, attrs)
     end
 
+    test "create_payment/2 returns changeset error when contract belongs to another tenant" do
+      # Create two different tenant scopes
+      scope = user_scope_fixture()
+      other_scope = user_scope_fixture()
+
+      # Create a contract that belongs to the OTHER tenant
+      other_contract = contract_fixture(other_scope, %{tenant_id: other_scope.user.id})
+
+      # Attempt to create a payment for the other tenant's contract
+      attrs = %{
+        status: :pending,
+        amount: "500.00",
+        payment_number: 1,
+        contract_id: other_contract.id
+      }
+
+      # Unauthorized contract_id is stripped, so it returns same error as missing contract_id
+      assert {:error, %Ecto.Changeset{}} = Payments.create_payment(scope, attrs)
+    end
+
     test "update_payment/3 with valid data updates the payment" do
       scope = user_scope_fixture()
       payment = payment_fixture(scope)
