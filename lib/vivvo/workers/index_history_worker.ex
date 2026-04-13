@@ -69,7 +69,8 @@ defmodule Vivvo.Workers.IndexHistoryWorker do
     end)
     |> Enum.reduce_while({:ok, []}, fn
       {:ok, histories}, {:ok, acc} ->
-        {:cont, {:ok, acc ++ histories}}
+        # Prepend to avoid O(n^2) complexity from repeated concatenation
+        {:cont, {:ok, Enum.reverse(histories, acc)}}
 
       {:ok, _}, {:error, reason} ->
         {:halt, {:error, reason}}
@@ -77,5 +78,9 @@ defmodule Vivvo.Workers.IndexHistoryWorker do
       {:error, reason}, _acc ->
         {:halt, {:error, reason}}
     end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
   end
 end
