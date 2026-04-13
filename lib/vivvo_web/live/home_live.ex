@@ -341,6 +341,11 @@ defmodule VivvoWeb.HomeLive do
          |> assign(:selected_contract, selected_contract)
          |> put_flash(:info, success_message)}
 
+      {:error, :contract_needs_update} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Contract rent is being updated. Please try again shortly.")}
+
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, payment_form: to_form(changeset))}
     end
