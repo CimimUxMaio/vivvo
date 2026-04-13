@@ -72,9 +72,6 @@ defmodule Vivvo.Workers.IndexHistoryWorker do
         # Prepend to avoid O(n^2) complexity from repeated concatenation
         {:cont, {:ok, Enum.reverse(histories, acc)}}
 
-      {:ok, _}, {:error, reason} ->
-        {:halt, {:error, reason}}
-
       {:error, reason}, _acc ->
         {:halt, {:error, reason}}
     end)
