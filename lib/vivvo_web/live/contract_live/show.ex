@@ -422,7 +422,7 @@ defmodule VivvoWeb.ContractLive.Show do
     else
       next_update = Contracts.next_rent_update_date(contract)
       days_until = Contracts.days_until_next_update(contract)
-      current_rent = Contracts.current_rent_value(contract)
+      current_rent = Contracts.latest_rent_value(contract)
 
       chart_data = Contracts.generate_rent_chart_data(contract, today)
       chart_labels_json = Jason.encode!(chart_data.labels)

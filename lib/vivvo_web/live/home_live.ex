@@ -882,7 +882,7 @@ defmodule VivvoWeb.HomeLive do
                   </td>
                   <td class="px-4 py-3 text-right font-medium">
                     <%= if metric.state in [:occupied, :upcoming] do %>
-                      {format_currency(Contracts.current_rent_value(metric.contract))}
+                      {format_currency(Contracts.latest_rent_value(metric.contract))}
                     <% else %>
                       <span class="text-base-content/30">-</span>
                     <% end %>
@@ -1046,7 +1046,7 @@ defmodule VivvoWeb.HomeLive do
         {nil, nil, :misc}
       else
         due_date = Contracts.calculate_due_date(contract, assigns.payment.payment_number)
-        expected_amount = Contracts.current_rent_value(contract, due_date)
+        expected_amount = Contracts.latest_rent_value(contract, due_date)
         paid_amount = assigns.payment.amount
 
         status =
@@ -1486,24 +1486,35 @@ defmodule VivvoWeb.HomeLive do
 
   # Tenant Dashboard Component (redesigned per issue #14)
   defp tenant_dashboard(assigns) do
+    # Pre-compute tenant dashboard data only when contracts exist
+    assigns =
+      if assigns.contracts != [] do
+        contract = assigns.selected_contract || List.first(assigns.contracts)
+
+        assign(assigns,
+          contract: contract,
+          contract_status: Contracts.contract_status(contract),
+          payment_status: Contracts.contract_payment_status(assigns.current_scope, contract),
+          total_due: Contracts.total_amount_due(assigns.current_scope, contract),
+          earliest_due: Contracts.earliest_due_date(assigns.current_scope, contract),
+          payment_statuses: Contracts.get_payment_statuses(assigns.current_scope, contract),
+          next_due_date: Contracts.next_payment_date(contract),
+          contract_needs_update: Contracts.needs_update?(contract)
+        )
+      else
+        assigns
+      end
+
     ~H"""
     <div class="space-y-6 sm:space-y-8">
       <%= if @contracts != [] do %>
-        <% contract = @selected_contract || List.first(@contracts)
-        contract_status = Contracts.contract_status(contract)
-        payment_status = Contracts.contract_payment_status(@current_scope, contract)
-        total_due = Contracts.total_amount_due(@current_scope, contract)
-        earliest_due = Contracts.earliest_due_date(@current_scope, contract)
-        payment_statuses = Contracts.get_payment_statuses(@current_scope, contract)
-        next_due_date = Contracts.next_payment_date(contract) %>
-
         <%!-- Page Header with New Misc Payment Action --%>
         <.page_header title="My Rentals" back_navigate={nil}>
           <:action
             icon="hero-plus"
             label="New Payment"
             phx-click="show_misc_payment_modal"
-            rest={["phx-value-contract_id": contract.id]}
+            rest={["phx-value-contract_id": @contract.id]}
           />
         </.page_header>
 
@@ -1514,34 +1525,32 @@ defmodule VivvoWeb.HomeLive do
 
         <%!-- A. Header: Current Situation Snapshot --%>
         <.situation_snapshot
-          contract={contract}
-          contract_status={contract_status}
-          payment_status={payment_status}
-          total_due={total_due}
-          earliest_due={earliest_due}
-          next_due_date={next_due_date}
+          contract={@contract}
+          contract_status={@contract_status}
+          payment_status={@payment_status}
+          total_due={@total_due}
+          earliest_due={@earliest_due}
+          next_due_date={@next_due_date}
         />
 
-        <%!-- B. Primary Action Zone --%>
-        <.primary_action_zone
-          contract={contract}
-          payment_status={payment_status}
-          total_due={total_due}
-          scope={@current_scope}
-        />
+        <%!-- Rent Update Warning (shown when contract needs update) --%>
+        <%= if @contract_needs_update do %>
+          <.rent_update_warning />
+        <% end %>
 
-        <%!-- C. Payments Overview --%>
+        <%!-- B. Payments Overview --%>
         <.payments_overview
-          contract={contract}
-          payment_statuses={payment_statuses}
+          contract={@contract}
+          payment_statuses={@payment_statuses}
           scope={@current_scope}
           current_expanded={@current_expanded}
           history_expanded={@history_expanded}
           expanded_payment_items={@expanded_payment_items}
+          contract_needs_update={@contract_needs_update}
         />
 
-        <%!-- D. Contract & Property Quick Access --%>
-        <.contract_quick_access contract={contract} contract_status={contract_status} />
+        <%!-- C. Contract & Property Quick Access --%>
+        <.contract_quick_access contract={@contract} contract_status={@contract_status} />
 
         <%!-- Submit Payment Modal --%>
         <%= if @submitting_payment do %>
@@ -1638,6 +1647,25 @@ defmodule VivvoWeb.HomeLive do
             </div>
           </button>
         <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  # Rent Update Warning Component
+  defp rent_update_warning(assigns) do
+    ~H"""
+    <div class="p-4 bg-warning/10 rounded-lg border border-warning/20">
+      <div class="flex items-start gap-3">
+        <.icon name="hero-clock" class="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+        <div>
+          <p class="text-sm font-medium text-warning">
+            Rent update in progress
+          </p>
+          <p class="text-sm text-base-content/70">
+            Your rent is being recalculated for the new period. Payment submissions are temporarily disabled. Please check back shortly.
+          </p>
+        </div>
       </div>
     </div>
     """
@@ -1745,84 +1773,6 @@ defmodule VivvoWeb.HomeLive do
     """
   end
 
-  # Primary Action Zone Component
-  defp primary_action_zone(assigns) do
-    has_amount_due? = Decimal.gt?(assigns.total_due, Decimal.new(0))
-
-    cta_info =
-      cond do
-        # PRIORITY 1: Submit payment takes precedence over viewing pending
-        has_amount_due? ->
-          month = get_earliest_unpaid_month(assigns.contract)
-          build_submit_payment_cta(month, assigns.contract)
-
-        # PRIORITY 2: Check if any payment is pending validation (only when no amount due)
-        has_pending_payment?(assigns.contract.payments) ->
-          {:view_pending, "View Pending Payment", "hero-eye", nil, nil}
-
-        # All caught up - don't render the action zone
-        true ->
-          nil
-      end
-
-    # Don't render anything if tenant is all caught up
-    if cta_info == nil do
-      ~H"""
-      """
-    else
-      {cta_type, cta_text, cta_icon, contract_id, month} = cta_info
-
-      assigns =
-        assign(assigns,
-          cta_type: cta_type,
-          cta_text: cta_text,
-          cta_icon: cta_icon,
-          contract_id: contract_id,
-          month: month
-        )
-
-      ~H"""
-      <div class="bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl p-6 border border-primary/20">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 class="text-lg font-semibold text-base-content">What do you need to do?</h2>
-            <p class="text-sm text-base-content/70 mt-1">
-              <%= case @cta_type do %>
-                <% :submit_payment -> %>
-                  You have an outstanding payment. Submit it now to avoid late fees.
-                <% :view_pending -> %>
-                  Your payment is being reviewed. You'll be notified when it's processed.
-              <% end %>
-            </p>
-          </div>
-
-          <%= if @cta_type == :submit_payment do %>
-            <.button
-              phx-click="show_payment_modal"
-              phx-value-contract-id={@contract_id}
-              phx-value-month={@month}
-              variant="primary"
-              class="shadow-lg shadow-primary/25 whitespace-nowrap"
-            >
-              <.icon name={@cta_icon} class="w-5 h-5 mr-2" />
-              {@cta_text}
-            </.button>
-          <% else %>
-            <.button
-              phx-click={JS.dispatch("scroll_to", detail: %{id: "current-payments"})}
-              variant="primary"
-              class="shadow-lg shadow-primary/25 whitespace-nowrap"
-            >
-              <.icon name={@cta_icon} class="w-5 h-5 mr-2" />
-              {@cta_text}
-            </.button>
-          <% end %>
-        </div>
-      </div>
-      """
-    end
-  end
-
   # Payments Overview Component
   defp payments_overview(assigns) do
     # Separate into categories
@@ -1879,6 +1829,7 @@ defmodule VivvoWeb.HomeLive do
                   contract={@contract}
                   scope={@scope}
                   expanded_items={@expanded_payment_items}
+                  contract_needs_update={@contract_needs_update}
                 />
               <% end %>
             </div>
@@ -1939,7 +1890,11 @@ defmodule VivvoWeb.HomeLive do
   # Payment Overview Item Component
   defp payment_overview_item(assigns) do
     show_actions = Map.get(assigns, :show_actions, true)
-    can_submit = assigns.item.status in [:unpaid, :partial] && show_actions
+    contract_needs_update = Map.get(assigns, :contract_needs_update, false)
+
+    can_submit =
+      assigns.item.status in [:unpaid, :partial] && show_actions && not contract_needs_update
+
     is_expanded = MapSet.member?(assigns.expanded_items, assigns.item.payment_number)
     has_payments = assigns.item.payments != []
     payment_count = length(assigns.item.payments)
@@ -2277,7 +2232,7 @@ defmodule VivvoWeb.HomeLive do
           <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
             <.icon name="hero-banknotes" class="w-5 h-5 text-base-content/50" />
             <span class="font-semibold text-base-content flex items-center gap-2">
-              {format_currency(Contracts.current_rent_value(@contract))}
+              {format_currency(Contracts.latest_rent_value(@contract))}
               <%= if @contract.index_type do %>
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
                   <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
@@ -2409,23 +2364,6 @@ defmodule VivvoWeb.HomeLive do
 
   # Helper functions for tenant dashboard
 
-  defp has_pending_payment?(payments) do
-    Enum.any?(payments, &(&1.status == :pending))
-  end
-
-  # Builds submit payment CTA or falls back to pending payment check
-  defp build_submit_payment_cta(nil, contract) do
-    if has_pending_payment?(contract.payments) do
-      {:view_pending, "View Pending Payment", "hero-eye", nil, nil}
-    else
-      nil
-    end
-  end
-
-  defp build_submit_payment_cta(month, contract) do
-    {:submit_payment, "Submit Payment", "hero-credit-card", contract.id, month}
-  end
-
   # Returns true if the payment item is for the current payment period
   defp current_payment_month?(item, contract) do
     current_payment_num = Contracts.get_current_payment_number(contract)
@@ -2453,27 +2391,6 @@ defmodule VivvoWeb.HomeLive do
       true ->
         %{icon: "hero-clock", bg_color: "bg-base-200", text_color: "text-base-content/50"}
     end
-  end
-
-  defp get_earliest_unpaid_month(contract) do
-    current_payment_num = Contracts.get_current_payment_number(contract)
-    today = Date.utc_today()
-
-    1..current_payment_num
-    |> Enum.filter(fn num ->
-      due_date = Contracts.calculate_due_date(contract, num)
-
-      # Skip future months
-      if Date.compare(today, due_date) == :lt do
-        false
-      else
-        # Check if month still has remaining amount to pay
-        # (considering both accepted AND pending payments)
-        remaining = get_remaining_amount(contract, num)
-        Decimal.gt?(remaining, Decimal.new(0))
-      end
-    end)
-    |> List.first()
   end
 
   # Calculates all display values for a trend bar item.
@@ -2512,21 +2429,11 @@ defmodule VivvoWeb.HomeLive do
     end)
   end
 
-  # Returns the remaining amount to pay for a specific month.
-  # This is the efficient single-purpose function for checking if payment is needed.
-  defp get_remaining_amount(contract, month) do
-    {accepted_total, pending_total} = calculate_payment_totals(contract, month)
-    due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.current_rent_value(contract, due_date)
-    Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
-  end
-
   # Returns a full summary map for display purposes (templates).
-  # Use get_remaining_amount/2 when you only need the remaining balance.
   defp calculate_payment_summary(contract, month) do
     {accepted_total, pending_total} = calculate_payment_totals(contract, month)
     due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.current_rent_value(contract, due_date)
+    rent = Contracts.latest_rent_value(contract, due_date)
     remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
 
     %{

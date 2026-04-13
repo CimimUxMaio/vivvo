@@ -215,7 +215,7 @@ defmodule VivvoWeb.PropertyLive.Show do
             <div class="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
               <.icon name="hero-banknotes" class="w-5 h-5 text-base-content/50" />
               <span class="font-semibold text-base-content flex items-center gap-2">
-                {format_currency(Contracts.current_rent_value(@contract))}
+                {format_currency(Contracts.latest_rent_value(@contract))}
                 <%= if @contract.index_type do %>
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-info/10 text-info rounded-full text-xs font-medium">
                     <.icon name="hero-arrow-trending-up" class="w-3 h-3" /> Indexed
@@ -415,7 +415,7 @@ defmodule VivvoWeb.PropertyLive.Show do
                 <div class="flex items-center justify-between sm:block">
                   <p class="text-xs text-base-content/50 sm:mb-0.5">Monthly Rent</p>
                   <p class="font-semibold text-base-content">
-                    {format_currency(Contracts.current_rent_value(contract))}
+                    {format_currency(Contracts.latest_rent_value(contract))}
                   </p>
                 </div>
 
