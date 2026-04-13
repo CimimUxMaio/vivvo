@@ -145,6 +145,16 @@ defmodule Vivvo.Payments do
     contract_id = Map.get(attrs, "contract_id") || Map.get(attrs, :contract_id)
     contract = if contract_id, do: Contracts.get_contract_for_tenant(scope, contract_id)
 
+    # Strip unauthorized contract_id to ensure consistent error handling.
+    # If contract_id is provided but contract is nil (not found for tenant),
+    # we remove it so the changeset returns the same error as if no contract_id was provided.
+    attrs =
+      if contract_id != nil && contract == nil do
+        Map.delete(attrs, "contract_id") |> Map.delete(:contract_id)
+      else
+        attrs
+      end
+
     with :ok <- validate_contract_needs_update(contract) do
       multi =
         Ecto.Multi.new()
