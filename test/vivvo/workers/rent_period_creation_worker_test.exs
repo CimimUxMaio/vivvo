@@ -1,5 +1,5 @@
 defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
-  use Vivvo.DataCase, async: true
+  use Vivvo.DataCase, async: false
 
   alias Vivvo.Contracts
   alias Vivvo.Contracts.Contract
@@ -12,45 +12,39 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
   import Vivvo.AccountsFixtures
 
   describe "perform/1" do
-    test "creates rent period when target period ends in scheduler's month" do
+    test "creates rent period when target period ends in previous month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
 
-      # Create a contract that started 5 months ago with 6-month duration
-      # This generates a period ending this month (current month)
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 1000),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      # Find the period ending this month
-      target_period =
-        Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
-        end)
+      # Verify the latest period ends in previous month (June 30)
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == last_month_end
 
-      assert target_period != nil
-
-      expected_new_start = Date.add(target_period.end_date, 1)
-      today_string = Date.to_iso8601(today)
+      expected_new_start = Date.add(latest_period.end_date, 1)
 
       assert {:ok, %RentPeriod{} = rent_period} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
-                 today: today_string
+                 today: Date.to_iso8601(today)
                })
 
       assert rent_period.start_date == expected_new_start
@@ -61,26 +55,25 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "is idempotent - returns :already_exists when run twice with same today" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      # Create a contract with period ending this month
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 1000),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       initial_count = length(Contracts.get_contract!(scope, contract.id).rent_periods)
@@ -109,24 +102,24 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "respects contract boundaries" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
+            start_date: contract_start,
             end_date: Date.add(today, 365),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
       today_string = Date.to_iso8601(today)
@@ -146,26 +139,36 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert rent_period.end_date == expected_end
     end
 
-    test "returns :period_not_found when no period ends in scheduler's month" do
+    test "returns :period_not_found when no period ends in previous month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
 
-      # Create a contract starting today (no period ends this month)
+      # Fixed dates: April 1st as "today"
+      # For 6-month duration starting Jan 1: period ends June 30
+      # On April 1, the period ends in June (future), not March (previous)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-04-01]
+      future_date = Date.add(today, 60)
+      future_date_string = Date.to_iso8601(future_date)
+
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: today,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
-          }
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.03"),
+          today: today
         )
 
-      # Try to run with a date in the future where no period ends
-      future_date = Date.add(today, 60)
-      future_date_string = Date.to_iso8601(future_date)
+      # Verify period ends in June, not March
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == ~D[2023-06-30]
 
+      # Try to run with a date in the future where no period ends in previous month
       assert {:ok, :period_not_found} =
                perform_job(RentPeriodCreationWorker, %{
                  contract_id: contract.id,
@@ -175,18 +178,17 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "creates rent period with update factor from Indexes module" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      # Create IPC history so Indexes.compute_update_factor returns a value
-      previous_month_end =
-        today
-        |> Date.beginning_of_month()
-        |> Date.add(-1)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Create IPC history entries for the period
+      # IPC needs history at the period start and previous month
       for i <- 1..2 do
-        date = Date.shift(previous_month_end, month: -i + 1) |> Date.beginning_of_month()
+        date = last_month_end |> Date.shift(month: -i + 1) |> Date.beginning_of_month()
 
         Indexes.create_index_history(%{
           type: :ipc,
@@ -195,28 +197,26 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
         })
       end
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       target_period =
         Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
+          p.end_date == last_month_end
         end)
+
+      assert target_period != nil
 
       # Get expected update factor from Indexes module
       expected_factor = Indexes.compute_update_factor(:ipc, target_period.start_date, today)
@@ -239,7 +239,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "returns contract_not_found when contract does not exist" do
       non_existent_id = 99_999_999
-      today_string = Date.to_iso8601(Date.utc_today())
+      today_string = Date.to_iso8601(~D[2023-07-01])
 
       assert {:ok, :contract_not_found} =
                perform_job(RentPeriodCreationWorker, %{
@@ -250,25 +250,25 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "returns contract_not_found when contract is archived" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
       Repo.update!(Contract.archive_changeset(contract, scope))
@@ -282,47 +282,45 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "creates period with ICL update factor using ratio calculation" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
       today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Create ICL history - need values at different dates
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
-      previous_month = Date.shift(today, month: -1) |> Date.beginning_of_month()
-
-      # Create historical ICL value
-      Vivvo.Indexes.create_index_history(%{
+      # Create historical ICL value at contract start
+      Indexes.create_index_history(%{
         type: :icl,
         value: Decimal.new("100.00"),
-        date: five_months_ago
+        date: contract_start
       })
 
-      # Create more recent ICL value
-      Vivvo.Indexes.create_index_history(%{
+      # Create ICL value at previous month (June 2023)
+      Indexes.create_index_history(%{
         type: :icl,
         value: Decimal.new("110.00"),
-        date: previous_month
+        date: Date.beginning_of_month(last_month_end)
       })
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
       target_period =
         Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
+          p.end_date == last_month_end
         end)
 
       assert target_period != nil
@@ -345,21 +343,18 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "handles ICL when historical value is missing - raises error" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Only create recent ICL history, not historical
-      previous_month = Date.shift(today, month: -1) |> Date.beginning_of_month()
-
-      Vivvo.Indexes.create_index_history(%{
+      Indexes.create_index_history(%{
         type: :icl,
         value: Decimal.new("110.00"),
-        date: previous_month
+        date: Date.beginning_of_month(last_month_end)
       })
 
       # Don't create historical ICL value at contract start date
@@ -368,13 +363,14 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
       # Should raise ArgumentError when historical ICL is missing
@@ -388,34 +384,31 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "ICL and IPC produce different update factors for same contract timing" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
       today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
-      previous_month = Date.shift(today, month: -1) |> Date.beginning_of_month()
-
-      # Create IPC history
-      Vivvo.Indexes.create_index_history(%{
+      # Create IPC history at previous month
+      Indexes.create_index_history(%{
         type: :ipc,
         value: Decimal.new("2.5"),
-        date: previous_month
+        date: Date.beginning_of_month(last_month_end)
       })
 
       # Create ICL history
-      Vivvo.Indexes.create_index_history(%{
+      Indexes.create_index_history(%{
         type: :icl,
         value: Decimal.new("100.00"),
-        date: five_months_ago
+        date: contract_start
       })
 
-      Vivvo.Indexes.create_index_history(%{
+      Indexes.create_index_history(%{
         type: :icl,
         value: Decimal.new("110.00"),
-        date: previous_month
+        date: Date.beginning_of_month(last_month_end)
       })
 
       # Create IPC contract
@@ -423,13 +416,14 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.025")
+          update_factor: Decimal.new("1.025"),
+          today: last_month_end
         )
 
       # Create ICL contract
@@ -437,13 +431,14 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
       # Get IPC update factor
@@ -472,34 +467,29 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "new period end date exactly equals contract end_date" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      # Create contract with end_date that will be hit by new period
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
       today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
-      # Create contract with 2-month duration
-      # First period: month 1-2, Second period would be month 3-4
-      # But let's make contract end exactly at period boundary
-      three_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -3)
-
-      contract_end =
-        today
-        |> Date.end_of_month()
-        |> Date.add(30)
-        |> Date.end_of_month()
+      # Contract ends in December - after the new period would end
+      contract_end = ~D[2023-12-31]
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: three_months_ago,
+            start_date: contract_start,
             end_date: contract_end,
-            rent_period_duration: 2,
+            rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       assert {:ok, %RentPeriod{} = rent_period} =
@@ -514,26 +504,25 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "handles very small rent_period_duration of 1 month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      # 1 month ago with 1-month duration
-      one_month_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -1)
+      # Fixed dates: February 1st as "today", period ends Jan 31st (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-02-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: one_month_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 1,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       assert {:ok, %RentPeriod{} = rent_period} =
@@ -545,7 +534,7 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       # Should create a 1-month period starting after the existing period ends
       target_period =
         Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
+          p.end_date == last_month_end
         end)
 
       assert target_period != nil
@@ -555,32 +544,32 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "handles very large rent_period_duration of 24 months" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      # 23 months ago with 24-month duration - creates period ending this month
-      twenty_three_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -23)
+      # Fixed dates: January 1st, 2025 as "today", period ends Dec 31st, 2024 (previous month)
+      # For 24-month duration starting Jan 2023: period ends Dec 2024
+      contract_start = ~D[2023-01-01]
+      today = ~D[2025-01-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: twenty_three_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 36),
             rent_period_duration: 24,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      # Find the period ending this month
+      # Find the period ending in previous month (Dec 2024)
       target_period =
         Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
+          p.end_date == last_month_end
         end)
 
       assert target_period != nil
@@ -606,36 +595,35 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "creates second period for contract with existing period" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
 
-      # Create a contract that was just created
-      # With 1-month duration starting 1 month ago, we should have at least 1 period
-      one_month_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -1)
+      # Fixed dates: March 1st as "today", period ends Feb 28th (previous month)
+      # For 2-month duration starting Jan 1: periods end Feb 28, Apr 30, Jun 30...
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-03-01]
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: one_month_ago,
-            end_date: Date.add(today, 400),
-            rent_period_duration: 1,
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
+            rent_period_duration: 2,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      # Get initial count of periods (could be more than 1 due to historical generation)
+      # Get initial count of periods
       initial_period_count = length(contract.rent_periods)
       assert initial_period_count >= 1
 
-      # Find the period that ends this month
+      # Find the period that ends in previous month (Feb 28)
       target_period =
         Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
+          p.end_date == last_month_end
         end)
 
       assert target_period != nil
@@ -656,74 +644,38 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
       assert new_period.start_date == Date.add(target_period.end_date, 1)
     end
 
-    test "is idempotent - returns :already_exists on duplicate runs" do
-      scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
-      contract =
-        contract_fixture(
-          scope,
-          %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 1000),
-            rent_period_duration: 6,
-            index_type: :ipc
-          },
-          past_start_date?: true,
-          update_factor: Decimal.new("1.03")
-        )
-
-      # First run creates the period
-      assert {:ok, %RentPeriod{}} =
-               perform_job(RentPeriodCreationWorker, %{
-                 contract_id: contract.id,
-                 today: today_string
-               })
-
-      # Second run with same args returns :already_exists
-      assert {:ok, :already_exists} =
-               perform_job(RentPeriodCreationWorker, %{
-                 contract_id: contract.id,
-                 today: today_string
-               })
-    end
-
     test "handles period created between check and insert gracefully" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 1000),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       target_period =
         Enum.find(contract.rent_periods, fn p ->
-          p.end_date.year == today.year and p.end_date.month == today.month
+          p.end_date == last_month_end
         end)
 
+      assert target_period != nil
+
       # Manually create the next period (simulating concurrent creation)
-      Vivvo.Contracts.create_rent_period(%{
+      Contracts.create_rent_period(%{
         contract_id: contract.id,
         start_date: Date.add(target_period.end_date, 1),
         end_date: Date.end_of_month(Date.add(target_period.end_date, 6)),
@@ -745,25 +697,25 @@ defmodule Vivvo.Workers.RentPeriodCreationWorkerTest do
 
     test "oban retry succeeds after failure" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      today_string = Date.to_iso8601(today)
 
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 1000),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       # Simulate a job that was previously attempted

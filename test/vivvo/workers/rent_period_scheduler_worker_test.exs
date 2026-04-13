@@ -11,30 +11,32 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
   describe "perform/1" do
     test "schedules jobs for contracts needing rent period updates" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      # To get a period ending this month with 6-month duration:
-      # period_end = start + 5 months (end of that month)
-      # So start should be 5 months ago
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Verify the latest period ends in previous month (June 30)
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == last_month_end
+
+      assert {:ok, %{scheduled_count: 1}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       today_string = Date.to_iso8601(today)
 
@@ -49,57 +51,63 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "skips contracts with rent periods ending next month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # Fixed dates: period ends April 30th (current month), not previous month
+      # For 6-month duration starting Jan 1: period ends June 30
+      # On April 1, the period ends in the future (June), not previous month
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-04-01]
 
-      # Create a contract starting today with 6-month duration
-      # The auto-generated period will end 5 months from now, not this month
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: today,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :icl
-          }
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0"),
+          today: today
         )
 
-      # Verify the contract has a period (it should, ending in the future)
-      assert contract.rent_periods != []
+      # Verify the period ends in June (not previous month)
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == ~D[2023-06-30]
 
-      # Scheduler should not find any contracts needing updates
-      assert {:ok, %{scheduled_count: 0}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Scheduler should not find contracts - period ends in June, not March
+      assert {:ok, %{scheduled_count: 0}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       refute_enqueued(worker: RentPeriodCreationWorker)
     end
 
     test "respects unique constraint for duplicate scheduling within same month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      # To get a period ending this month with 3-month duration:
-      # period_end = start + 2 months (end of that month)
-      # So start should be 2 months ago
-      two_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -2)
+      # Fixed dates: April 1st as "today", period ends March 31st (previous month)
+      # For 3-month duration starting Jan 1: period ends Mar 31, Jun 30, Sep 30, Dec 31
+      # On April 1, the previous month's end is March 31 - which matches the period end
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 3)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       _contract =
         contract_fixture(
           scope,
           %{
-            start_date: two_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 3,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       # Run scheduler - should schedule one job
-      assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
+      assert {:ok, %{scheduled_count: 1}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       # Verify a job was scheduled
       assert_enqueued(worker: RentPeriodCreationWorker)
@@ -127,28 +135,30 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "unique constraint prevents duplicate RentPeriodCreationWorker jobs for same contract on same day" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
       today_string = Date.to_iso8601(today)
-
-      # Create a contract that started 5 months ago with 6-month duration
-      # This gives a period ending this month
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
+
+      # Verify the latest period ends in previous month (June 30)
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == last_month_end
 
       # Insert first job manually to test Oban's unique constraint
       {:ok, _job1} =
@@ -185,41 +195,47 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "different contracts can be scheduled on same day" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # Fixed dates: March 1st as "today", periods end February 28th (previous month)
+      # For 2-month duration starting Jan 1: period ends Feb 28, Apr 30, Jun 30...
+      # On March 1, the previous month's end is February 28 - which matches period end
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 2)
       today_string = Date.to_iso8601(today)
-
-      # Create two contracts that started 1 month ago with 2-month duration
-      # That gives period ending this month
-      one_month_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -1)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract_a =
         contract_fixture(
           scope,
           %{
-            start_date: one_month_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 2,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       contract_b =
         contract_fixture(
           scope,
           %{
-            start_date: one_month_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 2,
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("0.05")
+          update_factor: Decimal.new("0.05"),
+          today: last_month_end
         )
+
+      # Verify both periods end in previous month (Feb 28)
+      latest_period_a = List.last(contract_a.rent_periods)
+      latest_period_b = List.last(contract_b.rent_periods)
+      assert latest_period_a.end_date == last_month_end
+      assert latest_period_b.end_date == last_month_end
 
       # Insert jobs for both contracts on same day
       {:ok, _job1} =
@@ -298,62 +314,78 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "runs on 1st but no contracts need updates" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # Fixed dates: April 1st as "today", period ends Sept 30th (future month)
+      # For 6-month duration starting April 1: period ends Sep 30
+      # On April 1, the period ends in the future, not previous month
+      contract_start = ~D[2023-04-01]
+      today = ~D[2023-04-01]
 
-      # Create a contract that won't need updates this month
-      # Starting today with 6-month duration means period ends in month 6
       _contract =
         contract_fixture(
           scope,
           %{
-            start_date: today,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
-          }
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0"),
+          today: today
         )
 
-      assert {:ok, %{scheduled_count: 0}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Period ends in September (future), not March (previous) - no update needed
+      assert {:ok, %{scheduled_count: 0}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
+
       refute_enqueued(worker: RentPeriodCreationWorker)
     end
 
     test "handles multiple contracts with same index type" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", periods end June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Create two IPC contracts
       contract_a =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       contract_b =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      assert {:ok, %{scheduled_count: 2}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Verify both periods end in previous month (June 30)
+      latest_period_a = List.last(contract_a.rent_periods)
+      latest_period_b = List.last(contract_b.rent_periods)
+      assert latest_period_a.end_date == last_month_end
+      assert latest_period_b.end_date == last_month_end
+
+      assert {:ok, %{scheduled_count: 2}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       # Should have 2 jobs enqueued
       assert Repo.aggregate(Oban.Job, :count) == 2
@@ -368,25 +400,25 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "processes single contract with IPC index type" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", periods end June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Create IPC contract
       ipc_contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       # Create ICL contract
@@ -394,16 +426,24 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
-      assert {:ok, %{scheduled_count: 2}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Verify both periods end in previous month (June 30)
+      latest_period_ipc = List.last(ipc_contract.rent_periods)
+      latest_period_icl = List.last(icl_contract.rent_periods)
+      assert latest_period_ipc.end_date == last_month_end
+      assert latest_period_icl.end_date == last_month_end
+
+      assert {:ok, %{scheduled_count: 2}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       job_contract_ids =
         Repo.all(Oban.Job)
@@ -415,186 +455,202 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "excludes contract ending exactly on last day of month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      end_of_month = Date.end_of_month(today)
+      # Fixed dates: July 1st as "today", contract ends June 30th
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
-      # Create a contract that ends on the last day of this month
-      # It should NOT need a new rent period
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
+      # Create a contract that ends on the last day of June
+      # It should NOT need a new rent period (contract ends this month)
       _contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: end_of_month,
+            start_date: contract_start,
+            end_date: Date.end_of_month(last_month_end),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      # The contract ends on the last day of month, so no new period should be scheduled
-      assert {:ok, %{scheduled_count: 0}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # The contract ends this month, so no new period should be scheduled
+      assert {:ok, %{scheduled_count: 0}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
     end
 
     test "handles period ending on last day of Feb (non-leap year)" do
       scope = user_scope_fixture()
-      # 2023 is a non-leap year, Feb has 28 days
-      # Use a "today" in Feb 2023 so that periods are generated up to that point
-      feb_28_2023 = ~D[2023-02-28]
+      # Fixed dates: March 1st as "today", period ends Feb 28th (previous month)
+      # For 2-month duration starting Jan 1: period ends Feb 28, Apr 30...
+      # On March 1, the previous month's end is February 28 - which matches period end
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 2)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
-      # Create contract with a "today" of Feb 28, 2023
-      # This generates periods up to Feb 28, 2023
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: ~D[2023-01-01],
+            start_date: contract_start,
             end_date: ~D[2024-01-01],
-            rent_period_duration: 1,
+            rent_period_duration: 2,
             index_type: :ipc
           },
           past_start_date?: true,
           update_factor: Decimal.new("1.03"),
-          today: feb_28_2023
+          today: last_month_end
         )
 
-      # Verify the latest period ends on Feb 28
+      # Verify the latest period ends on Feb 28th (previous month end)
       latest_period = List.last(contract.rent_periods)
-      assert latest_period.end_date == feb_28_2023
+      assert latest_period.end_date == last_month_end
 
-      # Run scheduler on Feb 28, 2023
+      # Run scheduler on March 1st - should find contract with period ending in Feb
       assert {:ok, %{scheduled_count: 1}} =
-               perform_job(RentPeriodSchedulerWorker, %{"today" => "2023-02-28"})
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       assert_enqueued(worker: RentPeriodCreationWorker)
     end
 
     test "handles period ending on 30th" do
       scope = user_scope_fixture()
-      # April 30, 2023
-      apr_30_2023 = ~D[2023-04-30]
+      # Fixed dates: May 1st as "today", period ends April 30th (previous month)
+      # For 2-month duration starting March 1: period ends Apr 30, Jun 30...
+      # On May 1, the previous month's end is April 30 - which matches period end
+      contract_start = ~D[2023-03-01]
+      today = Date.shift(contract_start, month: 2)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
-      # Create contract with a "today" of Apr 30, 2023
-      # This generates periods up to Apr 30, 2023
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: ~D[2023-03-01],
+            start_date: contract_start,
             end_date: ~D[2024-12-31],
             rent_period_duration: 2,
             index_type: :ipc
           },
           past_start_date?: true,
           update_factor: Decimal.new("1.03"),
-          today: apr_30_2023
+          today: last_month_end
         )
 
-      # Verify the latest period ends on Apr 30
+      # Verify the latest period ends on Apr 30th (previous month end)
       latest_period = List.last(contract.rent_periods)
-      assert latest_period.end_date == apr_30_2023
+      assert latest_period.end_date == last_month_end
 
+      # Run scheduler on May 1st - should find contract with period ending in April
       assert {:ok, %{scheduled_count: 1}} =
-               perform_job(RentPeriodSchedulerWorker, %{"today" => "2023-04-30"})
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       assert_enqueued(worker: RentPeriodCreationWorker)
     end
 
-    test "handles period ending on 31st" do
+    test "schedules the update of contracts with periods ending on the previous month" do
       scope = user_scope_fixture()
-      # March 31, 2023
-      mar_31_2023 = ~D[2023-03-31]
 
-      # Create contract with a "today" of Mar 31, 2023
-      # This generates periods up to Mar 31, 2023
+      contract_start = ~D[2023-03-01]
+      # Multiple of the period duration to ensure the last auto-generated
+      # period ends on the last day of the previous month.
+      today = Date.shift(contract_start, month: 4)
+
+      last_month_end =
+        today
+        |> Date.shift(month: -1)
+        |> Date.end_of_month()
+
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: ~D[2023-02-01],
-            end_date: ~D[2024-12-31],
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 2,
             index_type: :ipc
           },
           past_start_date?: true,
           update_factor: Decimal.new("1.03"),
-          today: mar_31_2023
+          # Autogenerate periods up to last month end
+          today: last_month_end
         )
 
-      # Verify the latest period ends on Mar 31
+      # Verify the latest period
       latest_period = List.last(contract.rent_periods)
-      assert latest_period.end_date == mar_31_2023
+      assert latest_period.end_date == last_month_end
 
       assert {:ok, %{scheduled_count: 1}} =
-               perform_job(RentPeriodSchedulerWorker, %{"today" => "2023-03-31"})
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       assert_enqueued(worker: RentPeriodCreationWorker)
     end
 
     test "handles contract with latest_period.end_date equal to contract.end_date" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      # Create contract with 1-month duration ending today
-      # This means the latest period end_date equals contract.end_date
-      last_month =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -1)
+      # Fixed dates: February 1st as "today", contract ends January 31st
+      # Period ends in previous month but so does contract - no update needed
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-02-01]
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       _contract =
         contract_fixture(
           scope,
           %{
-            start_date: last_month,
-            end_date: Date.end_of_month(today),
+            start_date: contract_start,
+            end_date: last_month_end,
             rent_period_duration: 1,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
-      # Contract ends this month, so no new period should be scheduled
-      assert {:ok, %{scheduled_count: 0}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Contract ends in previous month (Jan), so no new period should be scheduled
+      assert {:ok, %{scheduled_count: 0}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
     end
 
     test "scheduler does not reschedule contract after rent period is created" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
       today_string = Date.to_iso8601(today)
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
+      # Verify period ends in previous month (June 30)
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == last_month_end
+
       # First scheduler run creates a RentPeriodCreationWorker job
-      assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
+      assert {:ok, %{scheduled_count: 1}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => today_string})
+
       assert Repo.aggregate(Oban.Job, :count) == 1
 
       # Simulate the RentPeriodCreationWorker completing successfully
       # This would create the next rent period, so the contract no longer needs update
-      # For this test, we'll manually create the next period
+      # For this test, we'll manually create the next period (July - Dec)
       {:ok, _next_period} =
         Vivvo.Contracts.create_rent_period(%{
           contract_id: contract.id,
@@ -608,7 +664,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       Repo.delete_all(Oban.Job)
 
       # Second scheduler run - contract should no longer need update
-      # because the latest period now extends beyond the current month
+      # because the latest period now extends beyond the previous month
       assert {:ok, %{scheduled_count: 0}} =
                perform_job(RentPeriodSchedulerWorker, %{"today" => today_string})
 
@@ -618,25 +674,25 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "handles multiple contracts with different index types" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", periods end June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Create IPC contract
       ipc_contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       # Create ICL contract
@@ -644,16 +700,24 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :icl
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.0")
+          update_factor: Decimal.new("1.0"),
+          today: last_month_end
         )
 
-      assert {:ok, %{scheduled_count: 2}} = perform_job(RentPeriodSchedulerWorker, %{})
+      # Verify both periods end in previous month (June 30)
+      latest_period_ipc = List.last(ipc_contract.rent_periods)
+      latest_period_icl = List.last(icl_contract.rent_periods)
+      assert latest_period_ipc.end_date == last_month_end
+      assert latest_period_icl.end_date == last_month_end
+
+      assert {:ok, %{scheduled_count: 2}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       job_contract_ids =
         Repo.all(Oban.Job)
@@ -665,25 +729,25 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
     test "only schedules contracts with both index_type and rent_period_duration" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
+      # Fixed dates: July 1st as "today", periods end June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = Date.shift(contract_start, month: 6)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
 
       # Create valid contract with both index_type and rent_period_duration
       valid_contract =
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: 6,
             index_type: :ipc
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
       # Create contract without rent_period_duration (valid but won't be scheduled)
@@ -691,20 +755,106 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
         contract_fixture(
           scope,
           %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
             rent_period_duration: nil,
             index_type: nil
           },
           past_start_date?: true,
-          update_factor: Decimal.new("1.03")
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
 
+      # Verify valid contract period ends in previous month
+      latest_period = List.last(valid_contract.rent_periods)
+      assert latest_period.end_date == last_month_end
+
       # Only valid_contract should be scheduled
-      assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
+      assert {:ok, %{scheduled_count: 1}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => Date.to_iso8601(today)})
 
       job = Repo.one!(Oban.Job)
       assert job.args["contract_id"] == valid_contract.id
+    end
+
+    test "full flow: scheduler finds contract and creation worker creates new period" do
+      scope = user_scope_fixture()
+
+      # Fixed dates: July 1st as "today", period ends June 30th (previous month)
+      # For 6-month duration starting Jan 1: period ends June 30
+      contract_start = ~D[2023-01-01]
+      today = ~D[2023-07-01]
+      today_string = Date.to_iso8601(today)
+      last_month_end = today |> Date.shift(month: -1) |> Date.end_of_month()
+
+      # Create IPC history entries needed for update factor calculation
+      for i <- 1..2 do
+        date = last_month_end |> Date.shift(month: -i + 1) |> Date.beginning_of_month()
+
+        Vivvo.Indexes.create_index_history(%{
+          type: :ipc,
+          value: Decimal.new("2.5"),
+          date: date
+        })
+      end
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
+            rent_period_duration: 6,
+            index_type: :ipc
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
+        )
+
+      # Verify the latest period ends in previous month (June 30)
+      latest_period = List.last(contract.rent_periods)
+      assert latest_period.end_date == last_month_end
+
+      initial_period_count = length(contract.rent_periods)
+
+      # Step 1: Scheduler runs on July 1st and finds the contract
+      assert {:ok, %{scheduled_count: 1}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => today_string})
+
+      assert_enqueued(
+        worker: RentPeriodCreationWorker,
+        args: %{
+          contract_id: contract.id,
+          today: today_string
+        }
+      )
+
+      # Step 2: Creation worker runs and creates the new period
+      assert {:ok, %Vivvo.Contracts.RentPeriod{} = new_period} =
+               perform_job(RentPeriodCreationWorker, %{
+                 contract_id: contract.id,
+                 today: today_string
+               })
+
+      # Verify the new period was created correctly
+      # July 1st
+      assert new_period.start_date == today
+      # Dec 31st (6 months from July 1)
+      assert new_period.end_date == ~D[2023-12-31]
+      assert new_period.index_type == :ipc
+
+      # Verify contract now has one more period
+      updated_contract = Vivvo.Contracts.get_contract!(scope, contract.id)
+      assert length(updated_contract.rent_periods) == initial_period_count + 1
+
+      # Step 3: Running scheduler again should not schedule the same contract
+      Repo.delete_all(Oban.Job)
+
+      assert {:ok, %{scheduled_count: 0}} =
+               perform_job(RentPeriodSchedulerWorker, %{"today" => today_string})
+
+      refute_enqueued(worker: RentPeriodCreationWorker)
     end
   end
 end
