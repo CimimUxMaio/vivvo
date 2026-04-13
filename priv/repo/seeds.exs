@@ -187,7 +187,7 @@ contract1_end = Date.add(today, 180)
 
 IO.puts("Created Contract 1 (Active: Sunset Apts → Tenant1)")
 
-# Preload rent_periods for contract1 so current_rent_value works
+# Preload rent_periods for contract1 so latest_rent_value works
 contract1 = Repo.preload(contract1, :rent_periods)
 
 # Create payments for Contract 1
@@ -196,7 +196,7 @@ for month <- 1..6 do
   due_date = Contracts.calculate_due_date(contract1, month)
   submitted_at = DateTime.new!(due_date, ~T[10:00:00])
   # Get the correct rent value for this payment's due date
-  rent_amount = Contracts.current_rent_value(contract1, due_date)
+  rent_amount = Contracts.latest_rent_value(contract1, due_date)
 
   cond do
     month <= 4 ->
@@ -330,7 +330,7 @@ contract2_end = Date.add(today, 270)
 
 IO.puts("Created Contract 2 (Active: Downtown Loft → Tenant2)")
 
-# Preload rent_periods for contract2 so current_rent_value works
+# Preload rent_periods for contract2 so latest_rent_value works
 contract2 = Repo.preload(contract2, :rent_periods)
 
 # Create payments for Contract 2
@@ -339,7 +339,7 @@ for month <- 1..3 do
   due_date = Contracts.calculate_due_date(contract2, month)
   submitted_at = DateTime.new!(due_date, ~T[09:30:00])
   # Get the correct rent value for this payment's due date
-  rent_amount = Contracts.current_rent_value(contract2, due_date)
+  rent_amount = Contracts.latest_rent_value(contract2, due_date)
 
   cond do
     month <= 2 ->
@@ -461,7 +461,7 @@ for month <- 1..10 do
   delay = if :rand.uniform() > 0.5, do: 0, else: Enum.random(1..5)
   submitted_at = DateTime.new!(due_date, ~T[14:00:00]) |> DateTime.add(delay, :day)
   # Get the correct rent value for this payment's due date
-  rent_amount = Contracts.current_rent_value(contract3, due_date)
+  rent_amount = Contracts.latest_rent_value(contract3, due_date)
 
   {:ok, payment} =
     Payments.create_payment(
@@ -487,7 +487,7 @@ end
 due_date_11 = Contracts.calculate_due_date(contract3, 11)
 submitted_at_11 = DateTime.new!(due_date_11, ~T[14:00:00])
 # Get the correct rent value for month 11
-rent_amount_11 = Contracts.current_rent_value(contract3, due_date_11)
+rent_amount_11 = Contracts.latest_rent_value(contract3, due_date_11)
 
 if :rand.uniform() > 0.5 do
   # Pending - create payment but don't accept or reject
@@ -566,7 +566,7 @@ for month <- 1..12 do
 
   submitted_at = DateTime.new!(due_date, ~T[11:00:00]) |> DateTime.add(delay, :day)
   # Get the correct rent value for this payment's due date
-  rent_amount = Contracts.current_rent_value(contract4, due_date)
+  rent_amount = Contracts.latest_rent_value(contract4, due_date)
 
   if month == 12 && :rand.uniform() > 0.5 do
     # Pending - create payment but don't accept or reject
@@ -640,7 +640,7 @@ for month <- 1..2 do
   delay = if month == 2, do: 1, else: 0
   submitted_at = DateTime.new!(due_date, ~T[08:00:00]) |> DateTime.add(delay, :day)
   # Get the correct rent value for this payment's due date
-  rent_amount = Contracts.current_rent_value(contract5, due_date)
+  rent_amount = Contracts.latest_rent_value(contract5, due_date)
 
   {:ok, payment} =
     Payments.create_payment(
@@ -665,7 +665,7 @@ end
 due_date_c5m3 = Contracts.calculate_due_date(contract5, 3)
 submitted_at_c5m3 = DateTime.new!(due_date_c5m3, ~T[08:00:00])
 # Get the correct rent value for month 3
-rent_amount_c5m3 = Contracts.current_rent_value(contract5, due_date_c5m3)
+rent_amount_c5m3 = Contracts.latest_rent_value(contract5, due_date_c5m3)
 
 if :rand.uniform() > 0.5 do
   # Pending - create payment but don't accept or reject
