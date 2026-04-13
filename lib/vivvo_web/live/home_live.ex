@@ -1663,7 +1663,7 @@ defmodule VivvoWeb.HomeLive do
             Rent update in progress
           </p>
           <p class="text-sm text-base-content/70">
-            Your rent is being recalculated for the new period. Payment submissions are temporarily disabled. Please check back shortly.
+            Your rent is being recalculated for the new period. Rent payment submissions are temporarily disabled. Please check back shortly.
           </p>
         </div>
       </div>
