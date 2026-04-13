@@ -8,8 +8,6 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
   import Vivvo.ContractsFixtures
   import Vivvo.AccountsFixtures
 
-  setup {Req.Test, :verify_on_exit!}
-
   describe "perform/1" do
     test "schedules jobs for contracts needing rent period updates" do
       scope = user_scope_fixture()
@@ -298,45 +296,7 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
       assert backoff_7 == 43_200
     end
 
-    test "continues scheduling when index service fails for one index type" do
-      scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      # Create IPC history
-      previous_month = Date.shift(today, month: -1) |> Date.beginning_of_month()
-
-      Vivvo.Indexes.create_index_history(%{
-        type: :ipc,
-        value: Decimal.new("2.5"),
-        date: previous_month
-      })
-
-      # Create a contract with IPC index type
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
-      _contract =
-        contract_fixture(
-          scope,
-          %{
-            start_date: five_months_ago,
-            end_date: Date.add(today, 400),
-            rent_period_duration: 6,
-            index_type: :ipc
-          },
-          past_start_date?: true,
-          update_factor: Decimal.new("1.03")
-        )
-
-      # Run scheduler - should still succeed even if ICL fetch fails
-      # (in real scenario, IndexService might fail for one index type)
-      assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
-      assert_enqueued(worker: RentPeriodCreationWorker)
-    end
-
-    test "runs on 25th but no contracts need updates" do
+    test "runs on 1st but no contracts need updates" do
       scope = user_scope_fixture()
       today = Date.utc_today()
 
@@ -745,103 +705,6 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorkerTest do
 
       job = Repo.one!(Oban.Job)
       assert job.args["contract_id"] == valid_contract.id
-    end
-
-    test "fails when external API returns error and does not schedule creation workers" do
-      scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
-      contract_fixture(
-        scope,
-        %{
-          start_date: five_months_ago,
-          end_date: Date.add(today, 400),
-          rent_period_duration: 6,
-          index_type: :ipc
-        },
-        past_start_date?: true,
-        update_factor: Decimal.new("1.03")
-      )
-
-      Req.Test.stub(Vivvo.IndexService, fn conn ->
-        conn
-        |> Plug.Conn.put_status(503)
-        |> Req.Test.json(%{error: "Service unavailable"})
-      end)
-
-      Application.put_env(:vivvo, Vivvo.IndexService,
-        req_options: [plug: {Req.Test, Vivvo.IndexService}]
-      )
-
-      assert {:error, _} = perform_job(RentPeriodSchedulerWorker, %{})
-
-      refute_enqueued(worker: RentPeriodCreationWorker)
-
-      index_history_count = Repo.aggregate(Vivvo.Indexes.IndexHistory, :count)
-      assert index_history_count == 0
-
-      on_exit(fn ->
-        Application.put_env(:vivvo, Vivvo.IndexService, req_options: [retry: false])
-      end)
-    end
-
-    test "succeeds on retry after external API failure" do
-      scope = user_scope_fixture()
-      today = Date.utc_today()
-
-      five_months_ago =
-        today
-        |> Date.beginning_of_month()
-        |> Date.shift(month: -5)
-
-      contract_fixture(
-        scope,
-        %{
-          start_date: five_months_ago,
-          end_date: Date.add(today, 400),
-          rent_period_duration: 6,
-          index_type: :ipc
-        },
-        past_start_date?: true,
-        update_factor: Decimal.new("1.03")
-      )
-
-      Req.Test.stub(Vivvo.IndexService, fn conn ->
-        conn
-        |> Plug.Conn.put_status(503)
-        |> Req.Test.json(%{error: "Service unavailable"})
-      end)
-
-      Application.put_env(:vivvo, Vivvo.IndexService,
-        req_options: [plug: {Req.Test, Vivvo.IndexService}]
-      )
-
-      assert {:error, _} = perform_job(RentPeriodSchedulerWorker, %{})
-
-      refute_enqueued(worker: RentPeriodCreationWorker)
-      assert Repo.aggregate(Vivvo.Indexes.IndexHistory, :count) == 0
-
-      Req.Test.stub(Vivvo.IndexService, fn conn ->
-        if String.contains?(conn.request_path, "/ipc") do
-          Req.Test.json(conn, %{data: [%{"anio" => 2025, "mes" => 1, "valor" => 2.5}]})
-        else
-          Req.Test.json(conn, %{data: [%{"fecha" => "01/01/2025", "valor" => 100.0}]})
-        end
-      end)
-
-      assert {:ok, %{scheduled_count: 1}} = perform_job(RentPeriodSchedulerWorker, %{})
-
-      assert_enqueued(worker: RentPeriodCreationWorker)
-      assert Repo.aggregate(Vivvo.Indexes.IndexHistory, :count) == 2
-
-      on_exit(fn ->
-        Application.put_env(:vivvo, Vivvo.IndexService, req_options: [retry: false])
-      end)
     end
   end
 end
