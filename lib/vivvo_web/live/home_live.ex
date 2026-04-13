@@ -470,7 +470,7 @@ defmodule VivvoWeb.HomeLive do
   # Owner Dashboard Component
   defp owner_dashboard(assigns) do
     ~H"""
-    <div class="space-y-6 sm:space-y-8">
+    <div class="space-y-8">
       <%!-- Page Header --%>
       <.page_header title="Dashboard" back_navigate={nil}>
         <:subtitle>
@@ -490,7 +490,7 @@ defmodule VivvoWeb.HomeLive do
       />
 
       <%!-- Trends & Health Section (Middle) --%>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <.income_trend_card income_trend={@income_trend} />
         <.outstanding_aging_card
           outstanding_aging={@outstanding_aging}
@@ -830,7 +830,7 @@ defmodule VivvoWeb.HomeLive do
       </div>
 
       <%= if @property_metrics != [] do %>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto scrollbar-hide">
           <table class="w-full text-sm">
             <thead class="bg-base-200/50">
               <tr>
@@ -1511,7 +1511,7 @@ defmodule VivvoWeb.HomeLive do
       end
 
     ~H"""
-    <div class="space-y-6 sm:space-y-8">
+    <div class="space-y-8">
       <%= if @contracts != [] do %>
         <%!-- Page Header with New Misc Payment Action --%>
         <.page_header title="My Rentals" back_navigate={nil}>
@@ -1794,7 +1794,7 @@ defmodule VivvoWeb.HomeLive do
       )
 
     ~H"""
-    <div class="space-y-6">
+    <div class="flex flex-col gap-8">
       <%!-- Current & Unpaid Payments (Expanded by Default) --%>
       <%= if @has_unpaid do %>
         <div
@@ -1824,7 +1824,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Animated content container --%>
           <div class={[
             "overflow-hidden transition-all duration-300 ease-in-out",
-            @current_expanded && "max-h-[600px] opacity-100 overflow-y-auto",
+            @current_expanded && "max-h-[600px] opacity-100 overflow-y-auto scrollbar-hide",
             !@current_expanded && "max-h-0 opacity-0"
           ]}>
             <div class="divide-y divide-base-200 border-t border-base-200">
@@ -1871,7 +1871,7 @@ defmodule VivvoWeb.HomeLive do
           <%!-- Animated content container --%>
           <div class={[
             "overflow-hidden transition-all duration-300 ease-in-out",
-            @history_expanded && "max-h-[600px] opacity-100 overflow-y-auto",
+            @history_expanded && "max-h-[600px] opacity-100 overflow-y-auto scrollbar-hide",
             !@history_expanded && "max-h-0 opacity-0"
           ]}>
             <div class="divide-y divide-base-200 border-t border-base-200">
