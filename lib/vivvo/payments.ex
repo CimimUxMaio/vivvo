@@ -500,7 +500,7 @@ defmodule Vivvo.Payments do
   def month_fully_paid?(%Scope{} = scope, contract, payment_number) do
     total = total_accepted_for_month(scope, contract.id, payment_number)
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_number)
-    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    rent = Vivvo.Contracts.latest_rent_value(contract, due_date)
     Decimal.compare(total, rent) != :lt
   end
 
@@ -516,7 +516,7 @@ defmodule Vivvo.Payments do
   def get_month_status(%Scope{} = scope, contract, payment_number) do
     total = total_accepted_for_month(scope, contract.id, payment_number)
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_number)
-    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    rent = Vivvo.Contracts.latest_rent_value(contract, due_date)
 
     cond do
       Decimal.compare(total, rent) != :lt -> :paid
@@ -796,7 +796,7 @@ defmodule Vivvo.Payments do
 
   defp add_outstanding_to_bucket(scope, contract, payment_num, today, acc) do
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_num)
-    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    rent = Vivvo.Contracts.latest_rent_value(contract, due_date)
     paid = total_accepted_for_month(scope, contract.id, payment_num)
     outstanding = Decimal.sub(rent, paid)
 
