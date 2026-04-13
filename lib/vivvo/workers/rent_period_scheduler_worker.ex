@@ -2,23 +2,22 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
   @moduledoc """
   Monthly cron worker that schedules rent period creation jobs.
 
-  Runs at 12:00 PM on the 25th of each month. Schedules individual creation
-  workers for each contract whose latest rent period ends in the current month.
-  This proactively creates the next rent period before the current one expires,
-  ensuring users always have access to current rent information.
+  Runs at 01:00 on the 1st of each month. Schedules individual creation
+  workers for each contract whose latest rent period ended in the previous month.
+  This creates new rent periods at the start of each month when the previous
+  period has expired.
+
+  The IndexHistoryWorker runs daily at 23:00 to ensure fresh index data is
+  available before this worker executes.
 
   Scheduled via Oban Cron plugin which handles duplicate prevention automatically.
   """
-
-  require Logger
 
   use Oban.Worker,
     queue: :default,
     max_attempts: 7
 
   alias Vivvo.Contracts
-  alias Vivvo.Indexes
-  alias Vivvo.IndexService
   alias Vivvo.Workers.RentPeriodCreationWorker
 
   @max_backoff_seconds 43_200
@@ -31,30 +30,26 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
         _ -> Date.utc_today()
       end
 
-    # Update index histories BEFORE processing contracts
-    # This ensures we have the latest index data from external APIs
-    with {:ok, _} <- update_index_histories(today) do
-      # Query all contracts needing rent period updates (all filtering done in database)
-      contract_ids = Contracts.contracts_needing_update(today)
+    # Query all contracts needing rent period updates (all filtering done in database)
+    contract_ids = Contracts.contracts_needing_update(today)
 
-      # Schedule creation worker for each contract
-      # Each worker will compute its own update factor based on contract's index type
-      Enum.map(contract_ids, fn contract_id ->
-        today_string = Date.to_iso8601(today)
+    # Schedule creation worker for each contract
+    # Each worker will compute its own update factor based on contract's index type
+    Enum.map(contract_ids, fn contract_id ->
+      today_string = Date.to_iso8601(today)
 
-        %{
-          contract_id: contract_id,
-          today: today_string
-        }
-        |> RentPeriodCreationWorker.new(
-          unique: [period: :infinity, keys: [:contract_id, :today]],
-          queue: :rent_periods
-        )
-      end)
-      |> Oban.insert_all()
+      %{
+        contract_id: contract_id,
+        today: today_string
+      }
+      |> RentPeriodCreationWorker.new(
+        unique: [period: :infinity, keys: [:contract_id, :today]],
+        queue: :rent_periods
+      )
+    end)
+    |> Oban.insert_all()
 
-      {:ok, %{scheduled_count: length(contract_ids)}}
-    end
+    {:ok, %{scheduled_count: length(contract_ids)}}
   end
 
   @impl Oban.Worker
@@ -64,41 +59,5 @@ defmodule Vivvo.Workers.RentPeriodSchedulerWorker do
     base_backoff = 900
     backoff = trunc(base_backoff * :math.pow(2, attempt - 1))
     min(backoff, @max_backoff_seconds)
-  end
-
-  # Updates index histories for all index types by querying the external API
-  # for values between the latest date in the database and today.
-  # This should be done BEFORE processing contracts to ensure we have fresh data.
-  defp update_index_histories(today) do
-    with {:ok, missing_histories} <- fetch_missing_histories(today),
-         {:ok, count} <- Indexes.create_index_histories(missing_histories) do
-      Logger.info(
-        "Successfully updated index histories with #{length(missing_histories)} new entries"
-      )
-
-      {:ok, count}
-    else
-      {:error, reason} ->
-        Logger.error("Failed to update index histories: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
-  defp fetch_missing_histories(today) do
-    IndexService.index_types()
-    |> Enum.map(fn type ->
-      {from_date, to_date} = Indexes.get_missing_date_range(type, today)
-      IndexService.history(type, from_date, to_date)
-    end)
-    |> Enum.reduce_while({:ok, []}, fn
-      {:ok, histories}, {:ok, acc} ->
-        {:cont, {:ok, acc ++ histories}}
-
-      {:ok, _}, {:error, reason} ->
-        {:halt, {:error, reason}}
-
-      {:error, reason}, _acc ->
-        {:halt, {:error, reason}}
-    end)
   end
 end

@@ -1052,7 +1052,7 @@ defmodule Vivvo.ContractsTest do
     end
   end
 
-  describe "current_rent_period/2" do
+  describe "latest_rent_period/2" do
     test "returns correct period when date falls within range" do
       scope = user_scope_fixture()
       today = Date.utc_today()
@@ -1065,7 +1065,7 @@ defmodule Vivvo.ContractsTest do
         })
 
       # The date today should be covered by the rent period
-      period = Contracts.current_rent_period(contract, today)
+      period = Contracts.latest_rent_period(contract, today)
       assert period != nil
       assert Decimal.equal?(period.value, Decimal.new("1000.00"))
       assert Date.compare(period.start_date, today) != :gt
@@ -1085,7 +1085,7 @@ defmodule Vivvo.ContractsTest do
 
       # For a future contract, should return the earliest period
       today = Date.utc_today()
-      period = Contracts.current_rent_period(contract, today)
+      period = Contracts.latest_rent_period(contract, today)
       assert period != nil
       assert Decimal.equal?(period.value, Decimal.new("1000.00"))
       # Should be the earliest (and only) period
@@ -1105,12 +1105,12 @@ defmodule Vivvo.ContractsTest do
 
       today = Date.utc_today()
 
-      assert_raise RuntimeError, ~r/has no current rent period/, fn ->
-        Contracts.current_rent_period(contract, today)
+      assert_raise RuntimeError, ~r/has no rent periods/, fn ->
+        Contracts.latest_rent_period(contract, today)
       end
     end
 
-    test "raises when active contract has no matching period" do
+    test "returns latest period when active contract has no matching period" do
       scope = user_scope_fixture()
       today = Date.utc_today()
 
@@ -1130,7 +1130,8 @@ defmodule Vivvo.ContractsTest do
         )
 
       # Manually create a contract struct with rent periods that don't cover today
-      contract_with_bad_periods = %{
+      # This simulates the gap period on the 1st of month before the scheduler runs
+      contract_with_gap = %{
         contract
         | rent_periods: [
             %Vivvo.Contracts.RentPeriod{
@@ -1141,10 +1142,10 @@ defmodule Vivvo.ContractsTest do
           ]
       }
 
-      # This should raise because the contract has started but no period covers today
-      assert_raise RuntimeError, ~r/has no current rent period/, fn ->
-        Contracts.current_rent_period(contract_with_bad_periods, today)
-      end
+      # This should now return the latest period instead of raising
+      period = Contracts.latest_rent_period(contract_with_gap, today)
+      assert period != nil
+      assert Decimal.equal?(period.value, Decimal.new("1000.00"))
     end
 
     test "handles edge case: date exactly on start_date boundary" do
@@ -1160,7 +1161,7 @@ defmodule Vivvo.ContractsTest do
         })
 
       # Date exactly at start should be included
-      period = Contracts.current_rent_period(contract, start_date)
+      period = Contracts.latest_rent_period(contract, start_date)
       assert period != nil
       assert Decimal.equal?(period.value, Decimal.new("1000.00"))
     end
@@ -1182,7 +1183,7 @@ defmodule Vivvo.ContractsTest do
       period_end = rent_period.end_date
 
       # Date exactly at end should be included
-      period = Contracts.current_rent_period(contract, period_end)
+      period = Contracts.latest_rent_period(contract, period_end)
       assert period != nil
       assert Decimal.equal?(period.value, Decimal.new("1000.00"))
     end
@@ -1200,7 +1201,7 @@ defmodule Vivvo.ContractsTest do
         })
 
       # Get the period that covers today
-      period = Contracts.current_rent_period(contract, today)
+      period = Contracts.latest_rent_period(contract, today)
       assert period != nil
     end
 
@@ -1211,7 +1212,7 @@ defmodule Vivvo.ContractsTest do
       contract =
         expired_contract_fixture(scope, %{rent: "900.00"})
 
-      period = Contracts.current_rent_period(contract, today)
+      period = Contracts.latest_rent_period(contract, today)
       assert period != nil
       assert Decimal.equal?(period.value, Decimal.new("900.00"))
       # The returned period should be the latest one (closest to end_date)
@@ -1219,7 +1220,7 @@ defmodule Vivvo.ContractsTest do
     end
   end
 
-  describe "current_rent_value/2" do
+  describe "latest_rent_value/2" do
     test "returns rent value for current date" do
       scope = user_scope_fixture()
       today = Date.utc_today()
@@ -1231,7 +1232,7 @@ defmodule Vivvo.ContractsTest do
           rent: "1500.00"
         })
 
-      rent_value = Contracts.current_rent_value(contract, today)
+      rent_value = Contracts.latest_rent_value(contract, today)
       assert Decimal.equal?(rent_value, Decimal.new("1500.00"))
     end
 
@@ -1247,7 +1248,7 @@ defmodule Vivvo.ContractsTest do
         })
 
       today = Date.utc_today()
-      rent_value = Contracts.current_rent_value(contract, today)
+      rent_value = Contracts.latest_rent_value(contract, today)
       assert Decimal.equal?(rent_value, Decimal.new("2000.00"))
     end
 
@@ -1262,7 +1263,7 @@ defmodule Vivvo.ContractsTest do
           rent: "1200.00"
         })
 
-      rent_value = Contracts.current_rent_value(contract)
+      rent_value = Contracts.latest_rent_value(contract)
       assert Decimal.equal?(rent_value, Decimal.new("1200.00"))
     end
 
@@ -1272,8 +1273,84 @@ defmodule Vivvo.ContractsTest do
       contract =
         expired_contract_fixture(scope, %{rent: "850.00"})
 
-      rent_value = Contracts.current_rent_value(contract)
+      rent_value = Contracts.latest_rent_value(contract)
       assert Decimal.equal?(rent_value, Decimal.new("850.00"))
+    end
+  end
+
+  describe "needs_update?/1" do
+    test "returns false when contract has period covering today" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: today,
+          end_date: Date.add(today, 365),
+          rent: "1000.00"
+        })
+
+      assert Contracts.needs_update?(contract) == false
+    end
+
+    test "returns true when active contract has no period covering today" do
+      scope = user_scope_fixture()
+      today = Date.utc_today()
+
+      # Create a contract that started in the past
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: Date.add(today, -90),
+            end_date: Date.add(today, 365),
+            rent: "1000.00",
+            index_type: :icl,
+            rent_period_duration: 12
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0")
+        )
+
+      # Manually create a contract struct with rent periods that don't cover today
+      # This simulates the gap period on the 1st of month before the scheduler runs
+      contract_with_gap = %{
+        contract
+        | rent_periods: [
+            %Vivvo.Contracts.RentPeriod{
+              start_date: Date.add(today, -90),
+              end_date: Date.add(today, -60),
+              value: Decimal.new("1000.00")
+            }
+          ]
+      }
+
+      assert Contracts.needs_update?(contract_with_gap) == true
+    end
+
+    test "returns false for future contracts" do
+      scope = user_scope_fixture()
+      future_start = Date.add(Date.utc_today(), 30)
+
+      contract =
+        contract_fixture(scope, %{
+          start_date: future_start,
+          end_date: Date.add(future_start, 365),
+          rent: "1000.00"
+        })
+
+      # Future contracts don't need updates
+      assert Contracts.needs_update?(contract) == false
+    end
+
+    test "returns false for expired contracts" do
+      scope = user_scope_fixture()
+
+      contract =
+        expired_contract_fixture(scope, %{rent: "900.00"})
+
+      # Expired contracts don't need updates
+      assert Contracts.needs_update?(contract) == false
     end
   end
 
@@ -1801,7 +1878,7 @@ defmodule Vivvo.ContractsTest do
       next_update = Contracts.next_rent_update_date(contract)
 
       # Should be the day after the current rent period ends
-      current_period = Contracts.current_rent_period(contract, today)
+      current_period = Contracts.latest_rent_period(contract, today)
       expected_date = Date.add(current_period.end_date, 1)
       assert next_update == expected_date
     end
@@ -2671,35 +2748,37 @@ defmodule Vivvo.ContractsTest do
   end
 
   describe "contracts_needing_update/1" do
-    test "returns contracts with rent period ending in current month" do
+    test "returns contracts with rent period ending in previous month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      end_of_this_month = Date.end_of_month(today)
 
-      # Create contract with rent period ending in the current month
+      contract_start = ~D[2024-01-01]
+      today = Date.shift(contract_start, month: 3)
+
+      last_month_end =
+        today
+        |> Date.shift(month: -1)
+        |> Date.end_of_month()
+
+      # Create contract with rent period ending in the previous month
       # Use today's date as start to avoid past_start_date requirement
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: today,
-            end_date: Date.add(today, 400),
-            rent_period_duration: 6,
+            start_date: contract_start,
+            end_date: Date.shift(contract_start, month: 12),
+            rent_period_duration: 3,
             index_type: :ipc
-          }
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.03"),
+          today: last_month_end
         )
-
-      # Delete auto-generated period from fixture
-      contract = Contracts.get_contract!(scope, contract.id)
-
-      Enum.each(contract.rent_periods, fn rp ->
-        Repo.delete!(rp)
-      end)
 
       _period =
         rent_period_fixture(contract, %{
-          start_date: Date.add(end_of_this_month, -30),
-          end_date: end_of_this_month,
+          start_date: contract_start,
+          end_date: Date.end_of_month(Date.shift(today, month: -1)),
           value: Decimal.new("1000.00"),
           index_type: :ipc,
           update_factor: Decimal.new("1.03")
@@ -2710,11 +2789,15 @@ defmodule Vivvo.ContractsTest do
       assert hd(results) == contract.id
     end
 
-    test "excludes contracts with rent period ending in different month" do
+    test "excludes contracts with rent period ending in current month" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
+      # Use fixed dates: April 1st as "today", period ends April 30th (current month)
+      today = ~D[2024-04-01]
+      end_of_current_month = ~D[2024-04-30]
 
-      contract =
+      # Create contract with period ending in current month (April 30th)
+      # The fixture will create a period ending on the "today" date we pass
+      _contract =
         contract_fixture(
           scope,
           %{
@@ -2722,78 +2805,69 @@ defmodule Vivvo.ContractsTest do
             end_date: Date.add(today, 400),
             rent_period_duration: 6,
             index_type: :icl
-          }
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0"),
+          today: end_of_current_month
         )
 
-      # Period ending next month
-      _period =
-        rent_period_fixture(contract, %{
-          start_date: today,
-          end_date: Date.end_of_month(Date.add(today, 30)),
-          value: Decimal.new("1000.00"),
-          index_type: :icl,
-          update_factor: Decimal.new("1.05")
-        })
-
+      # Query on April 1st - period ends in current month (April), not previous month (March)
       results = Contracts.contracts_needing_update(today)
       assert results == []
     end
 
     test "excludes archived contracts" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      end_of_this_month = Date.end_of_month(today)
+      # Use fixed dates: April 1st as "today", period ends March 31st (previous month)
+      today = ~D[2024-04-01]
+      end_of_previous_month = ~D[2024-03-31]
 
+      # Create contract with period ending in previous month (March 31st)
+      # The fixture will create a period ending on the "today" date we pass
       contract =
         contract_fixture(
           scope,
           %{
-            start_date: today,
-            end_date: Date.add(today, 400),
+            start_date: ~D[2024-01-01],
+            end_date: ~D[2025-01-01],
             rent_period_duration: 6,
             index_type: :ipc
-          }
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0"),
+          today: end_of_previous_month
         )
-
-      _period =
-        rent_period_fixture(contract, %{
-          start_date: Date.add(end_of_this_month, -30),
-          end_date: end_of_this_month,
-          value: Decimal.new("1000.00"),
-          index_type: :ipc,
-          update_factor: Decimal.new("1.03")
-        })
 
       # Archive the contract
       Repo.update!(Contract.archive_changeset(contract, scope))
 
+      # Query on April 1st - period ends in previous month (March), but contract is archived
       results = Contracts.contracts_needing_update(today)
       assert results == []
     end
 
     test "excludes contracts without index_type or rent_period_duration" do
       scope = user_scope_fixture()
-      today = Date.utc_today()
-      end_of_this_month = Date.end_of_month(today)
+      # Use fixed dates: April 1st as "today", period ends March 31st (previous month)
+      today = ~D[2024-04-01]
+      end_of_previous_month = ~D[2024-03-31]
 
       # Create contract without index_type and without rent_period_duration
-      # Both must be nil or both must be set (validation requirement)
-      contract_no_index =
+      # The fixture will create a period ending on the "today" date we pass
+      _contract_no_index =
         contract_fixture(
           scope,
           %{
-            start_date: today,
-            end_date: Date.add(today, 400)
-          }
+            start_date: ~D[2024-01-01],
+            end_date: ~D[2025-01-01]
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("1.0"),
+          today: end_of_previous_month
         )
 
-      _period =
-        rent_period_fixture(contract_no_index, %{
-          start_date: Date.add(end_of_this_month, -30),
-          end_date: end_of_this_month,
-          value: Decimal.new("1000.00")
-        })
-
+      # Query on April 1st - period ends in previous month (March),
+      # but contract lacks index_type/rent_period_duration
       results = Contracts.contracts_needing_update(today)
       assert results == []
     end

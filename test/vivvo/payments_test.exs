@@ -7,7 +7,7 @@ defmodule Vivvo.PaymentsTest do
     alias Vivvo.Payments.Payment
 
     import Vivvo.AccountsFixtures, only: [user_scope_fixture: 0]
-    import Vivvo.ContractsFixtures, only: [contract_fixture: 2]
+    import Vivvo.ContractsFixtures, only: [contract_fixture: 2, contract_fixture: 3]
     import Vivvo.PaymentsFixtures
 
     @invalid_attrs %{status: nil, amount: nil, payment_number: nil, notes: nil, contract_id: nil}
@@ -53,6 +53,72 @@ defmodule Vivvo.PaymentsTest do
     test "create_payment/2 with invalid data returns error changeset" do
       scope = user_scope_fixture()
       assert {:error, %Ecto.Changeset{}} = Payments.create_payment(scope, @invalid_attrs)
+    end
+
+    test "create_payment/2 returns error when contract needs update" do
+      scope = user_scope_fixture()
+
+      # Create a contract with indexing that needs an update today.
+      # We set the fixture's `today` to the last day of the previous month,
+      # so periods are generated up to that date, creating a gap for today.
+      today = Date.utc_today()
+
+      last_month_end =
+        today
+        |> Date.shift(month: -1)
+        |> Date.end_of_month()
+
+      # Create contract starting 6 months before last_month_end with 3-month rent periods
+      contract_start = Date.shift(today, month: -6)
+
+      contract =
+        contract_fixture(
+          scope,
+          %{
+            start_date: contract_start,
+            end_date: Date.shift(today, month: 6),
+            rent: "1000.00",
+            tenant_id: scope.user.id,
+            index_type: :icl,
+            rent_period_duration: 3
+          },
+          past_start_date?: true,
+          update_factor: Decimal.new("0.0"),
+          today: last_month_end
+        )
+
+      # Verify the contract needs update today (there's a gap period)
+      assert Vivvo.Contracts.needs_update?(contract, today)
+
+      # Attempting to create a payment should fail
+      attrs = %{
+        status: :pending,
+        amount: "500.00",
+        payment_number: 1,
+        contract_id: contract.id
+      }
+
+      assert {:error, :contract_needs_update} = Payments.create_payment(scope, attrs)
+    end
+
+    test "create_payment/2 returns changeset error when contract belongs to another tenant" do
+      # Create two different tenant scopes
+      scope = user_scope_fixture()
+      other_scope = user_scope_fixture()
+
+      # Create a contract that belongs to the OTHER tenant
+      other_contract = contract_fixture(other_scope, %{tenant_id: other_scope.user.id})
+
+      # Attempt to create a payment for the other tenant's contract
+      attrs = %{
+        status: :pending,
+        amount: "500.00",
+        payment_number: 1,
+        contract_id: other_contract.id
+      }
+
+      # Unauthorized contract_id is stripped, so it returns same error as missing contract_id
+      assert {:error, %Ecto.Changeset{}} = Payments.create_payment(scope, attrs)
     end
 
     test "update_payment/3 with valid data updates the payment" do

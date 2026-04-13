@@ -45,10 +45,13 @@ defmodule Vivvo.Workers.RentPeriodCreationWorker do
   end
 
   defp create_rent_period_for_contract(contract, today) do
-    year = today.year
-    month = today.month
+    # Calculate the previous month (the one that just ended)
+    # by subtracting today.day days from today to get the last day of previous month
+    previous_month_date = Date.add(today, -today.day)
+    year = previous_month_date.year
+    month = previous_month_date.month
 
-    # Find the period ending in the scheduler's year/month
+    # Find the period ending in the previous month
     target_period =
       Enum.find(contract.rent_periods, fn period ->
         period.end_date.year == year and period.end_date.month == month

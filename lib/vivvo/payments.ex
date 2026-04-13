@@ -143,8 +143,19 @@ defmodule Vivvo.Payments do
   """
   def create_payment(%Scope{} = scope, attrs, uploaded_files \\ [], opts \\ []) do
     contract_id = Map.get(attrs, "contract_id") || Map.get(attrs, :contract_id)
+    contract = if contract_id, do: Contracts.get_contract_for_tenant(scope, contract_id)
 
-    with :ok <- validate_contract_ownership(scope, contract_id) do
+    # Strip unauthorized contract_id to ensure consistent error handling.
+    # If contract_id is provided but contract is nil (not found for tenant),
+    # we remove it so the changeset returns the same error as if no contract_id was provided.
+    attrs =
+      if contract_id != nil && contract == nil do
+        Map.delete(attrs, "contract_id") |> Map.delete(:contract_id)
+      else
+        attrs
+      end
+
+    with :ok <- validate_contract_needs_update(contract) do
       multi =
         Ecto.Multi.new()
         |> Ecto.Multi.run(:file_attrs, fn _repo, _changes ->
@@ -225,13 +236,12 @@ defmodule Vivvo.Payments do
     end)
   end
 
-  defp validate_contract_ownership(_scope, nil), do: :ok
+  defp validate_contract_needs_update(nil), do: :ok
 
-  defp validate_contract_ownership(scope, contract_id) do
-    case Vivvo.Contracts.get_contract_for_tenant(scope, contract_id) do
-      nil -> {:error, :unauthorized}
-      _contract -> :ok
-    end
+  defp validate_contract_needs_update(contract) do
+    if Vivvo.Contracts.needs_update?(contract),
+      do: {:error, :contract_needs_update},
+      else: :ok
   end
 
   @doc """
@@ -500,7 +510,7 @@ defmodule Vivvo.Payments do
   def month_fully_paid?(%Scope{} = scope, contract, payment_number) do
     total = total_accepted_for_month(scope, contract.id, payment_number)
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_number)
-    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    rent = Vivvo.Contracts.latest_rent_value(contract, due_date)
     Decimal.compare(total, rent) != :lt
   end
 
@@ -516,7 +526,7 @@ defmodule Vivvo.Payments do
   def get_month_status(%Scope{} = scope, contract, payment_number) do
     total = total_accepted_for_month(scope, contract.id, payment_number)
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_number)
-    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    rent = Vivvo.Contracts.latest_rent_value(contract, due_date)
 
     cond do
       Decimal.compare(total, rent) != :lt -> :paid
@@ -796,7 +806,7 @@ defmodule Vivvo.Payments do
 
   defp add_outstanding_to_bucket(scope, contract, payment_num, today, acc) do
     due_date = Vivvo.Contracts.calculate_due_date(contract, payment_num)
-    rent = Vivvo.Contracts.current_rent_value(contract, due_date)
+    rent = Vivvo.Contracts.latest_rent_value(contract, due_date)
     paid = total_accepted_for_month(scope, contract.id, payment_num)
     outstanding = Decimal.sub(rent, paid)
 
