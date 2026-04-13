@@ -976,8 +976,9 @@ defmodule VivvoWeb.CoreComponents do
   attr :value, :string, required: true, doc: "the currently selected option value"
   attr :on_select, :any, required: true, doc: "phx-click event name or JS command for selection"
   attr :class, :string, default: "bg-base-200 rounded-xl", doc: "container CSS classes"
+
   attr :rest, :global,
-    exclude: ~w(phx-click phx-value-selected type class),
+    include: ~w(phx-target),
     doc: "additional non-conflicting attributes to pass to each option button"
 
   slot :option, required: true do
