@@ -424,9 +424,7 @@ defmodule Vivvo.Contracts do
       iex> contract_status(%Contract{start_date: ~D[2026-03-01], end_date: ~D[2027-03-01]})
       :upcoming
   """
-  def contract_status(%Contract{} = contract) do
-    today = Date.utc_today()
-
+  def contract_status(%Contract{} = contract, today \\ Date.utc_today()) do
     cond do
       Date.compare(today, contract.start_date) == :lt -> :upcoming
       Date.compare(today, contract.end_date) == :gt -> :expired
@@ -752,7 +750,7 @@ defmodule Vivvo.Contracts do
     total_expected =
       Enum.reduce(past_payment_numbers, Decimal.new(0), fn payment_num, acc ->
         due_date = calculate_due_date(contract, payment_num)
-        rent = current_rent_value(contract, due_date)
+        rent = latest_rent_value(contract, due_date)
         Decimal.add(acc, rent)
       end)
 
@@ -825,7 +823,7 @@ defmodule Vivvo.Contracts do
   defp calculate_month_delay(contract, payments_by_month, payment_number, today) do
     due_date = calculate_due_date(contract, payment_number)
     month_payments = Map.get(payments_by_month, payment_number)
-    rent = current_rent_value(contract, due_date)
+    rent = latest_rent_value(contract, due_date)
 
     cond do
       is_nil(month_payments) ->
@@ -1011,7 +1009,7 @@ defmodule Vivvo.Contracts do
   # when total payments exceed rent (overpayment credit).
   defp calculate_and_add_outstanding(scope, contract, payment_num, acc) do
     due_date = calculate_due_date(contract, payment_num)
-    rent = current_rent_value(contract, due_date)
+    rent = latest_rent_value(contract, due_date)
     paid = Payments.total_accepted_for_month(scope, contract.id, payment_num)
     outstanding = Decimal.sub(rent, paid)
     Decimal.add(acc, outstanding)
@@ -1110,7 +1108,7 @@ defmodule Vivvo.Contracts do
 
   defp build_payment_status(payment_num, contract, contract_payments, totals_by_month, today) do
     due_date = calculate_due_date(contract, payment_num)
-    rent = current_rent_value(contract, due_date)
+    rent = latest_rent_value(contract, due_date)
     total_paid = Map.get(totals_by_month, payment_num, Decimal.new(0))
     month_status = determine_month_status(total_paid, rent)
 
@@ -1177,32 +1175,37 @@ defmodule Vivvo.Contracts do
   end
 
   @doc """
-  Returns the rent period that covers the given date for a contract.
+  Returns the rent period that covers or most recently precedes the given date.
 
   ## Behavior
 
   - If the date falls within a rent period's date range, returns that period
   - If the contract is in the future (start_date > date), returns the earliest period
   - If the contract is expired (end_date < date), returns the latest period
-  - If no period covers the date and contract is active, raises an error
-    (this indicates a bug in period generation)
+  - If the contract is active but no period covers the date (gap period),
+    returns the latest period before the gap (graceful fallback)
+
+  This function is designed to handle the transition period on the 1st of each
+  month (00:00-01:00) when the RentPeriodSchedulerWorker may not have created
+  the new rent period yet. During this window, it returns the previous period's
+  value rather than raising an error.
 
   ## Examples
 
-      iex> current_rent_period(contract_with_periods, ~D[2026-03-15])
+      iex> latest_rent_period(contract_with_periods, ~D[2026-03-15])
       %RentPeriod{start_date: ~D[2026-01-01], end_date: ~D[2026-03-31], value: Decimal.new("1200.00")}
 
-      iex> current_rent_period(future_contract, Date.utc_today())
+      iex> latest_rent_period(future_contract, Date.utc_today())
       %RentPeriod{}  # Returns earliest period for future contracts
 
   """
-  def current_rent_period(%Contract{} = contract, date \\ Date.utc_today()) do
+  def latest_rent_period(%Contract{} = contract, date \\ Date.utc_today()) do
     contract =
       if Ecto.assoc_loaded?(contract.rent_periods) do
         contract
       else
         Logger.warning(
-          "Rent periods not preloaded for contract #{contract.id} in current_rent_period. Preloading now, but consider preloading in calling function for efficiency."
+          "Rent periods not preloaded for contract #{contract.id} in latest_rent_period. Preloading now, but consider preloading in calling function for efficiency."
         )
 
         Repo.preload(contract, :rent_periods)
@@ -1210,53 +1213,40 @@ defmodule Vivvo.Contracts do
 
     periods = contract.rent_periods
 
-    date_match =
-      Enum.find(periods, fn rp ->
-        Date.compare(rp.start_date, date) != :gt and
-          Date.compare(rp.end_date, date) != :lt
+    latest_period =
+      Enum.max_by(periods, & &1.end_date, Date, fn ->
+        # Even future contracts must have one **initial** rent period created.
+        raise "Contract #{contract.id} has no rent periods"
       end)
 
-    case date_match do
-      %RentPeriod{} = rp ->
-        rp
-
-      nil ->
-        handle_no_matching_period(contract, periods, date)
-    end
-  end
-
-  defp handle_no_matching_period(contract, periods, date) do
-    cond do
-      Date.compare(contract.start_date, date) == :gt ->
-        # Future contract -- use the initial (earliest) period
-        Enum.min_by(periods, & &1.start_date, Date, fn ->
-          raise "Contract #{contract.id} has no rent periods"
-        end)
-
-      Date.compare(contract.end_date, date) == :lt ->
-        # Expired contract -- use the latest period
-        Enum.max_by(periods, & &1.end_date, Date, fn ->
-          raise "Contract #{contract.id} has no rent periods"
-        end)
-
-      true ->
-        # Contract is active but no matching period -- bug in period generation
-        raise "Contract #{contract.id} has no current rent period for date #{date}. " <>
-                "This indicates a bug in rent period generation."
-    end
+    # 1. First, try to find an exact date match.
+    # 2. If no match is found, use the latest available period:
+    # - If there is no match because the contract is :upcoming (future),
+    # then the latest period would match the first and **only** rent period the contract has.
+    # - If there is no match because the contract has :expired (past),
+    # then the latest period would match the last rent period of the contract.
+    # - If there is no match for an active contract, this is because the contract has not been updated yet.
+    # Until the contract is updated we return the contract's latest period.
+    Enum.find(periods, latest_period, fn rp ->
+      Date.compare(rp.start_date, date) != :gt and
+        Date.compare(rp.end_date, date) != :lt
+    end)
   end
 
   @doc """
   Returns the rent value for the given date from the appropriate rent period.
 
+  Uses `latest_rent_period/2` to find the period, which gracefully handles
+  the transition period on the 1st of each month.
+
   ## Examples
 
-      iex> current_rent_value(contract, ~D[2026-03-15])
+      iex> latest_rent_value(contract, ~D[2026-03-15])
       Decimal.new("1200.00")
 
   """
-  def current_rent_value(%Contract{} = contract, date \\ Date.utc_today()) do
-    current_rent_period(contract, date).value
+  def latest_rent_value(%Contract{} = contract, date \\ Date.utc_today()) do
+    latest_rent_period(contract, date).value
   end
 
   @doc """
@@ -1275,7 +1265,7 @@ defmodule Vivvo.Contracts do
 
   """
   def next_rent_update_date(%Contract{} = contract, today \\ Date.utc_today()) do
-    current_period = current_rent_period(contract, today)
+    current_period = latest_rent_period(contract, today)
     update_date = Date.add(current_period.end_date, 1)
 
     if Date.before?(update_date, contract.end_date) do
@@ -1302,6 +1292,49 @@ defmodule Vivvo.Contracts do
     case next_rent_update_date(contract, today) do
       nil -> nil
       date -> Date.diff(date, today)
+    end
+  end
+
+  @doc """
+  Returns true if the contract is active and its rent periods need to be updated.
+
+  This occurs during the transition period on the 1st of each month (00:00-01:00)
+  when the RentPeriodSchedulerWorker has not yet created the new rent period for
+  the current month. During this window, tenants should not be able to submit
+  rent payments as the rent amount may not be final.
+
+  ## Conditions for returning true:
+  - Contract is active (start_date <= today <= end_date)
+  - No rent period covers today's date
+
+  ## Examples
+
+      iex> needs_update?(active_contract)
+      false  # Period exists covering today
+
+      iex> needs_update?(contract_during_transition)
+      true   # No period covers today (gap period)
+
+  """
+  def needs_update?(%Contract{} = contract, today \\ Date.utc_today()) do
+    contract =
+      if Ecto.assoc_loaded?(contract.rent_periods) do
+        contract
+      else
+        Repo.preload(contract, :rent_periods)
+      end
+
+    # Check if contract is active
+    case contract_status(contract, today) do
+      :active ->
+        # Check if any period covers today
+        not Enum.any?(contract.rent_periods, fn rp ->
+          Date.compare(rp.start_date, today) != :gt and
+            Date.compare(rp.end_date, today) != :lt
+        end)
+
+      _ ->
+        false
     end
   end
 
@@ -1379,7 +1412,7 @@ defmodule Vivvo.Contracts do
       Enum.reduce(dates, {[], [], nil, nil}, fn date,
                                                 {labels_acc, values_acc, min_acc, max_acc} ->
         label = format_chart_label(date, interval)
-        value = Decimal.to_float(current_rent_value(contract, date))
+        value = Decimal.to_float(latest_rent_value(contract, date))
 
         new_min = if min_acc == nil or value < min_acc, do: value, else: min_acc
         new_max = if max_acc == nil or value > max_acc, do: value, else: max_acc
