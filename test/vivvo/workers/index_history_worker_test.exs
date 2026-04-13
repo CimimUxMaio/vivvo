@@ -1,5 +1,5 @@
 defmodule Vivvo.Workers.IndexHistoryWorkerTest do
-  use Vivvo.DataCase, async: true
+  use Vivvo.DataCase, async: false
 
   alias Vivvo.Workers.IndexHistoryWorker
 
