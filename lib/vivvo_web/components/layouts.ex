@@ -133,7 +133,7 @@ defmodule VivvoWeb.Layouts do
                   <%!-- Dropdown Menu --%>
                   <div
                     tabindex="-1"
-                    class="dropdown-content bg-base-100 rounded-xl shadow-lg border border-base-200 z-1 w-56 p-2"
+                    class="dropdown-content bg-base-100 rounded-xl shadow-lg border border-base-200 w-56 p-2"
                   >
                     <%!-- User Info --%>
                     <div class="px-3 py-2 border-b border-base-200 mb-1">
