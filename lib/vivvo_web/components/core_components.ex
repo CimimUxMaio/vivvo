@@ -487,7 +487,7 @@ defmodule VivvoWeb.CoreComponents do
 
       <%!-- Mobile FAB Actions --%>
       <%= if @action != [] do %>
-        <div class="fixed bottom-6 right-6 z-50 sm:hidden fab">
+        <div class="fixed bottom-6 right-6 z-50 sm:hidden fab group">
           <div
             tabindex="0"
             role="button"
@@ -505,29 +505,36 @@ defmodule VivvoWeb.CoreComponents do
             <.icon name="hero-x-mark" class="size-6" />
           </div>
 
-          <%!-- Action Buttons --%>
+          <%!-- Backdrop overlay with fade animation --%>
+          <div class="pointer-events-none fixed inset-0 bg-black/50 -z-10 opacity-0 transition-opacity duration-200 ease-out group-focus-within:opacity-100 group-hover:opacity-100">
+          </div>
+
+          <%!-- Action Buttons with Labels --%>
           <%= for action <- @action do %>
-            <.link
-              :if={action[:navigate]}
-              navigate={action[:navigate]}
-              class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
-              title={action.label}
-              aria-label={action.label}
-              {Keyword.new(action[:rest] || [])}
-            >
-              <.icon name={action.icon} class="size-6" />
-            </.link>
-            <button
-              :if={action[:"phx-click"]}
-              type="button"
-              phx-click={action[:"phx-click"]}
-              class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
-              title={action.label}
-              aria-label={action.label}
-              {Keyword.new(action[:rest] || [])}
-            >
-              <.icon name={action.icon} class="size-6" />
-            </button>
+            <div>
+              <span class="text-white/90 text-lg">{action.label}</span>
+              <.link
+                :if={action[:navigate]}
+                navigate={action[:navigate]}
+                class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
+                title={action.label}
+                aria-label={action.label}
+                {Keyword.new(action[:rest] || [])}
+              >
+                <.icon name={action.icon} class="size-6" />
+              </.link>
+              <button
+                :if={action[:"phx-click"]}
+                type="button"
+                phx-click={action[:"phx-click"]}
+                class="btn btn-circle btn-primary btn-soft size-14 shadow-lg"
+                title={action.label}
+                aria-label={action.label}
+                {Keyword.new(action[:rest] || [])}
+              >
+                <.icon name={action.icon} class="size-6" />
+              </button>
+            </div>
           <% end %>
         </div>
       <% end %>
