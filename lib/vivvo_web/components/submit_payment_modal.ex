@@ -313,12 +313,7 @@ defmodule VivvoWeb.SubmitPaymentModal do
       with_consumed_uploads(socket, :files, [], fn uploaded_files ->
         case Payments.create_payment(socket.assigns.current_scope, attrs, uploaded_files, opts) do
           {:ok, _payment} ->
-            message =
-              if socket.assigns.type == :rent,
-                do: "Payment submitted successfully!",
-                else: "Miscellaneous payment submitted successfully!"
-
-            send(self(), {:flash, :info, message})
+            send(self(), {:flash, :info, success_message(socket.assigns.type)})
             push_modal_close(socket, socket.assigns.id)
 
           {:error, :contract_needs_update} ->
@@ -431,4 +426,8 @@ defmodule VivvoWeb.SubmitPaymentModal do
       due_date: due_date
     }
   end
+
+  # Returns the appropriate success message based on payment type
+  defp success_message(:rent), do: "Payment submitted successfully!"
+  defp success_message(_type), do: "Miscellaneous payment submitted successfully!"
 end
