@@ -324,6 +324,10 @@ defmodule VivvoWeb.SubmitPaymentModal do
 
         {:noreply, push_modal_close(socket, socket.assigns.id)}
 
+      {:error, :contract_needs_update} ->
+        send(self(), {:flash, :info, "Contract rent is being updated. Please try again shortly."})
+        {:noreply, socket}
+
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
     end
@@ -412,7 +416,7 @@ defmodule VivvoWeb.SubmitPaymentModal do
   defp calculate_payment_summary(contract, month) do
     {accepted_total, pending_total} = calculate_payment_totals(contract, month)
     due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.current_rent_value(contract, due_date)
+    rent = Contracts.latest_rent_value(contract, due_date)
     remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
 
     %{

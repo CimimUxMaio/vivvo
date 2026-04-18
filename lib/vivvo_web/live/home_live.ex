@@ -9,8 +9,6 @@ defmodule VivvoWeb.HomeLive do
 
   import VivvoWeb.Helpers.ContractHelpers
   import VivvoWeb.PaymentComponents, only: [file_chip: 1]
-  import VivvoWeb.SubmitPaymentModal, only: [submit_payment_modal: 1]
-  import VivvoWeb.UploadHelpers, only: [clear_upload_files: 1, process_upload_entry: 2]
 
   alias Vivvo.Accounts.Scope
   alias Vivvo.Contracts
@@ -19,15 +17,16 @@ defmodule VivvoWeb.HomeLive do
   # Number of months to show in income trend chart
   @trend_months 6
 
-  @file_config Application.compile_env(:vivvo, Vivvo.Files)
-
   @impl true
   def mount(_params, _session, socket) do
     scope = socket.assigns.current_scope
 
     if Scope.tenant?(scope) do
-      # Tenant state is handled by handle_params
-      # Initialize with empty assigns, handle_params will populate
+      # Subscribe to payments for real-time updates
+      if connected?(socket) do
+        Payments.subscribe_payments(scope)
+      end
+
       {:ok,
        socket
        |> assign(:contracts, [])
@@ -35,16 +34,15 @@ defmodule VivvoWeb.HomeLive do
        |> assign(:current_expanded, true)
        |> assign(:history_expanded, false)
        |> assign(:expanded_payment_items, MapSet.new())
-       |> assign(:submitting_payment, nil)
-       |> assign(:payment_form, nil)
-       |> assign(:payment_summary, nil)
-       |> allow_upload(:files,
-         accept: Enum.map(@file_config[:allowed_extensions], &".#{&1}"),
-         max_entries: @file_config[:max_files_per_payment],
-         max_file_size: @file_config[:max_file_size]
-       )}
+       |> assign(:payment_contract, nil)
+       |> assign(:payment_month, nil)
+       |> assign(:payment_type, :rent)}
     else
-      # Owner view - new dashboard with streams for large collections
+      # Owner view - subscribe to payments for real-time updates
+      if connected?(socket) do
+        Payments.subscribe_payments(scope)
+      end
+
       socket =
         socket
         |> assign(:today, Date.utc_today())
@@ -86,24 +84,58 @@ defmodule VivvoWeb.HomeLive do
     end
   end
 
+  # PubSub handlers for real-time payment updates
+  @impl true
+  def handle_info({event, %Vivvo.Payments.Payment{}}, socket)
+      when event in [:created, :updated, :deleted] do
+    scope = socket.assigns.current_scope
+
+    socket =
+      if Scope.tenant?(scope) do
+        refresh_tenant_contracts(socket, scope)
+      else
+        refresh_owner_dashboard(socket, scope)
+      end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:flash, type, message}, socket) do
+    {:noreply, put_flash(socket, type, message)}
+  end
+
+  defp refresh_tenant_contracts(socket, scope) do
+    contracts = Contracts.list_contracts_for_tenant(scope)
+
+    selected_contract =
+      if socket.assigns.selected_contract do
+        Enum.find(
+          contracts,
+          &(to_string(&1.id) == to_string(socket.assigns.selected_contract.id))
+        ) ||
+          List.first(contracts)
+      else
+        List.first(contracts)
+      end
+
+    socket
+    |> assign(:contracts, contracts)
+    |> assign(:selected_contract, selected_contract)
+  end
+
+  defp refresh_owner_dashboard(socket, scope) do
+    socket
+    |> assign(:expanded_pending_payments, MapSet.new())
+    |> refresh_dashboard_data(scope)
+  end
+
   @impl true
   def handle_event("accept_payment", %{"id" => payment_id}, socket) do
     scope = socket.assigns.current_scope
 
     if Scope.owner?(scope) do
       do_accept_payment(socket, scope, payment_id)
-    else
-      {:noreply, put_flash(socket, :error, "Unauthorized action")}
-    end
-  end
-
-  @impl true
-  def handle_event("reject_payment", %{"rejection-reason" => reason}, socket) do
-    scope = socket.assigns.current_scope
-    payment = socket.assigns.rejecting_payment
-
-    if Scope.owner?(scope) && payment do
-      do_reject_payment(socket, scope, payment.id, reason)
     else
       {:noreply, put_flash(socket, :error, "Unauthorized action")}
     end
@@ -160,7 +192,7 @@ defmodule VivvoWeb.HomeLive do
   end
 
   @impl true
-  def handle_event("show_reject_modal", %{"payment-id" => payment_id}, socket) do
+  def handle_event("set_rejecting_payment", %{"payment-id" => payment_id}, socket) do
     scope = socket.assigns.current_scope
 
     case Payments.get_payment(scope, payment_id) do
@@ -168,13 +200,11 @@ defmodule VivvoWeb.HomeLive do
         {:noreply, put_flash(socket, :error, "Payment not found")}
 
       payment ->
-        {:noreply, assign(socket, :rejecting_payment, payment)}
+        {:noreply,
+         socket
+         |> assign(:rejecting_payment, payment)
+         |> push_modal_open("reject-payment-modal")}
     end
-  end
-
-  @impl true
-  def handle_event("close_reject_modal", _params, socket) do
-    {:noreply, assign(socket, :rejecting_payment, nil)}
   end
 
   @impl true
@@ -189,25 +219,12 @@ defmodule VivvoWeb.HomeLive do
     if contract do
       {month_num, _} = Integer.parse(month)
 
-      summary = calculate_payment_summary(contract, month_num)
-
-      # Pre-populate with minimum of rent or remaining allowance
-      initial_amount = Decimal.min(summary.rent, summary.remaining)
-      initial_attrs = %{"amount" => initial_amount, "type" => :rent}
-
-      changeset =
-        Payments.change_payment(
-          scope,
-          %Vivvo.Payments.Payment{},
-          initial_attrs,
-          remaining_allowance: summary.remaining
-        )
-
       {:noreply,
        socket
-       |> assign(:submitting_payment, {contract, month_num, :rent})
-       |> assign(:payment_form, to_form(changeset))
-       |> assign(:payment_summary, summary)}
+       |> assign(:payment_contract, contract)
+       |> assign(:payment_month, month_num)
+       |> assign(:payment_type, :rent)
+       |> push_modal_open("payment-modal")}
     else
       {:noreply, put_flash(socket, :error, "Contract not found")}
     end
@@ -223,131 +240,14 @@ defmodule VivvoWeb.HomeLive do
     contract = Contracts.get_contract_for_tenant(scope, contract_id)
 
     if contract do
-      # Miscellaneous payment - no payment_number needed
-      initial_attrs = %{"amount" => "", "type" => :miscellaneous}
-
-      changeset =
-        Payments.change_payment(
-          scope,
-          %Vivvo.Payments.Payment{},
-          initial_attrs
-        )
-
       {:noreply,
        socket
-       |> assign(:submitting_payment, {contract, nil, :miscellaneous})
-       |> assign(:payment_form, to_form(changeset))
-       |> assign(:payment_summary, nil)}
+       |> assign(:payment_contract, contract)
+       |> assign(:payment_month, nil)
+       |> assign(:payment_type, :miscellaneous)
+       |> push_modal_open("payment-modal")}
     else
       {:noreply, put_flash(socket, :error, "Contract not found")}
-    end
-  end
-
-  @impl true
-  def handle_event("close_payment_modal", _params, socket) do
-    file_entries = socket.assigns.uploads.files.entries
-
-    {:noreply,
-     socket
-     |> then(fn s ->
-       # Cancel all pending uploads
-       Enum.reduce(file_entries, s, fn entry, socket ->
-         cancel_upload(socket, :files, entry.ref)
-       end)
-     end)
-     |> assign(:submitting_payment, nil)
-     |> assign(:payment_form, nil)
-     |> assign(:payment_summary, nil)}
-  end
-
-  @impl true
-  def handle_event("cancel_upload", %{"ref" => ref}, socket) do
-    {:noreply, cancel_upload(socket, :files, ref)}
-  end
-
-  @impl true
-  def handle_event("validate_payment", %{"payment" => params}, socket) do
-    scope = socket.assigns.current_scope
-    {_contract, month, payment_type} = socket.assigns.submitting_payment
-
-    # Normalize params with server-side payment type enforcement
-    params = normalize_payment_params(params, payment_type, month)
-
-    # Only validate with remaining allowance for rent payments
-    opts =
-      if payment_type == :rent,
-        do: [remaining_allowance: socket.assigns.payment_summary.remaining],
-        else: []
-
-    changeset =
-      Payments.change_payment(
-        scope,
-        %Vivvo.Payments.Payment{},
-        params,
-        opts
-      )
-      |> Map.put(:action, :validate)
-
-    {:noreply,
-     socket
-     |> assign(payment_form: to_form(changeset))}
-  end
-
-  @impl true
-  def handle_event("submit_payment", %{"payment" => params}, socket) do
-    scope = socket.assigns.current_scope
-    {contract, month, payment_type} = socket.assigns.submitting_payment
-
-    # Normalize params with server-side payment type enforcement
-    attrs =
-      params
-      |> Map.put("contract_id", contract.id)
-      |> normalize_payment_params(payment_type, month)
-
-    # Only validate remaining allowance for rent payments
-    opts =
-      if payment_type == :rent do
-        summary = calculate_payment_summary(contract, month)
-        [remaining_allowance: summary.remaining]
-      else
-        []
-      end
-
-    # Collect uploaded files
-    uploaded_files =
-      consume_uploaded_entries(socket, :files, &process_upload_entry/2)
-
-    case Payments.create_payment(scope, attrs, uploaded_files, opts) do
-      {:ok, _payment} ->
-        clear_upload_files(uploaded_files)
-
-        contracts = Contracts.list_contracts_for_tenant(scope)
-
-        selected_contract =
-          Enum.find(contracts, &(to_string(&1.id) == to_string(contract.id))) ||
-            List.first(contracts)
-
-        success_message =
-          if payment_type == :rent,
-            do: "Payment submitted successfully!",
-            else: "Miscellaneous payment submitted successfully!"
-
-        {:noreply,
-         socket
-         |> assign(:submitting_payment, nil)
-         |> assign(:payment_form, nil)
-         |> assign(:payment_summary, nil)
-         |> assign(:contracts, contracts)
-         |> assign(:selected_contract, selected_contract)
-         |> put_flash(:info, success_message)}
-
-      {:error, :contract_needs_update} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Contract rent is being updated. Please try again shortly.")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, payment_form: to_form(changeset))}
     end
   end
 
@@ -375,39 +275,6 @@ defmodule VivvoWeb.HomeLive do
     {:noreply, put_flash(socket, :error, "Failed to accept payment")}
   end
 
-  defp do_reject_payment(socket, scope, payment_id, reason) do
-    case Payments.get_payment(scope, payment_id) do
-      nil ->
-        {:noreply, put_flash(socket, :error, "Payment not found")}
-
-      payment ->
-        handle_reject_payment_result(
-          socket,
-          scope,
-          Payments.reject_payment(scope, payment, reason)
-        )
-    end
-  end
-
-  defp handle_reject_payment_result(socket, _scope, {:ok, payment}) do
-    pending_payments =
-      Enum.reject(socket.assigns.pending_payments, fn p -> p.id == payment.id end)
-
-    socket =
-      socket
-      |> assign(:pending_payments, pending_payments)
-      |> assign(:rejecting_payment, nil)
-      |> assign(:pending_payments_empty?, pending_payments == [])
-      |> assign(:expanded_pending_payments, MapSet.new())
-      |> put_flash(:info, "Payment rejected")
-
-    {:noreply, socket}
-  end
-
-  defp handle_reject_payment_result(socket, _scope, {:error, _changeset}) do
-    {:noreply, put_flash(socket, :error, "Failed to reject payment")}
-  end
-
   defp refresh_dashboard_data(socket, scope) do
     today = Date.utc_today()
     pending_payments = Payments.pending_payments_for_validation(scope)
@@ -433,16 +300,15 @@ defmodule VivvoWeb.HomeLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <%= if Scope.tenant?(@current_scope) do %>
         <.tenant_dashboard
-          uploads={@uploads}
           contracts={@contracts}
           current_scope={@current_scope}
           selected_contract={@selected_contract}
           current_expanded={@current_expanded}
           history_expanded={@history_expanded}
-          submitting_payment={@submitting_payment}
-          payment_form={@payment_form}
-          payment_summary={@payment_summary}
           expanded_payment_items={@expanded_payment_items}
+          payment_contract={@payment_contract}
+          payment_month={@payment_month}
+          payment_type={@payment_type}
         />
       <% else %>
         <.owner_dashboard
@@ -459,8 +325,9 @@ defmodule VivvoWeb.HomeLive do
           dashboard_summary={@dashboard_summary}
           payment_counts={@payment_counts}
           pending_payments={@pending_payments}
-          rejecting_payment={@rejecting_payment}
           expanded_pending_payments={@expanded_pending_payments}
+          rejecting_payment={@rejecting_payment}
+          current_scope={@current_scope}
         />
       <% end %>
     </Layouts.app>
@@ -509,18 +376,12 @@ defmodule VivvoWeb.HomeLive do
       />
 
       <%!-- Reject Payment Modal --%>
-      <%= if @rejecting_payment do %>
-        <.reject_modal
-          id="reject-payment-modal"
-          title="Reject Payment"
-          description="Please provide a reason for rejecting this payment."
-          submit_event="reject_payment"
-          close_event="close_reject_modal"
-          reason_label="Rejection Reason"
-          reason_placeholder="Enter rejection reason..."
-          submit_text="Reject Payment"
-        />
-      <% end %>
+      <.live_component
+        module={VivvoWeb.RejectPaymentModal}
+        id="reject-payment-modal"
+        payment={@rejecting_payment}
+        current_scope={@current_scope}
+      />
     </div>
     """
   end
@@ -1268,8 +1129,7 @@ defmodule VivvoWeb.HomeLive do
           <.icon name="hero-check" class="w-4 h-4 mr-1.5" /> Accept
         </.button>
         <.button
-          phx-click="show_reject_modal"
-          phx-value-payment-id={@payment.id}
+          phx-click={JS.push("set_rejecting_payment", value: %{"payment-id" => @payment.id})}
           phx-click-stop
           class="btn-error flex-1"
         >
@@ -1394,8 +1254,7 @@ defmodule VivvoWeb.HomeLive do
           <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept
         </.button>
         <.button
-          phx-click="show_reject_modal"
-          phx-value-payment-id={@payment.id}
+          phx-click={JS.push("set_rejecting_payment", value: %{"payment-id" => @payment.id})}
           phx-click-stop
           class="btn-error btn-sm"
         >
@@ -1557,19 +1416,15 @@ defmodule VivvoWeb.HomeLive do
         <%!-- C. Contract & Property Quick Access --%>
         <.contract_quick_access contract={@contract} contract_status={@contract_status} />
 
-        <%!-- Submit Payment Modal --%>
-        <%= if @submitting_payment do %>
-          <.submit_payment_modal
-            id="submit-payment-modal"
-            uploads={@uploads}
-            submitting_payment={@submitting_payment}
-            payment_summary={@payment_summary}
-            form={@payment_form}
-            submit_event="submit_payment"
-            close_event="close_payment_modal"
-            validation_event="validate_payment"
-          />
-        <% end %>
+        <%!-- Submit Payment Modal - LiveComponent always mounted, visibility via JS --%>
+        <.live_component
+          module={VivvoWeb.SubmitPaymentModal}
+          id="payment-modal"
+          contract={@payment_contract}
+          type={@payment_type}
+          month={@payment_month}
+          current_scope={@current_scope}
+        />
       <% else %>
         <.no_contract_message />
       <% end %>
@@ -2418,45 +2273,5 @@ defmodule VivvoWeb.HomeLive do
       received: received,
       collection_pct: collection_pct
     }
-  end
-
-  # Calculates payment totals for a specific month from preloaded contract payments.
-  # Returns {accepted_total, pending_total} to avoid N+1 queries.
-  defp calculate_payment_totals(contract, month) do
-    contract.payments
-    |> Enum.filter(&(&1.type == :rent and &1.payment_number == month))
-    |> Enum.reduce({Decimal.new(0), Decimal.new(0)}, fn payment, {accepted, pending} ->
-      case payment.status do
-        :accepted -> {Decimal.add(accepted, payment.amount), pending}
-        :pending -> {accepted, Decimal.add(pending, payment.amount)}
-        _ -> {accepted, pending}
-      end
-    end)
-  end
-
-  # Returns a full summary map for display purposes (templates).
-  defp calculate_payment_summary(contract, month) do
-    {accepted_total, pending_total} = calculate_payment_totals(contract, month)
-    due_date = Contracts.calculate_due_date(contract, month)
-    rent = Contracts.latest_rent_value(contract, due_date)
-    remaining = Decimal.sub(rent, Decimal.add(accepted_total, pending_total))
-
-    %{
-      rent: rent,
-      accepted_total: accepted_total,
-      pending_total: pending_total,
-      remaining: remaining,
-      due_date: due_date
-    }
-  end
-
-  # Normalizes payment parameters based on payment type.
-  # Enforces server-side payment type and sets appropriate payment_number.
-  # - For rent payments: sets payment_number to the month
-  # - For misc payments: sets payment_number to nil
-  defp normalize_payment_params(params, payment_type, month) do
-    params
-    |> Map.put("type", to_string(payment_type))
-    |> Map.put("payment_number", if(payment_type == :rent, do: month))
   end
 end
