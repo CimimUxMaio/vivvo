@@ -10,6 +10,7 @@ defmodule VivvoWeb.UploadHelpers do
   Processes an upload entry and stores it to a temporary directory.
 
   This function is intended for use as a callback with `consume_uploaded_entries/3`.
+  The callback receives `(entry, meta)` where meta is a map containing the `:path`.
 
   ## Options
 
@@ -21,10 +22,14 @@ defmodule VivvoWeb.UploadHelpers do
       consume_uploaded_entries(socket, :files, &process_upload_entry/2)
 
       # Custom subdir: stores to <temp_dir>/uploads/invoices/
-      consume_uploaded_entries(socket, :files, &process_upload_entry(&1, subdir: "invoices"))
+      consume_uploaded_entries(socket, :files, &process_upload_entry(&1, &2, subdir: "invoices"))
 
   """
-  @spec process_upload_entry(map(), map(), keyword()) ::
+
+  # Note: consume_uploaded_entries passes (meta, entry) to the callback
+  # where meta is %{path: temp_file_path} and entry is %UploadEntry{}
+
+  @spec process_upload_entry(map(), Phoenix.LiveView.UploadEntry.t(), keyword()) ::
           {:ok, %{path: String.t(), filename: String.t()}}
   def process_upload_entry(%{path: path}, entry, opts \\ []) do
     temp_dir = build_uploads_path(opts[:subdir])
@@ -34,6 +39,33 @@ defmodule VivvoWeb.UploadHelpers do
     File.cp!(path, dest)
 
     {:ok, %{path: dest, filename: entry.client_name}}
+  end
+
+  @doc """
+  Consumes uploaded entries and stores them to a temporary directory.
+
+  This is a convenience wrapper around `consume_uploaded_entries/3` that uses
+  `process_upload_entry/3` as the callback. Supports the same options.
+
+  ## Options
+
+    * `:subdir` - Custom subdirectory within <temp_dir>/uploads/ (default: ".")
+
+  ## Examples
+
+      # Default: stores to <temp_dir>/uploads/
+      uploaded_files = consume_file_uploads(socket, :files)
+
+      # Custom subdir: stores to <temp_dir>/uploads/invoices/
+      uploaded_files = consume_file_uploads(socket, :files, subdir: "invoices")
+
+  """
+  @spec consume_file_uploads(Phoenix.LiveView.Socket.t(), atom(), keyword()) ::
+          list(%{path: String.t(), filename: String.t()})
+  def consume_file_uploads(socket, name, opts \\ []) do
+    Phoenix.LiveView.consume_uploaded_entries(socket, name, fn meta, entry ->
+      process_upload_entry(meta, entry, opts)
+    end)
   end
 
   defp build_uploads_path(custom_subdir) do
