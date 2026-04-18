@@ -312,6 +312,19 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
+  Returns an `%Ecto.Changeset{}` for tracking payment rejection changes.
+
+  ## Examples
+
+      iex> change_payment_rejection(payment)
+      %Ecto.Changeset{data: %Payment{}}
+
+  """
+  def change_payment_rejection(%Payment{} = payment, attrs \\ %{}) do
+    Payment.validation_changeset(payment, attrs)
+  end
+
+  @doc """
   List all payments for the tenant's contracts.
 
   ## Examples
