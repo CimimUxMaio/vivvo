@@ -10,7 +10,8 @@ defmodule VivvoWeb.UploadHelpers do
   Processes an upload entry and stores it to a temporary directory.
 
   This function is intended for use as a callback with `consume_uploaded_entries/3`.
-  The callback receives `(entry, meta)` where meta is a map containing the `:path`.
+  The callback receives `(meta, entry)` where `meta` is a map containing the `:path`
+  and `entry` is the `%Phoenix.LiveView.UploadEntry{}` struct.
 
   ## Options
 
@@ -25,9 +26,6 @@ defmodule VivvoWeb.UploadHelpers do
       consume_uploaded_entries(socket, :files, &process_upload_entry(&1, &2, subdir: "invoices"))
 
   """
-
-  # Note: consume_uploaded_entries passes (meta, entry) to the callback
-  # where meta is %{path: temp_file_path} and entry is %UploadEntry{}
 
   @spec process_upload_entry(map(), Phoenix.LiveView.UploadEntry.t(), keyword()) ::
           {:ok, %{path: String.t(), filename: String.t()}}
