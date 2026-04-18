@@ -19,7 +19,6 @@ const Modal = {
     this.box = this.el.querySelector(".modal-box")
     this.onOpenEvent = this.el.dataset.onOpen
     this.onCloseEvent = this.el.dataset.onClose
-    this.eventTarget = this.el.getAttribute("phx-target")
     this.isOpen = false
     this.isClosing = false
     this.isDragging = false
@@ -255,14 +254,11 @@ const Modal = {
   },
 
   /**
-   * Push an event to the server, targeting a specific element if eventTarget is set.
+   * Push an event to the server, routing through this element.
+   * LiveView will respect the phx-target attribute if set, otherwise bubble to parent LiveView.
    */
   pushModalEvent(event) {
-    if (this.eventTarget) {
-      this.pushEventTo(this.eventTarget, event)
-    } else {
-      this.pushEvent(event)
-    }
+    this.pushEventTo(this.el, event)
   },
 }
 
