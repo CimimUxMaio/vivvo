@@ -456,8 +456,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       context = set_tenant_role(%{user: user, conn: conn})
 
       assert {:error,
-              {:redirect,
-               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+              {:live_redirect,
+               %{to: "/", flash: %{"error" => "You don't have permission to access this page."}}}} =
                live(context.conn, ~p"/properties")
     end
 
@@ -465,8 +465,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       context = set_tenant_role(%{user: user, conn: conn})
 
       assert {:error,
-              {:redirect,
-               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+              {:live_redirect,
+               %{to: "/", flash: %{"error" => "You don't have permission to access this page."}}}} =
                live(context.conn, ~p"/properties/new")
     end
 
@@ -478,8 +478,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       context = set_tenant_role(%{user: user, conn: conn})
 
       assert {:error,
-              {:redirect,
-               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+              {:live_redirect,
+               %{to: "/", flash: %{"error" => "You don't have permission to access this page."}}}} =
                live(context.conn, ~p"/properties/#{property}")
     end
 
@@ -491,8 +491,8 @@ defmodule VivvoWeb.PropertyLiveTest do
       context = set_tenant_role(%{user: user, conn: conn})
 
       assert {:error,
-              {:redirect,
-               %{to: "/", flash: %{"error" => "You must be an owner to access this page."}}}} =
+              {:live_redirect,
+               %{to: "/", flash: %{"error" => "You don't have permission to access this page."}}}} =
                live(context.conn, ~p"/properties/#{property}/edit")
     end
   end

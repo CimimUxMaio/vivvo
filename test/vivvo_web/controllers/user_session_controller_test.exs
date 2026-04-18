@@ -21,7 +21,11 @@ defmodule VivvoWeb.UserSessionControllerTest do
       assert redirected_to(conn) == ~p"/"
 
       # Now do a logged in request and assert on the menu
+      # The dispatcher redirects to the appropriate dashboard
       conn = get(conn, ~p"/")
+      assert redirected_to(conn) == ~p"/owner/dashboard"
+
+      conn = get(conn, ~p"/owner/dashboard")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"
@@ -85,7 +89,11 @@ defmodule VivvoWeb.UserSessionControllerTest do
       assert redirected_to(conn) == ~p"/"
 
       # Now do a logged in request and assert on the menu
+      # The dispatcher redirects to the appropriate dashboard
       conn = get(conn, ~p"/")
+      assert redirected_to(conn) == ~p"/owner/dashboard"
+
+      conn = get(conn, ~p"/owner/dashboard")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"
@@ -109,7 +117,11 @@ defmodule VivvoWeb.UserSessionControllerTest do
       assert Accounts.get_user!(user.id).confirmed_at
 
       # Now do a logged in request and assert on the menu
+      # The dispatcher redirects to the appropriate dashboard
       conn = get(conn, ~p"/")
+      assert redirected_to(conn) == ~p"/owner/dashboard"
+
+      conn = get(conn, ~p"/owner/dashboard")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"

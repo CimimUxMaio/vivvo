@@ -70,6 +70,7 @@ defmodule VivvoWeb.Router do
       ] do
       live "/owner/dashboard", OwnerDashboardLive, :index
 
+      # Property routes
       live "/properties", PropertyLive.Index, :index
       live "/properties/new", PropertyLive.Form, :new
       live "/properties/:id", PropertyLive.Show, :show
@@ -80,7 +81,7 @@ defmodule VivvoWeb.Router do
       live "/properties/:property_id/contracts/:contract_id", ContractLive.Show, :show
     end
 
-    live_session :tenant_dashboard,
+    live_session :tenant,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
         {VivvoWeb.RoleHooks, :handle_role_changes},
