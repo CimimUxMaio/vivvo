@@ -896,6 +896,10 @@ defmodule VivvoWeb.CoreComponents do
   attr :field, Phoenix.HTML.FormField, required: true, doc: "the form field for error display"
   attr :label, :string, default: nil, doc: "the label text for the upload area"
 
+  attr :phx_target, :any,
+    default: nil,
+    doc: "the target for phx-click events (e.g., @myself for LiveComponents)"
+
   def file_upload(assigns) do
     ~H"""
     <div class="space-y-4">
@@ -982,6 +986,7 @@ defmodule VivvoWeb.CoreComponents do
             type="button"
             phx-click="cancel_upload"
             phx-value-ref={entry.ref}
+            phx-target={@phx_target}
             class="flex-shrink-0 btn btn-ghost btn-xs btn-circle hover:bg-error/10 hover:text-error"
             aria-label="Remove file"
           >

@@ -192,6 +192,7 @@ defmodule VivvoWeb.SubmitPaymentModal do
                 upload={@uploads.files}
                 field={@form[:files]}
                 label="Supporting Documents (Optional)"
+                phx_target={@myself}
               />
 
               <.input field={@form[:contract_id]} type="hidden" value={@contract.id} />
