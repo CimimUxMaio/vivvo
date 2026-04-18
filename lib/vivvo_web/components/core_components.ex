@@ -682,6 +682,34 @@ defmodule VivvoWeb.CoreComponents do
     )
   end
 
+  @doc """
+  Opens a modal by ID.
+
+  Dispatches a "modal:open" custom event to the dialog element,
+  which triggers the Modal hook to call showModal().
+
+  ## Examples
+
+      <button phx-click={open_modal("my-modal")}>Open Modal</button>
+  """
+  def open_modal(js \\ %JS{}, id) do
+    JS.dispatch(js, "modal:open", to: "##{id}")
+  end
+
+  @doc """
+  Closes a modal by ID.
+
+  Dispatches a "modal:close" custom event to the dialog element,
+  which triggers the Modal hook to call close().
+
+  ## Examples
+
+      <button phx-click={close_modal("my-modal")}>Close Modal</button>
+  """
+  def close_modal(js \\ %JS{}, id) do
+    JS.dispatch(js, "modal:close", to: "##{id}")
+  end
+
   @contract_status_config %{
     upcoming: {"hero-clock", "bg-info/10 text-info border-info/20", "Upcoming"},
     active: {"hero-check-circle", "bg-success/10 text-success border-success/20", "Active"},
@@ -861,6 +889,132 @@ defmodule VivvoWeb.CoreComponents do
   end
 
   @doc """
+  Renders a file upload component for LiveView uploads.
+
+  ## Examples
+
+      <.file_upload
+        upload={@uploads.files}
+        field={@form[:files]}
+        label="Supporting Documents"
+      />
+  """
+  attr :upload, :any, required: true, doc: "the LiveView upload configuration"
+  attr :field, Phoenix.HTML.FormField, required: true, doc: "the form field for error display"
+  attr :label, :string, default: nil, doc: "the label text for the upload area"
+
+  attr :phx_target, :any,
+    default: nil,
+    doc: "the target for phx-click events (e.g., @myself for LiveComponents)"
+
+  def file_upload(assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <label :if={@label} class="label text-sm font-medium">{@label}</label>
+
+      <%!-- Drop Zone --%>
+      <div
+        class="group relative border-2 border-dashed border-base-300 rounded-xl p-8 transition-all duration-200 hover:border-primary hover:bg-primary/5"
+        phx-drop-target={@upload.ref}
+      >
+        <.live_file_input upload={@upload} class="hidden" />
+        <label
+          for={@upload.ref}
+          class="cursor-pointer flex flex-col items-center gap-3"
+        >
+          <div class="w-14 h-14 rounded-full bg-base-200 flex items-center justify-center group-hover:bg-primary/10 group-hover:scale-110 transition-all duration-200">
+            <.icon
+              name="hero-cloud-arrow-up"
+              class="w-7 h-7 text-base-content/50 group-hover:text-primary transition-colors"
+            />
+          </div>
+          <div class="text-center space-y-1">
+            <p class="text-sm font-medium text-base-content">
+              <span class="text-primary">Click to upload</span> or drag and drop
+            </p>
+            <p class="text-xs text-base-content/50">
+              PDF, JPG, PNG, GIF up to 10MB
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <%!-- Errors --%>
+      <div :if={@upload.errors != []} class="space-y-2">
+        <div :for={error <- @upload.errors} class="alert alert-error alert-sm">
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+          <span class="text-sm">{format_upload_error(error)}</span>
+        </div>
+      </div>
+
+      <.input_errors field={@field} />
+
+      <%!-- File List --%>
+      <div :if={@upload.entries != []} class="space-y-2">
+        <div
+          :for={entry <- @upload.entries}
+          class="flex items-center gap-3 p-3 bg-base-100 border border-base-200 rounded-lg hover:border-base-300 transition-colors"
+        >
+          <%!-- Preview or Icon --%>
+          <div class="flex-shrink-0">
+            <%= if entry.client_type =~ "image" do %>
+              <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-lg" />
+            <% else %>
+              <div class="w-10 h-10 bg-base-200 rounded-lg flex items-center justify-center">
+                <.icon name="hero-document" class="w-5 h-5 text-base-content/40" />
+              </div>
+            <% end %>
+          </div>
+
+          <%!-- File Details --%>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-base-content truncate">
+              {entry.client_name}
+            </p>
+            <p class="text-xs text-base-content/50">
+              {format_file_size(entry.client_size)}
+            </p>
+
+            <%!-- Progress --%>
+            <div class="mt-2 w-full bg-base-200 rounded-full h-1.5 overflow-hidden">
+              <div
+                class={[
+                  "h-full rounded-full transition-all duration-300",
+                  entry.progress == 100 && "bg-success",
+                  entry.progress < 100 && "bg-primary"
+                ]}
+                style={"width: #{entry.progress}%"}
+              />
+            </div>
+          </div>
+
+          <%!-- Actions --%>
+          <button
+            type="button"
+            phx-click="cancel_upload"
+            phx-value-ref={entry.ref}
+            phx-target={@phx_target}
+            class="flex-shrink-0 btn btn-ghost btn-xs btn-circle hover:bg-error/10 hover:text-error"
+            aria-label="Remove file"
+          >
+            <.icon name="hero-x-mark" class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp format_upload_error({:too_large, _}), do: "File is too large (max 10MB)"
+  defp format_upload_error({:too_many_files, _}), do: "Too many files (max 5 files)"
+  defp format_upload_error({:invalid, _}), do: "Invalid file type"
+  defp format_upload_error(_), do: "Upload error occurred"
+
+  defp format_file_size(bytes) when bytes < 1024, do: "#{bytes} B"
+  defp format_file_size(bytes) when bytes < 1024 * 1024, do: "#{Float.round(bytes / 1024, 1)} KB"
+  defp format_file_size(bytes), do: "#{Float.round(bytes / (1024 * 1024), 1)} MB"
+
+  @doc """
   Renders a badge for property collection performance status.
 
   ## Examples
@@ -894,75 +1048,156 @@ defmodule VivvoWeb.CoreComponents do
   end
 
   @doc """
-  Renders a modal for rejecting an item with a reason.
+  Renders a responsive modal using the native HTML dialog element.
+
+  On desktop (sm and above): Appears as a centered floating modal
+  On mobile (below sm): Slides up from the bottom as a bottom sheet
+
+  The modal is self-managed - it does not require a LiveView boolean state
+  to control visibility. Instead, use `open_modal/1` and `close_modal/1` to
+  control it from LiveView.
+
+  ## Attributes
+
+    * `:id` - Required. The DOM id for the modal (used by open_modal/close_modal)
+    * `:on_open` - Optional event fired when modal opens (after showModal())
+    * `:on_close` - Optional event fired when modal closes (after close())
+
+  ## Slots
+
+    * `:header` - Optional header content (title, description)
+    * `:inner_block` - Required main content of the modal
+    * `:footer` - Optional footer content (action buttons)
+
+  ## Opening and Closing
+
+  Use `open_modal/1` and `close_modal/1` from LiveView:
+
+      <button phx-click={open_modal("my-modal")}>Open Modal</button>
+
+      <.modal id="my-modal">
+        <%!-- content --%>
+        <:footer>
+          <button phx-click={close_modal("my-modal")}>Cancel</button>
+        </:footer>
+      </.modal>
+
+  The modal can also be closed by:
+  - Pressing the ESC key
+  - Clicking outside the modal (via modal-backdrop form)
+  - Dragging down on mobile (mobile only)
 
   ## Examples
 
-      <.reject_modal
-        id="reject-payment-modal"
-        title="Reject Payment"
-        description="Please provide a reason for rejecting this payment."
-        submit_event="reject_payment"
-        close_event="close_reject_modal"
-        reason_label="Rejection Reason"
-        reason_placeholder="Enter rejection reason..."
-        submit_text="Reject Payment"
-      />
+      <.modal id="my-modal" on_open="modal_opened" on_close="modal_closed">
+        <:header>
+          <h3 class="text-lg font-bold">Modal Title</h3>
+        </:header>
+
+        <p>Your modal content here...</p>
+
+        <:footer>
+          <button type="button" phx-click={close_modal("my-modal")} class="btn btn-ghost">
+            Cancel
+          </button>
+          <button class="btn btn-primary">Save</button>
+        </:footer>
+      </.modal>
   """
   attr :id, :string, required: true, doc: "the DOM id for the modal"
-  attr :title, :string, required: true, doc: "the modal title"
-  attr :description, :string, required: true, doc: "description text explaining the action"
-  attr :submit_event, :string, required: true, doc: "the phx-submit event name"
-  attr :close_event, :string, required: true, doc: "the phx-click event name to close modal"
-  attr :reason_label, :string, default: "Reason", doc: "label for the reason textarea"
 
-  attr :reason_placeholder, :string,
-    default: "Enter reason...",
-    doc: "placeholder for the textarea"
+  attr :on_open, :string,
+    default: nil,
+    doc: "optional event to fire after modal opens"
 
-  attr :submit_text, :string, default: "Reject", doc: "text for the submit button"
-  attr :cancel_text, :string, default: "Cancel", doc: "text for the cancel button"
+  attr :on_close, :string,
+    default: nil,
+    doc: "optional event to fire after modal closes (for cleanup)"
 
-  def reject_modal(assigns) do
+  slot :header, doc: "optional header content" do
+    attr :class, :string, doc: "additional CSS classes for the header"
+  end
+
+  slot :inner_block, required: true, doc: "the main content of the modal"
+
+  slot :footer, doc: "optional footer content (action buttons)" do
+    attr :class, :string, doc: "additional CSS classes for the footer"
+  end
+
+  attr :rest, :global, doc: "additional HTML attributes to add to the modal dialog element"
+
+  def modal(assigns) do
     ~H"""
-    <div id={@id} class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="card bg-base-100 w-full max-w-md shadow-2xl">
-        <div class="card-body">
-          <h3 class="card-title text-lg">{@title}</h3>
-          <p class="text-base-content/70 mb-4">
-            {@description}
-          </p>
+    <%!--
+      Responsive Modal Component using native HTML dialog element.
 
-          <form phx-submit={@submit_event} id={"#{@id}-form"}>
-            <.input
-              type="textarea"
-              name="rejection-reason"
-              rows="3"
-              placeholder={@reason_placeholder}
-              required
-              label={@reason_label}
-            />
+      Uses daisyUI modal classes:
+      - .modal: Base dialog styling
+      - .modal-bottom: Bottom sheet on mobile
+      - .modal-middle: Centered modal on desktop (sm and up)
+      - .modal-box: Content container
+      - .modal-backdrop: Clickable backdrop that closes the modal
 
-            <div class="card-actions justify-end gap-3 mt-4">
-              <button
-                type="button"
-                phx-click={@close_event}
-                class="btn btn-ghost"
-              >
-                {@cancel_text}
-              </button>
-              <button
-                type="submit"
-                class="btn btn-error"
-                phx-disable-with="Rejecting..."
-              >
-                {@submit_text}
-              </button>
-            </div>
-          </form>
+      Native dialog behavior:
+      - ESC key closes the modal
+      - form[method="dialog"] submission closes the modal
+      - showModal() / close() API
+
+      JS hook handles:
+      - "modal:open" / "modal:close" custom events (client and server)
+      - Drag-to-dismiss on mobile
+      - on_open / on_close event callbacks
+    --%>
+    <dialog
+      id={@id}
+      phx-hook="Modal"
+      data-on-open={@on_open}
+      data-on-close={@on_close}
+      class="modal modal-bottom sm:modal-middle"
+      {@rest}
+    >
+      <div class="modal-box p-0 overflow-hidden flex flex-col">
+        <%!-- Drag Handle - visible only on mobile --%>
+        <div
+          data-drag-handle
+          class="flex-shrink-0 cursor-grab active:cursor-grabbing sm:hidden"
+        >
+          <div class="w-12 h-1.5 bg-base-300 rounded-full mx-auto mt-3 mb-1" />
         </div>
+
+        <%!-- Header Slot --%>
+        <%= if @header != [] do %>
+          <div class={[
+            "p-6 pb-4 border-b border-base-200 flex-shrink-0",
+            Enum.map(@header, & &1[:class])
+          ]}>
+            {render_slot(@header)}
+          </div>
+        <% end %>
+
+        <%!-- Content Slot --%>
+        <div class="overflow-y-auto flex-1 p-6">
+          {render_slot(@inner_block)}
+        </div>
+
+        <%!-- Footer Slot --%>
+        <%= if @footer != [] do %>
+          <div class={[
+            "p-6 border-t border-base-200 flex-shrink-0",
+            Enum.map(@footer, & &1[:class])
+          ]}>
+            <div class="modal-action m-0">
+              {render_slot(@footer)}
+            </div>
+          </div>
+        <% end %>
       </div>
-    </div>
+
+      <%!-- Backdrop form - clicking outside closes the modal --%>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
     """
   end
 

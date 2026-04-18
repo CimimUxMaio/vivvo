@@ -40,6 +40,7 @@ import {
 } from "chart.js"
 import {initTheme} from "./theme"
 import chroma from "chroma-js"
+import Modal from "./hooks/modal"
 
 // Register Chart.js components
 Chart.register(
@@ -408,7 +409,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash, MultiSelect},
+    hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash, MultiSelect, Modal},
 })
 
 // Show progress bar on live navigation and form submits

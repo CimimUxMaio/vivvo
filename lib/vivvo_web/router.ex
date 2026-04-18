@@ -55,20 +55,22 @@ defmodule VivvoWeb.Router do
         {VivvoWeb.UserAuth, :require_authenticated},
         {VivvoWeb.RoleHooks, :handle_role_changes}
       ] do
-      live "/", HomeLive, :index
+      # Dispatcher at root
+      live "/", DashboardDispatcherLive, :index
+
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
-
-    # File download route
-    get "/files/:id", FileController, :show
 
     live_session :owner,
       on_mount: [
         {VivvoWeb.UserAuth, :require_authenticated},
         {VivvoWeb.RoleHooks, :handle_role_changes},
-        {VivvoWeb.UserAuth, :require_owner_role}
+        {VivvoWeb.RoleHooks, {:require_role, :owner}}
       ] do
+      live "/owner/dashboard", OwnerDashboardLive, :index
+
+      # Property routes
       live "/properties", PropertyLive.Index, :index
       live "/properties/new", PropertyLive.Form, :new
       live "/properties/:id", PropertyLive.Show, :show
@@ -78,6 +80,18 @@ defmodule VivvoWeb.Router do
       live "/properties/:property_id/contracts/new", ContractLive.Form, :new
       live "/properties/:property_id/contracts/:contract_id", ContractLive.Show, :show
     end
+
+    live_session :tenant,
+      on_mount: [
+        {VivvoWeb.UserAuth, :require_authenticated},
+        {VivvoWeb.RoleHooks, :handle_role_changes},
+        {VivvoWeb.RoleHooks, {:require_role, :tenant}}
+      ] do
+      live "/tenant/dashboard", TenantDashboardLive, :index
+    end
+
+    # File download route
+    get "/files/:id", FileController, :show
 
     post "/users/update-password", UserSessionController, :update_password
   end

@@ -1,4 +1,4 @@
-defmodule VivvoWeb.HomeLiveTest do
+defmodule VivvoWeb.OwnerDashboardLiveTest do
   use VivvoWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
@@ -17,17 +17,10 @@ defmodule VivvoWeb.HomeLiveTest do
     Map.merge(context, %{user: updated_user, scope: updated_scope})
   end
 
-  defp ensure_tenant_role(%{user: user, conn: conn} = context) do
-    {:ok, updated_user} = Accounts.update_user_current_role(user, %{current_role: :tenant})
-    updated_scope = Scope.for_user(updated_user)
-    conn = log_in_user(conn, updated_user)
-    Map.merge(context, %{user: updated_user, scope: updated_scope, conn: conn})
-  end
-
   describe "owner dashboard" do
     setup :ensure_owner_role
 
-    test "renders home page for owner with expired contract having pending payment", %{
+    test "renders dashboard for owner with expired contract having pending payment", %{
       conn: conn,
       scope: scope
     } do
@@ -54,14 +47,14 @@ defmodule VivvoWeb.HomeLiveTest do
           payment_number: 1
         })
 
-      # Visit the home page as the owner -- should NOT crash
-      {:ok, _view, html} = live(conn, ~p"/")
+      # Visit the dashboard as the owner -- should NOT crash
+      {:ok, _view, html} = live(conn, ~p"/owner/dashboard")
 
       # Verify basic owner dashboard elements render
       assert html =~ "Dashboard"
     end
 
-    test "renders home page for owner with active contract", %{conn: conn, scope: scope} do
+    test "renders dashboard for owner with active contract", %{conn: conn, scope: scope} do
       # Baseline sanity check -- active contract should always work
       tenant = user_fixture(%{preferred_roles: [:tenant]})
       tenant_scope = Scope.for_user(tenant)
@@ -90,7 +83,7 @@ defmodule VivvoWeb.HomeLiveTest do
           payment_number: 1
         })
 
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, _view, html} = live(conn, ~p"/owner/dashboard")
       assert html =~ "Dashboard"
     end
 
@@ -128,71 +121,24 @@ defmodule VivvoWeb.HomeLiveTest do
           status: :pending
         })
 
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/owner/dashboard")
 
       # Verify the pending payment row renders without error
       # This tests that pending_payment_row properly calculates due_date
       # and passes it to current_rent_value
       assert has_element?(view, "#payment-#{payment.id}")
     end
-  end
 
-  describe "tenant dashboard" do
-    setup :ensure_tenant_role
-
-    test "renders home page for tenant with expired contract", %{
+    test "redirects tenant to home when accessing owner dashboard", %{
       conn: conn,
-      user: tenant,
-      scope: _tenant_scope
+      user: user
     } do
-      # Create an owner to own the contract
-      owner = user_fixture(%{preferred_roles: [:owner]})
-      owner_scope = Scope.for_user(owner)
-      property = property_fixture(owner_scope)
+      # Switch user to tenant role
+      {:ok, tenant_user} = Accounts.update_user_current_role(user, %{current_role: :tenant})
+      conn = log_in_user(conn, tenant_user)
 
-      # Create an expired non-archived contract assigned to this tenant
-      _expired_contract =
-        expired_contract_fixture(owner_scope, %{
-          tenant_id: tenant.id,
-          property_id: property.id,
-          rent: "800.00"
-        })
-
-      # Visit the home page as the tenant -- should NOT crash
-      {:ok, _view, html} = live(conn, ~p"/")
-
-      # Verify basic tenant dashboard elements render
-      assert html =~ "Contract Details"
-    end
-
-    test "renders home page for tenant with active contract", %{
-      conn: conn,
-      user: tenant,
-      scope: _tenant_scope
-    } do
-      # Baseline sanity check
-      owner = user_fixture(%{preferred_roles: [:owner]})
-      owner_scope = Scope.for_user(owner)
-      property = property_fixture(owner_scope)
-
-      _contract =
-        contract_fixture(
-          owner_scope,
-          %{
-            tenant_id: tenant.id,
-            property_id: property.id,
-            start_date: Date.add(Date.utc_today(), -30),
-            end_date: Date.add(Date.utc_today(), 365),
-            rent: "900.00",
-            index_type: :icl,
-            rent_period_duration: 12
-          },
-          past_start_date?: true,
-          update_factor: Decimal.new("0.0")
-        )
-
-      {:ok, _view, html} = live(conn, ~p"/")
-      assert html =~ "Contract Details"
+      # Try to access owner dashboard as tenant - should redirect immediately
+      assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, ~p"/owner/dashboard")
     end
   end
 end

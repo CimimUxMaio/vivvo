@@ -312,6 +312,26 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
+  Returns an `%Ecto.Changeset{}` for tracking payment validation changes.
+
+  This is a general-purpose changeset for validating payment status transitions,
+  including acceptance and rejection. The caller must provide the appropriate
+  status in the attributes.
+
+  ## Examples
+
+      iex> change_payment_validation(payment, %{"status" => "rejected"})
+      %Ecto.Changeset{data: %Payment{}}
+
+      iex> change_payment_validation(payment, %{"status" => "accepted"})
+      %Ecto.Changeset{data: %Payment{}}
+
+  """
+  def change_payment_validation(%Payment{} = payment, attrs \\ %{}) do
+    Payment.validation_changeset(payment, attrs)
+  end
+
+  @doc """
   List all payments for the tenant's contracts.
 
   ## Examples
@@ -586,25 +606,15 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
-  Get pending payments that need validation with optional pagination.
-
-  ## Options
-    * `:page` - Page number (default: 1)
-    * `:per_page` - Items per page (default: 20)
+  Get all pending payments that need validation.
 
   ## Examples
 
       iex> pending_payments_for_validation(scope)
       [%Payment{}, ...]
 
-      iex> pending_payments_for_validation(scope, page: 1, per_page: 10)
-      [%Payment{}, ...]
-
   """
-  def pending_payments_for_validation(%Scope{} = scope, opts \\ []) do
-    page = Keyword.get(opts, :page, 1)
-    per_page = Keyword.get(opts, :per_page, 20)
-
+  def pending_payments_for_validation(%Scope{} = scope) do
     Payment
     |> join(:inner, [p], c in assoc(p, :contract))
     |> join(:inner, [p, c], t in assoc(c, :tenant))
@@ -617,16 +627,7 @@ defmodule Vivvo.Payments do
       contract: {c, rent_periods: rp, tenant: t, property: prop},
       files: []
     )
-    |> paginate(page, per_page)
     |> Repo.all()
-  end
-
-  defp paginate(query, page, per_page) do
-    offset = (page - 1) * per_page
-
-    query
-    |> limit(^per_page)
-    |> offset(^offset)
   end
 
   @doc """
