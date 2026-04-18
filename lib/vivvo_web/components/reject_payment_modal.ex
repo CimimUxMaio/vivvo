@@ -56,7 +56,7 @@ defmodule VivvoWeb.RejectPaymentModal do
 
   defp reset_form(socket) do
     payment = socket.assigns.payment
-    changeset = Payments.change_payment_rejection(payment, %{"status" => "rejected"})
+    changeset = Payments.change_payment_validation(payment, %{"status" => "rejected"})
 
     assign(socket, form: to_form(changeset))
   end
@@ -119,9 +119,12 @@ defmodule VivvoWeb.RejectPaymentModal do
 
   @impl true
   def handle_event("validate", %{"payment" => params}, socket) do
+    # Ensure status is set for validation (required by Payment.validation_changeset)
+    params = Map.put(params, "status", "rejected")
+
     changeset =
       socket.assigns.payment
-      |> Payments.change_payment_rejection(params)
+      |> Payments.change_payment_validation(params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, form: to_form(changeset))}

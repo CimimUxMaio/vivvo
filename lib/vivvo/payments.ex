@@ -312,15 +312,22 @@ defmodule Vivvo.Payments do
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking payment rejection changes.
+  Returns an `%Ecto.Changeset{}` for tracking payment validation changes.
+
+  This is a general-purpose changeset for validating payment status transitions,
+  including acceptance and rejection. The caller must provide the appropriate
+  status in the attributes.
 
   ## Examples
 
-      iex> change_payment_rejection(payment)
+      iex> change_payment_validation(payment, %{"status" => "rejected"})
+      %Ecto.Changeset{data: %Payment{}}
+
+      iex> change_payment_validation(payment, %{"status" => "accepted"})
       %Ecto.Changeset{data: %Payment{}}
 
   """
-  def change_payment_rejection(%Payment{} = payment, attrs \\ %{}) do
+  def change_payment_validation(%Payment{} = payment, attrs \\ %{}) do
     Payment.validation_changeset(payment, attrs)
   end
 
