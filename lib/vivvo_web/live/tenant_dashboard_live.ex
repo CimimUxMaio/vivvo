@@ -98,7 +98,7 @@ defmodule VivvoWeb.TenantDashboardLive do
   def handle_event("select_contract", %{"id" => contract_id}, socket) do
     # Verify the contract belongs to this tenant
     if Enum.any?(socket.assigns.contracts, &(to_string(&1.id) == contract_id)) do
-      {:noreply, push_patch(socket, to: ~p"/?property=#{contract_id}")}
+      {:noreply, push_patch(socket, to: ~p"/tenant/dashboard?property=#{contract_id}")}
     else
       {:noreply, put_flash(socket, :error, "Invalid property selection")}
     end
