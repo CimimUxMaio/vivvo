@@ -95,4 +95,50 @@ defmodule VivvoWeb.UploadHelpers do
 
     :ok
   end
+
+  @doc """
+  Consumes uploaded entries, executes a callback, and automatically cleans up temp files.
+
+  This is a context-manager-like abstraction that ensures temporary uploaded files
+  are always cleaned up after the callback completes, regardless of success or failure.
+
+  The callback receives the list of uploaded files (each with `:path` and `:filename`)
+  and can return any value. The temp files are always deleted after the callback runs.
+
+  ## Options
+
+    * `:subdir` - Custom subdirectory within <temp_dir>/uploads/ (default: ".")
+
+  ## Examples
+
+      socket =
+        with_consumed_uploads(socket, :files, [], fn uploaded_files ->
+          case Payments.create_payment(scope, attrs, uploaded_files, opts) do
+            {:ok, payment} ->
+              send(self(), {:flash, :info, "Payment created!"})
+              push_modal_close(socket, "payment-modal")
+
+            {:error, changeset} ->
+              assign(socket, form: to_form(changeset))
+          end
+        end)
+
+  """
+  @spec with_consumed_uploads(
+          Phoenix.LiveView.Socket.t(),
+          atom(),
+          keyword(),
+          (list(%{path: String.t(), filename: String.t()}) -> any())
+        ) :: any()
+  def with_consumed_uploads(socket, name, opts \\ [], callback)
+      when is_function(callback, 1) do
+    uploaded_files = consume_file_uploads(socket, name, opts)
+
+    result = callback.(uploaded_files)
+
+    # Always clean up temp files after callback completes
+    clear_upload_files(uploaded_files)
+
+    result
+  end
 end

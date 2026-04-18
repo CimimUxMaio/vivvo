@@ -309,29 +309,32 @@ defmodule VivvoWeb.SubmitPaymentModal do
 
     opts = payment_opts(socket)
 
-    # Consume uploaded files
-    uploaded_files = consume_file_uploads(socket, :files)
+    socket =
+      with_consumed_uploads(socket, :files, [], fn uploaded_files ->
+        case Payments.create_payment(socket.assigns.current_scope, attrs, uploaded_files, opts) do
+          {:ok, _payment} ->
+            message =
+              if socket.assigns.type == :rent,
+                do: "Payment submitted successfully!",
+                else: "Miscellaneous payment submitted successfully!"
 
-    case Payments.create_payment(socket.assigns.current_scope, attrs, uploaded_files, opts) do
-      {:ok, _payment} ->
-        clear_upload_files(uploaded_files)
+            send(self(), {:flash, :info, message})
+            push_modal_close(socket, socket.assigns.id)
 
-        message =
-          if socket.assigns.type == :rent,
-            do: "Payment submitted successfully!",
-            else: "Miscellaneous payment submitted successfully!"
+          {:error, :contract_needs_update} ->
+            send(
+              self(),
+              {:flash, :info, "Contract rent is being updated. Please try again shortly."}
+            )
 
-        send(self(), {:flash, :info, message})
+            socket
 
-        {:noreply, push_modal_close(socket, socket.assigns.id)}
+          {:error, %Ecto.Changeset{} = changeset} ->
+            assign(socket, form: to_form(changeset))
+        end
+      end)
 
-      {:error, :contract_needs_update} ->
-        send(self(), {:flash, :info, "Contract rent is being updated. Please try again shortly."})
-        {:noreply, socket}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset))}
-    end
+    {:noreply, socket}
   end
 
   @impl true
