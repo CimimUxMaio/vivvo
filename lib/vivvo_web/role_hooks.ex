@@ -9,23 +9,32 @@ defmodule VivvoWeb.RoleHooks do
   use VivvoWeb, :verified_routes
 
   @doc """
-  Attaches a handler for role change messages.
+  Verifies the user has the required role.
 
-  When the RoleSelector component sends a `{:role_changed, updated_user}`
-  message, this hook updates the current_scope and navigates to the home page.
+  ## Examples
 
-  ## Usage
+      # Require owner role
+      on_mount [{VivvoWeb.RoleHooks, {:require_role, :owner}}]
 
-  Add this hook to your live_session in the router:
-
-      live_session :authenticated,
-        on_mount: [
-          {VivvoWeb.UserAuth, :require_authenticated},
-          {VivvoWeb.RoleHooks, :handle_role_changes}
-        ] do
-        # ... routes
-      end
+      # Require tenant role
+      on_mount [{VivvoWeb.RoleHooks, {:require_role, :tenant}}]
   """
+  def on_mount({:require_role, required_role}, _params, _session, socket) do
+    current_role = socket.assigns.current_scope.user.current_role
+
+    if current_role == required_role do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(:error, "You don't have permission to access this page.")
+        |> Phoenix.LiveView.push_navigate(to: ~p"/")
+
+      {:halt, socket}
+    end
+  end
+
+  # Handle role changes by attaching an info handler
   def on_mount(:handle_role_changes, _params, _session, socket) do
     {:cont,
      Phoenix.LiveView.attach_hook(socket, :role_change_handler, :handle_info, fn
