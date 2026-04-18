@@ -958,6 +958,8 @@ defmodule VivvoWeb.OwnerDashboardLive do
               ]}
             />
           </button>
+        <% else %>
+          <div class="w-10 h-10"></div>
         <% end %>
       </div>
     </div>
@@ -1083,6 +1085,8 @@ defmodule VivvoWeb.OwnerDashboardLive do
               ]}
             />
           </button>
+        <% else %>
+          <div class="w-8 h-8 ml-1"></div>
         <% end %>
       </div>
     </div>
@@ -1110,7 +1114,7 @@ defmodule VivvoWeb.OwnerDashboardLive do
       <div class={[
         "overflow-hidden transition-all duration-300 ease-in-out",
         "border-t border-base-200 bg-base-200/50",
-        @is_expanded && "max-h-[400px] opacity-100",
+        @is_expanded && "opacity-100",
         !@is_expanded && "max-h-0 opacity-0"
       ]}>
         <div class="p-4 sm:p-5 space-y-4">
