@@ -506,12 +506,12 @@ defmodule VivvoWeb.CoreComponents do
           </div>
 
           <%!-- Backdrop overlay with fade animation --%>
-          <div class="fixed inset-0 bg-black/50 -z-10 opacity-0 transition-opacity duration-200 ease-out group-focus-within:opacity-100 group-hover:opacity-100">
+          <div class="pointer-events-none fixed inset-0 bg-black/50 -z-10 opacity-0 transition-opacity duration-200 ease-out group-focus-within:opacity-100 group-hover:opacity-100">
           </div>
 
           <%!-- Action Buttons with Labels --%>
           <%= for action <- @action do %>
-            <div class="flex gap-4">
+            <div>
               <span class="text-white/90 text-lg">{action.label}</span>
               <.link
                 :if={action[:navigate]}
