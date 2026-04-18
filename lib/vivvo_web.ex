@@ -94,6 +94,9 @@ defmodule VivvoWeb do
       # Upload helpers for file handling
       import VivvoWeb.UploadHelpers
 
+      # LiveView helpers for common UI interactions
+      import VivvoWeb.Helpers.LiveView
+
       # Common modules used in templates
       alias Phoenix.LiveView.JS
       alias VivvoWeb.Components.MultiSelect

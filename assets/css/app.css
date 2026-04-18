@@ -158,3 +158,20 @@
   animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
+
+/* ============================================================================
+   Modal Mobile Drag Support
+   Minimal custom CSS to support drag-to-dismiss on mobile
+   daisyUI handles all other modal styling and animations
+   ============================================================================ */
+
+.modal .modal-box {
+  --drag-y: 0px;
+}
+
+/* During drag: apply offset directly and disable transitions */
+/* Use [open] attribute for higher specificity to override daisyUI */
+.modal[open].modal-dragging .modal-box {
+  translate: 0 var(--drag-y) !important;
+  transition: none !important;
+}
