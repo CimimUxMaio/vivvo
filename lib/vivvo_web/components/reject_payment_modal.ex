@@ -74,22 +74,24 @@ defmodule VivvoWeb.RejectPaymentModal do
             </p>
           </:header>
 
-          <.form
-            for={@form}
-            id={@id <> "-form"}
-            phx-submit="submit"
-            phx-change="validate"
-            phx-target={@myself}
-          >
-            <.input
-              field={@form[:rejection_reason]}
-              type="textarea"
-              rows="3"
-              placeholder="Enter rejection reason..."
-              required
-              label="Rejection Reason"
-            />
-          </.form>
+          <:body>
+            <.form
+              for={@form}
+              id={@id <> "-form"}
+              phx-submit="submit"
+              phx-change="validate"
+              phx-target={@myself}
+            >
+              <.input
+                field={@form[:rejection_reason]}
+                type="textarea"
+                rows="3"
+                placeholder="Enter rejection reason..."
+                required
+                label="Rejection Reason"
+              />
+            </.form>
+          </:body>
 
           <:footer>
             <button

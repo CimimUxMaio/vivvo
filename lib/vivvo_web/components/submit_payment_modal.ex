@@ -165,75 +165,79 @@ defmodule VivvoWeb.SubmitPaymentModal do
             <% end %>
           </:header>
 
-          <%= if @type == :rent do %>
-            <.payment_progress_bar contract={@contract} month={@month} />
-          <% else %>
-            <%!-- Miscellaneous payment info --%>
-            <div class="mb-4 p-3 bg-warning/10 border border-warning/20 rounded-box flex items-start gap-3">
-              <.icon name="hero-light-bulb" class="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-              <p class="text-sm text-base-content/80">
-                This is an additional payment that will not count toward your rent totals. Use this for security deposits, pet fees, or other charges.
-              </p>
-            </div>
-          <% end %>
-
-          <%!-- Payment Info Section - Owner's Bank Details --%>
-          <%= if @has_payment_info do %>
-            <.payment_info_card fields={@visible_payment_fields} />
-          <% end %>
-
-          <.form
-            for={@form}
-            id={@id <> "-form"}
-            phx-submit="submit"
-            phx-change="validate"
-            phx-target={@myself}
-          >
+          <:body>
             <div class="space-y-4">
-              <.input
-                field={@form[:amount]}
-                type="number"
-                label="Amount ($)"
-                step="0.01"
-                min="0.01"
-                placeholder="Enter payment amount"
-                required
-              />
-
-              <%= if @type != :rent do %>
-                <.input
-                  field={@form[:category]}
-                  type="select"
-                  label="Category"
-                  options={category_options()}
-                  prompt="Select a category"
-                  required
-                />
-              <% end %>
-
-              <.input
-                field={@form[:notes]}
-                type="textarea"
-                label="Notes (Optional)"
-                rows="3"
-                placeholder="Add any notes about this payment..."
-              />
-
-              <%!-- File Upload - managed internally --%>
-              <.file_upload
-                upload={@uploads.files}
-                field={@form[:files]}
-                label="Supporting Documents (Optional)"
-                phx_target={@myself}
-              />
-
-              <.input field={@form[:contract_id]} type="hidden" value={@contract.id} />
-              <.input field={@form[:type]} type="hidden" value={@type} />
               <%= if @type == :rent do %>
-                <.input field={@form[:payment_number]} type="hidden" value={@month} />
+                <.payment_progress_bar contract={@contract} month={@month} />
+              <% else %>
+                <%!-- Miscellaneous payment info --%>
+                <div class="p-3 bg-warning/10 border border-warning/20 rounded-box flex items-center gap-2">
+                  <.icon name="hero-exclamation-circle" class="size-5 text-warning shrink-0" />
+                  <p class="text-sm text-base-content/80">
+                    This is an additional payment that will not count toward your rent totals. Use this for security deposits, pet fees, or other charges.
+                  </p>
+                </div>
               <% end %>
+
+              <%!-- Payment Info Section - Owner's Bank Details --%>
+              <%= if @has_payment_info do %>
+                <.payment_info_card fields={@visible_payment_fields} />
+              <% end %>
+
+              <.form
+                for={@form}
+                id={@id <> "-form"}
+                phx-submit="submit"
+                phx-change="validate"
+                phx-target={@myself}
+              >
+                <div class="space-y-3">
+                  <.input
+                    field={@form[:amount]}
+                    type="number"
+                    label="Amount ($)"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="Enter payment amount"
+                    required
+                  />
+
+                  <%= if @type != :rent do %>
+                    <.input
+                      field={@form[:category]}
+                      type="select"
+                      label="Category"
+                      options={category_options()}
+                      prompt="Select a category"
+                      required
+                    />
+                  <% end %>
+
+                  <.input
+                    field={@form[:notes]}
+                    type="textarea"
+                    label="Notes (Optional)"
+                    rows="3"
+                    placeholder="Add any notes about this payment..."
+                  />
+
+                  <%!-- File Upload - managed internally --%>
+                  <.file_upload
+                    upload={@uploads.files}
+                    field={@form[:files]}
+                    label="Supporting Documents (Optional)"
+                    phx_target={@myself}
+                  />
+
+                  <.input field={@form[:contract_id]} type="hidden" value={@contract.id} />
+                  <.input field={@form[:type]} type="hidden" value={@type} />
+                  <%= if @type == :rent do %>
+                    <.input field={@form[:payment_number]} type="hidden" value={@month} />
+                  <% end %>
+                </div>
+              </.form>
             </div>
-          </.form>
+          </:body>
 
           <:footer>
             <button
@@ -268,92 +272,31 @@ defmodule VivvoWeb.SubmitPaymentModal do
 
   defp payment_info_card(assigns) do
     ~H"""
-    <div class="mb-6">
-      <%!-- Section Header --%>
-      <div class="flex items-center gap-2 mb-3">
-        <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <.icon name="hero-banknotes" class="w-4 h-4 text-primary" />
-        </div>
-        <div>
-          <h4 class="text-sm font-semibold text-base-content">Payment Information</h4>
-          <p class="text-xs text-base-content/60">Transfer to this account</p>
-        </div>
+    <%!-- Payment Details Card --%>
+    <div class="p-3 py-4 bg-info/10 border border-info/20 rounded-box space-y-3">
+      <div class="flex items-center gap-2">
+        <.icon name="hero-information-circle" class="size-5 text-info shrink-0" />
+        <p class="text-sm text-base-content/80">Transfer to this account</p>
       </div>
 
-      <%!-- Payment Details Card --%>
-      <div class="bg-gradient-to-br from-base-100 to-base-200/50 border border-base-300 rounded-xl p-4 shadow-sm">
-        <div class="space-y-3">
-          <%= for {key, value, label} <- @fields do %>
-            <div class="group">
-              <label class="text-xs font-medium text-base-content/60 uppercase tracking-wide mb-1 block">
-                {label}
-              </label>
-              <div class="flex items-center gap-2">
-                <div
-                  class="flex-1 bg-base-100 border border-base-300 rounded-lg px-3 py-2.5 text-sm font-mono text-base-content break-all select-all shadow-inner"
-                  id={"payment-field-#{key}"}
-                >
-                  {value}
-                </div>
-                <button
-                  type="button"
-                  id={"copy-btn-#{key}"}
-                  phx-hook=".CopyButton"
-                  data-copy-target={"payment-field-#{key}"}
-                  class="flex-shrink-0 btn btn-ghost btn-sm h-10 w-10 p-0 min-h-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
-                  aria-label={"Copy #{label}"}
-                  title={"Copy #{label}"}
-                >
-                  <.icon name="hero-clipboard-document" class="w-4 h-4 copy-icon" />
-                  <.icon name="hero-check" class="w-4 h-4 check-icon hidden" />
-                </button>
+      <div class="space-y-3">
+        <%= for {key, value, label} <- @fields do %>
+          <div class="group">
+            <label class="text-xs font-medium text-base-content/60 uppercase tracking-wide mb-1 block">
+              {label}
+            </label>
+            <div class="flex items-center gap-2">
+              <div
+                class="flex-1 flex items-center justify-between bg-base-100 border border-base-300 rounded-box px-3 py-2.5 text-sm font-mono break-all select-all"
+                id={"payment-field-#{key}"}
+              >
+                {value}
+                <.copy_to_clipboard id={"#{key}-copy-button"} content={value} />
               </div>
             </div>
-          <% end %>
-        </div>
-
-        <%!-- Helper hint --%>
-        <div class="mt-4 flex items-start gap-2 text-xs text-base-content/60">
-          <.icon name="hero-information-circle" class="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <p>Click the copy button next to any field to copy it to your clipboard</p>
-        </div>
+          </div>
+        <% end %>
       </div>
-
-      <%!-- Colocated Hook for Copy Functionality --%>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyButton">
-        export default {
-          mounted() {
-            const targetId = this.el.dataset.copyTarget;
-            const copyIcon = this.el.querySelector('.copy-icon');
-            const checkIcon = this.el.querySelector('.check-icon');
-
-            this.el.addEventListener('click', async () => {
-              const targetElement = document.getElementById(targetId);
-              if (!targetElement) return;
-
-              const textToCopy = targetElement.textContent.trim();
-
-              try {
-                await navigator.clipboard.writeText(textToCopy);
-
-                // Show success state
-                copyIcon.classList.add('hidden');
-                checkIcon.classList.remove('hidden');
-                this.el.classList.add('text-success');
-
-                // Reset after 2 seconds
-                setTimeout(() => {
-                  copyIcon.classList.remove('hidden');
-                  checkIcon.classList.add('hidden');
-                  this.el.classList.remove('text-success');
-                }, 2000);
-              } catch (err) {
-                console.error('Failed to copy:', err);
-              }
-            });
-          }
-        }
-      </script>
     </div>
     """
   end
@@ -367,13 +310,13 @@ defmodule VivvoWeb.SubmitPaymentModal do
     assigns = assign(assigns, :summary, summary)
 
     ~H"""
-    <div class="mb-6 p-4 bg-base-200/50 rounded-lg">
+    <div class="p-4 bg-base-200/50 rounded-box">
       <div class="flex justify-between items-center mb-2">
         <span class="text-sm font-medium">Monthly Rent</span>
         <span class="text-lg font-bold">{format_currency(@summary.rent)}</span>
       </div>
 
-      <div class="h-4 bg-base-300 rounded-full overflow-hidden flex">
+      <div class="h-4 bg-base-300 rounded-box flex">
         <div
           class="h-full bg-success transition-all duration-300"
           style={"width: #{calculate_progress_percentage(@summary.accepted_total, @summary.rent)}%"}
