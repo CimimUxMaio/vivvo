@@ -120,6 +120,33 @@ defmodule VivvoWeb.SubmitPaymentModal do
 
   @impl true
   def render(assigns) do
+    # Extract payment info fields from the contract's property owner
+    # Handle cases where contract, property, or user might be nil
+    owner =
+      if assigns.contract do
+        assigns.contract.user
+      end
+
+    {visible_payment_fields, has_payment_info} =
+      if owner do
+        payment_fields = [
+          {:cbu, owner.cbu, "CBU"},
+          {:alias, owner.alias, "Alias"},
+          {:account_name, owner.account_name, "Account Holder"}
+        ]
+
+        # Filter out fields with nil values
+        visible = Enum.filter(payment_fields, fn {_key, value, _label} -> value != nil end)
+        {visible, visible != []}
+      else
+        {[], false}
+      end
+
+    assigns =
+      assigns
+      |> assign(:visible_payment_fields, visible_payment_fields)
+      |> assign(:has_payment_info, has_payment_info)
+
     ~H"""
     <div id={@id <> "-wrapper"}>
       <%= if @form do %>
@@ -138,70 +165,79 @@ defmodule VivvoWeb.SubmitPaymentModal do
             <% end %>
           </:header>
 
-          <%= if @type == :rent do %>
-            <.payment_progress_bar contract={@contract} month={@month} />
-          <% else %>
-            <%!-- Miscellaneous payment info --%>
-            <div class="mb-4 p-3 bg-warning/10 border border-warning/20 rounded-box flex items-start gap-3">
-              <.icon name="hero-light-bulb" class="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-              <p class="text-sm text-base-content/80">
-                This is an additional payment that will not count toward your rent totals. Use this for security deposits, pet fees, or other charges.
-              </p>
-            </div>
-          <% end %>
-
-          <.form
-            for={@form}
-            id={@id <> "-form"}
-            phx-submit="submit"
-            phx-change="validate"
-            phx-target={@myself}
-          >
+          <:body>
             <div class="space-y-4">
-              <.input
-                field={@form[:amount]}
-                type="number"
-                label="Amount ($)"
-                step="0.01"
-                min="0.01"
-                placeholder="Enter payment amount"
-                required
-              />
-
-              <%= if @type != :rent do %>
-                <.input
-                  field={@form[:category]}
-                  type="select"
-                  label="Category"
-                  options={category_options()}
-                  prompt="Select a category"
-                  required
-                />
-              <% end %>
-
-              <.input
-                field={@form[:notes]}
-                type="textarea"
-                label="Notes (Optional)"
-                rows="3"
-                placeholder="Add any notes about this payment..."
-              />
-
-              <%!-- File Upload - managed internally --%>
-              <.file_upload
-                upload={@uploads.files}
-                field={@form[:files]}
-                label="Supporting Documents (Optional)"
-                phx_target={@myself}
-              />
-
-              <.input field={@form[:contract_id]} type="hidden" value={@contract.id} />
-              <.input field={@form[:type]} type="hidden" value={@type} />
               <%= if @type == :rent do %>
-                <.input field={@form[:payment_number]} type="hidden" value={@month} />
+                <.payment_progress_bar contract={@contract} month={@month} />
+              <% else %>
+                <%!-- Miscellaneous payment info --%>
+                <div class="p-3 bg-warning/10 border border-warning/20 rounded-box flex items-center gap-2">
+                  <.icon name="hero-exclamation-circle" class="size-5 text-warning shrink-0" />
+                  <p class="text-sm text-base-content/80">
+                    This is an additional payment that will not count toward your rent totals. Use this for security deposits, pet fees, or other charges.
+                  </p>
+                </div>
               <% end %>
+
+              <%!-- Payment Info Section - Owner's Bank Details --%>
+              <%= if @has_payment_info do %>
+                <.payment_info_card fields={@visible_payment_fields} />
+              <% end %>
+
+              <.form
+                for={@form}
+                id={@id <> "-form"}
+                phx-submit="submit"
+                phx-change="validate"
+                phx-target={@myself}
+              >
+                <div class="space-y-3">
+                  <.input
+                    field={@form[:amount]}
+                    type="number"
+                    label="Amount ($)"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="Enter payment amount"
+                    required
+                  />
+
+                  <%= if @type != :rent do %>
+                    <.input
+                      field={@form[:category]}
+                      type="select"
+                      label="Category"
+                      options={category_options()}
+                      prompt="Select a category"
+                      required
+                    />
+                  <% end %>
+
+                  <.input
+                    field={@form[:notes]}
+                    type="textarea"
+                    label="Notes (Optional)"
+                    rows="3"
+                    placeholder="Add any notes about this payment..."
+                  />
+
+                  <%!-- File Upload - managed internally --%>
+                  <.file_upload
+                    upload={@uploads.files}
+                    field={@form[:files]}
+                    label="Supporting Documents (Optional)"
+                    phx_target={@myself}
+                  />
+
+                  <.input field={@form[:contract_id]} type="hidden" value={@contract.id} />
+                  <.input field={@form[:type]} type="hidden" value={@type} />
+                  <%= if @type == :rent do %>
+                    <.input field={@form[:payment_number]} type="hidden" value={@month} />
+                  <% end %>
+                </div>
+              </.form>
             </div>
-          </.form>
+          </:body>
 
           <:footer>
             <button
@@ -231,6 +267,40 @@ defmodule VivvoWeb.SubmitPaymentModal do
     """
   end
 
+  # Payment info card component - displays owner's bank details
+  attr :fields, :list, required: true, doc: "List of {key, value, label} tuples for payment info"
+
+  defp payment_info_card(assigns) do
+    ~H"""
+    <%!-- Payment Details Card --%>
+    <div class="p-3 py-4 bg-info/10 border border-info/20 rounded-box space-y-3">
+      <div class="flex items-center gap-2">
+        <.icon name="hero-information-circle" class="size-5 text-info shrink-0" />
+        <p class="text-sm text-base-content/80">Transfer to this account</p>
+      </div>
+
+      <div class="space-y-3">
+        <%= for {key, value, label} <- @fields do %>
+          <div class="group">
+            <label class="text-xs font-medium text-base-content/60 uppercase tracking-wide mb-1 block">
+              {label}
+            </label>
+            <div class="flex items-center gap-2">
+              <div
+                class="flex-1 flex items-center justify-between bg-base-100 border border-base-300 rounded-box px-3 py-2.5 text-sm font-mono break-all select-all"
+                id={"payment-field-#{key}"}
+              >
+                {value}
+                <.copy_to_clipboard id={"#{key}-copy-button"} content={value} />
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
   # Payment progress bar component
   attr :contract, :any, required: true
   attr :month, :any, required: true
@@ -240,13 +310,13 @@ defmodule VivvoWeb.SubmitPaymentModal do
     assigns = assign(assigns, :summary, summary)
 
     ~H"""
-    <div class="mb-6 p-4 bg-base-200/50 rounded-lg">
+    <div class="p-4 bg-base-200/50 rounded-box">
       <div class="flex justify-between items-center mb-2">
         <span class="text-sm font-medium">Monthly Rent</span>
         <span class="text-lg font-bold">{format_currency(@summary.rent)}</span>
       </div>
 
-      <div class="h-4 bg-base-300 rounded-full overflow-hidden flex">
+      <div class="h-4 bg-base-300 rounded-box flex">
         <div
           class="h-full bg-success transition-all duration-300"
           style={"width: #{calculate_progress_percentage(@summary.accepted_total, @summary.rent)}%"}

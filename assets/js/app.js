@@ -58,6 +58,47 @@ Chart.register(
 )
 
 /**
+ * CopyToClipboard hook for copying text to the system clipboard.
+ *
+ * ## Expected Dataset Attributes
+ *
+ *   * `data-content` - Required. The text content to copy to clipboard
+ *
+ * ## Behavior
+ *
+ * On click, copies the `data-content` value to the clipboard using the
+ * Clipboard API. Temporarily adds the "swap-active" class to the element
+ * for 2 seconds to trigger a visual success state (typically used with
+ * daisyUI's swap component to toggle between copy and check icons).
+ *
+ * ## Example HEEx Usage
+ *
+ *     <label phx-hook="CopyToClipboard" data-content={@text_to_copy}>
+ *       <.icon name="hero-clipboard-document" class="swap-off" />
+ *       <.icon name="hero-check" class="swap-on text-success" />
+ *     </label>
+ */
+const CopyToClipboard = {
+  mounted() {
+    this.el.addEventListener("click", async () => {
+      const textToCopy = this.el.dataset.content?.trim() || ""
+
+      try {
+        await navigator.clipboard.writeText(textToCopy)
+
+        this.el.classList.add("swap-active")
+
+        setTimeout(() => {
+          this.el.classList.remove("swap-active")
+        }, 2000)
+      } catch (err) {
+        console.error("Failed to copy text: ", err)
+      }
+    })
+  }
+}
+
+/**
  * PieChart hook for rendering pie charts using Chart.js
  * Expects data-chart-data attribute containing an array of objects with:
  *   - label: string
@@ -409,7 +450,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-    hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash, MultiSelect, Modal},
+    hooks: {...colocatedHooks, PieChart, SteppedLineChart, Flash, MultiSelect, Modal, CopyToClipboard},
 })
 
 // Show progress bar on live navigation and form submits

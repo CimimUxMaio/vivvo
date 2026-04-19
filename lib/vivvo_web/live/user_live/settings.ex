@@ -205,6 +205,66 @@ defmodule VivvoWeb.UserLive.Settings do
             </.form>
           </div>
         </div>
+
+        <%!-- Payment Information Card --%>
+        <div class="bg-base-100 rounded-2xl shadow-sm border border-base-200 overflow-hidden">
+          <div class="h-1 bg-gradient-to-r from-success via-success/80 to-success/60"></div>
+
+          <div class="p-6">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="p-2 bg-success/10 rounded-xl">
+                <.icon name="hero-banknotes" class="w-6 h-6 text-success" />
+              </div>
+              <div>
+                <h2 class="text-lg font-semibold text-base-content">Payment Information</h2>
+                <p class="text-sm text-base-content/60">
+                  Manage your bank account details for payments
+                </p>
+              </div>
+            </div>
+
+            <.form
+              for={@payment_info_form}
+              id="payment_info_form"
+              phx-submit="update_payment_info"
+              phx-change="validate_payment_info"
+              class="space-y-4"
+            >
+              <.input
+                field={@payment_info_form[:cbu]}
+                type="text"
+                label="CBU"
+                placeholder="22-digit CBU number"
+                maxlength="22"
+              />
+
+              <.input
+                field={@payment_info_form[:alias]}
+                type="text"
+                label="Alias"
+                placeholder="your.alias.name"
+              />
+
+              <.input
+                field={@payment_info_form[:account_name]}
+                type="text"
+                label="Account Holder Name"
+                placeholder="Full name of the account owner"
+              />
+
+              <div class="flex justify-end">
+                <.button
+                  variant="primary"
+                  phx-disable-with="Saving..."
+                >
+                  <span class="flex items-center gap-2">
+                    <.icon name="hero-check" class="w-4 h-4" /> Save Payment Info
+                  </span>
+                </.button>
+              </div>
+            </.form>
+          </div>
+        </div>
       </div>
     </Layouts.app>
     """
@@ -230,6 +290,7 @@ defmodule VivvoWeb.UserLive.Settings do
     email_changeset = Accounts.change_user_email(user, %{}, validate_unique: false)
     password_changeset = Accounts.change_user_password(user, %{}, hash_password: false)
     settings_changeset = Accounts.change_user_settings(user)
+    payment_info_changeset = Accounts.change_user_payment_info(user)
 
     socket =
       socket
@@ -237,6 +298,7 @@ defmodule VivvoWeb.UserLive.Settings do
       |> assign(:email_form, to_form(email_changeset))
       |> assign(:password_form, to_form(password_changeset))
       |> assign(:settings_form, to_form(settings_changeset))
+      |> assign(:payment_info_form, to_form(payment_info_changeset))
       |> assign(:trigger_submit, false)
       |> assign(:role_options, @role_options)
 
@@ -330,6 +392,32 @@ defmodule VivvoWeb.UserLive.Settings do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, settings_form: to_form(changeset, action: :insert))}
+    end
+  end
+
+  def handle_event("validate_payment_info", %{"user" => user_params}, socket) do
+    payment_info_form =
+      socket.assigns.current_scope.user
+      |> Accounts.change_user_payment_info(user_params)
+      |> Map.put(:action, :validate)
+      |> to_form()
+
+    {:noreply, assign(socket, payment_info_form: payment_info_form)}
+  end
+
+  def handle_event("update_payment_info", %{"user" => user_params}, socket) do
+    user = socket.assigns.current_scope.user
+    true = Accounts.sudo_mode?(user)
+
+    case Accounts.update_user_payment_info(user, user_params) do
+      {:ok, _updated_user} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Payment information updated successfully.")
+         |> push_navigate(to: ~p"/users/settings")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, payment_info_form: to_form(changeset, action: :insert))}
     end
   end
 

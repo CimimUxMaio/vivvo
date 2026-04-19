@@ -21,6 +21,9 @@ defmodule Vivvo.Accounts.User do
     field :phone_number, :string
     field :preferred_roles, {:array, Ecto.Enum}, values: [:owner, :tenant]
     field :current_role, Ecto.Enum, values: [:owner, :tenant]
+    field :cbu, :string
+    field :alias, :string
+    field :account_name, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -242,5 +245,40 @@ defmodule Vivvo.Accounts.User do
   def valid_password?(_, _) do
     Bcrypt.no_user_verify()
     false
+  end
+
+  @doc """
+  A user changeset for updating payment information (CBU, alias, account name).
+
+  All fields are optional, but if any are provided, basic validation is applied:
+  - CBU must be exactly 22 digits
+  - Alias must be 6-20 characters (alphanumeric, dots, hyphens, underscores allowed)
+  - Account name must be 1-100 characters
+  """
+  def payment_info_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:cbu, :alias, :account_name])
+    |> validate_cbu()
+    |> validate_alias()
+    |> validate_account_name()
+  end
+
+  defp validate_cbu(changeset) do
+    changeset
+    |> validate_length(:cbu, max: 22)
+    |> validate_format(:cbu, ~r/^\d{0,22}$/, message: "must contain only digits (up to 22)")
+  end
+
+  defp validate_alias(changeset) do
+    changeset
+    |> validate_length(:alias, min: 6, max: 20)
+    |> validate_format(:alias, ~r/^[a-zA-Z0-9._-]*$/,
+      message: "can only contain letters, numbers, dots, hyphens, and underscores"
+    )
+  end
+
+  defp validate_account_name(changeset) do
+    changeset
+    |> validate_length(:account_name, min: 1, max: 100)
   end
 end
