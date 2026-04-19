@@ -909,12 +909,12 @@ defmodule VivvoWeb.CoreComponents do
 
   def file_upload(assigns) do
     ~H"""
-    <div class="space-y-4">
-      <label :if={@label} class="label text-sm font-medium">{@label}</label>
+    <div class="fieldset">
+      <label :if={@label} class="label mb-1">{@label}</label>
 
       <%!-- Drop Zone --%>
       <div
-        class="group relative border-2 border-dashed border-base-300 rounded-xl p-8 transition-all duration-200 hover:border-primary hover:bg-primary/5"
+        class="group relative border-2 border-dashed border-base-300 rounded-box p-8 transition-all duration-200 hover:border-primary hover:bg-primary/5"
         phx-drop-target={@upload.ref}
       >
         <.live_file_input upload={@upload} class="hidden" />
@@ -950,17 +950,17 @@ defmodule VivvoWeb.CoreComponents do
       <.input_errors field={@field} />
 
       <%!-- File List --%>
-      <div :if={@upload.entries != []} class="space-y-2">
+      <div :if={@upload.entries != []} class="mt-3 space-y-2">
         <div
           :for={entry <- @upload.entries}
-          class="flex items-center gap-3 p-3 bg-base-100 border border-base-200 rounded-lg hover:border-base-300 transition-colors"
+          class="flex items-center gap-3 p-3 bg-base-100 border border-base-200 rounded-box hover:border-base-300 transition-colors"
         >
           <%!-- Preview or Icon --%>
           <div class="flex-shrink-0">
             <%= if entry.client_type =~ "image" do %>
-              <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-lg" />
+              <.live_img_preview entry={entry} class="w-10 h-10 object-cover rounded-box" />
             <% else %>
-              <div class="w-10 h-10 bg-base-200 rounded-lg flex items-center justify-center">
+              <div class="w-10 h-10 bg-base-200 rounded-box flex items-center justify-center">
                 <.icon name="hero-document" class="w-5 h-5 text-base-content/40" />
               </div>
             <% end %>
@@ -994,7 +994,7 @@ defmodule VivvoWeb.CoreComponents do
             phx-click="cancel_upload"
             phx-value-ref={entry.ref}
             phx-target={@phx_target}
-            class="flex-shrink-0 btn btn-ghost btn-xs btn-circle hover:bg-error/10 hover:text-error"
+            class="btn btn-soft btn-error btn-xs btn-circle"
             aria-label="Remove file"
           >
             <.icon name="hero-x-mark" class="w-4 h-4" />
@@ -1066,7 +1066,7 @@ defmodule VivvoWeb.CoreComponents do
   ## Slots
 
     * `:header` - Optional header content (title, description)
-    * `:inner_block` - Required main content of the modal
+    * `:body` - Required main body content of the modal
     * `:footer` - Optional footer content (action buttons)
 
   ## Opening and Closing
@@ -1094,7 +1094,9 @@ defmodule VivvoWeb.CoreComponents do
           <h3 class="text-lg font-bold">Modal Title</h3>
         </:header>
 
-        <p>Your modal content here...</p>
+        <:body>
+          <p>Your modal content here...</p>
+        </:body>
 
         <:footer>
           <button type="button" phx-click={close_modal("my-modal")} class="btn btn-ghost">
@@ -1118,7 +1120,9 @@ defmodule VivvoWeb.CoreComponents do
     attr :class, :string, doc: "additional CSS classes for the header"
   end
 
-  slot :inner_block, required: true, doc: "the main content of the modal"
+  slot :body, required: true, doc: "the main body content of the modal" do
+    attr :class, :string, doc: "additional CSS classes for the body container"
+  end
 
   slot :footer, doc: "optional footer content (action buttons)" do
     attr :class, :string, doc: "additional CSS classes for the footer"
@@ -1156,7 +1160,7 @@ defmodule VivvoWeb.CoreComponents do
       class="modal modal-bottom sm:modal-middle"
       {@rest}
     >
-      <div class="modal-box p-0 overflow-hidden flex flex-col">
+      <div class="modal-box w-full sm:max-w-xl p-0 overflow-hidden flex flex-col">
         <%!-- Drag Handle - visible only on mobile --%>
         <div
           data-drag-handle
@@ -1168,22 +1172,25 @@ defmodule VivvoWeb.CoreComponents do
         <%!-- Header Slot --%>
         <%= if @header != [] do %>
           <div class={[
-            "p-6 pb-4 border-b border-base-200 flex-shrink-0",
+            "border-b border-base-200 px-6 py-4",
             Enum.map(@header, & &1[:class])
           ]}>
             {render_slot(@header)}
           </div>
         <% end %>
 
-        <%!-- Content Slot --%>
-        <div class="overflow-y-auto flex-1 p-6">
-          {render_slot(@inner_block)}
+        <%!-- Body Slot --%>
+        <div class={[
+          "overflow-y-auto flex-1 px-6 py-4",
+          Enum.map(@body, & &1[:class])
+        ]}>
+          {render_slot(@body)}
         </div>
 
         <%!-- Footer Slot --%>
         <%= if @footer != [] do %>
           <div class={[
-            "p-6 border-t border-base-200 flex-shrink-0",
+            "border-t border-base-200 px-6 py-4",
             Enum.map(@footer, & &1[:class])
           ]}>
             <div class="modal-action m-0">
@@ -1587,6 +1594,40 @@ defmodule VivvoWeb.CoreComponents do
         </div>
       </div>
     </div>
+    """
+  end
+
+  @doc """
+  Renders a copy-to-clipboard button with visual feedback.
+
+  Uses the `CopyToClipboard` JS hook to copy text and shows a checkmark
+  icon temporarily on successful copy via daisyUI's swap component.
+
+  ## Attributes
+
+    * `id` - Required. The DOM id for the copy button element
+    * `content` - Required. The text to copy to clipboard on click
+
+  ## Examples
+
+      <.copy_to_clipboard id="cbu-copy" content={@cbu_number} />
+  """
+  attr :id, :string, required: true, doc: "the DOM id for the copy button element"
+  attr :content, :string, required: true, doc: "the text to copy to clipboard on click"
+
+  def copy_to_clipboard(assigns) do
+    ~H"""
+    <label
+      id={@id}
+      class="swap hover:text-primary"
+      phx-hook="CopyToClipboard"
+      data-content={@content}
+      title="Copy to clipboard"
+      aria-label="Copy to clipboard"
+    >
+      <.icon name="hero-clipboard-document" class="size-4 swap-off" />
+      <.icon name="hero-check" class="size-4 text-success swap-on" />
+    </label>
     """
   end
 end
