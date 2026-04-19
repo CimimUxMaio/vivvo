@@ -209,4 +209,103 @@ defmodule VivvoWeb.UserLive.SettingsTest do
       assert message == "You must log in to access this page."
     end
   end
+
+  describe "update payment info form" do
+    setup %{conn: conn} do
+      user = user_fixture()
+      %{conn: log_in_user(conn, user), user: user}
+    end
+
+    test "updates the user payment information", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/settings")
+
+      lv
+      |> form("#payment_info_form", %{
+        "user" => %{
+          "cbu" => "1234567890123456789012",
+          "alias" => "my.alias.name",
+          "account_name" => "John Doe"
+        }
+      })
+      |> render_submit()
+
+      assert_redirected(lv, ~p"/users/settings")
+    end
+
+    test "renders errors with invalid CBU (phx-change)", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/settings")
+
+      result =
+        lv
+        |> element("#payment_info_form")
+        |> render_change(%{
+          "user" => %{
+            "cbu" => "invalid-cbu",
+            "alias" => "",
+            "account_name" => ""
+          }
+        })
+
+      assert result =~ "Save Payment Info"
+      assert result =~ "must contain only digits"
+    end
+
+    test "renders errors with invalid alias (phx-change)", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/settings")
+
+      result =
+        lv
+        |> element("#payment_info_form")
+        |> render_change(%{
+          "user" => %{
+            "cbu" => "",
+            "alias" => "inv@lid",
+            "account_name" => ""
+          }
+        })
+
+      assert result =~ "Save Payment Info"
+      assert result =~ "can only contain letters, numbers, dots, hyphens, and underscores"
+    end
+
+    test "renders errors with invalid alias length (phx-submit)", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/settings")
+
+      result =
+        lv
+        |> form("#payment_info_form", %{
+          "user" => %{
+            "cbu" => "",
+            "alias" => "short",
+            "account_name" => "John Doe"
+          }
+        })
+        |> render_submit()
+
+      assert result =~ "Save Payment Info"
+      assert result =~ "should be at least 6 character(s)"
+    end
+
+    test "allows empty payment info fields", %{conn: conn, user: user} do
+      {:ok, lv, _html} = live(conn, ~p"/users/settings")
+
+      lv
+      |> form("#payment_info_form", %{
+        "user" => %{
+          "cbu" => "",
+          "alias" => "",
+          "account_name" => ""
+        }
+      })
+      |> render_submit()
+
+      assert_redirected(lv, ~p"/users/settings")
+
+      # Verify user can be fetched and has nil payment fields
+      updated_user = Accounts.get_user!(user.id)
+      assert is_nil(updated_user.cbu)
+      assert is_nil(updated_user.alias)
+      assert is_nil(updated_user.account_name)
+    end
+  end
 end

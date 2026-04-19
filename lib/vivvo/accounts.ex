@@ -382,6 +382,39 @@ defmodule Vivvo.Accounts do
     User.settings_changeset(user, attrs)
   end
 
+  ## Payment Information
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing user payment information.
+
+  ## Examples
+
+      iex> change_user_payment_info(user)
+      %Ecto.Changeset{data: %User{}}
+
+  """
+  def change_user_payment_info(user, attrs \\ %{}) do
+    User.payment_info_changeset(user, attrs)
+  end
+
+  @doc """
+  Updates the user's payment information.
+
+  ## Examples
+
+      iex> update_user_payment_info(user, %{cbu: "1234567890123456789012", alias: "my.alias", account_name: "John Doe"})
+      {:ok, %User{}}
+
+      iex> update_user_payment_info(user, %{cbu: "invalid"})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_user_payment_info(user, attrs) do
+    user
+    |> User.payment_info_changeset(attrs)
+    |> Repo.update()
+  end
+
   ## Token helper
 
   defp update_user_and_delete_all_tokens(changeset) do
