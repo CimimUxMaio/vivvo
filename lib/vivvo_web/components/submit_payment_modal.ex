@@ -120,6 +120,33 @@ defmodule VivvoWeb.SubmitPaymentModal do
 
   @impl true
   def render(assigns) do
+    # Extract payment info fields from the contract's property owner
+    # Handle cases where contract, property, or user might be nil
+    owner =
+      if assigns.contract do
+        assigns.contract.user
+      end
+
+    {visible_payment_fields, has_payment_info} =
+      if owner do
+        payment_fields = [
+          {:cbu, owner.cbu, "CBU"},
+          {:alias, owner.alias, "Alias"},
+          {:account_name, owner.account_name, "Account Holder"}
+        ]
+
+        # Filter out fields with nil values
+        visible = Enum.filter(payment_fields, fn {_key, value, _label} -> value != nil end)
+        {visible, visible != []}
+      else
+        {[], false}
+      end
+
+    assigns =
+      assigns
+      |> assign(:visible_payment_fields, visible_payment_fields)
+      |> assign(:has_payment_info, has_payment_info)
+
     ~H"""
     <div id={@id <> "-wrapper"}>
       <%= if @form do %>
@@ -148,6 +175,11 @@ defmodule VivvoWeb.SubmitPaymentModal do
                 This is an additional payment that will not count toward your rent totals. Use this for security deposits, pet fees, or other charges.
               </p>
             </div>
+          <% end %>
+
+          <%!-- Payment Info Section - Owner's Bank Details --%>
+          <%= if @has_payment_info do %>
+            <.payment_info_card fields={@visible_payment_fields} />
           <% end %>
 
           <.form
@@ -227,6 +259,101 @@ defmodule VivvoWeb.SubmitPaymentModal do
           </:footer>
         </.modal>
       <% end %>
+    </div>
+    """
+  end
+
+  # Payment info card component - displays owner's bank details
+  attr :fields, :list, required: true, doc: "List of {key, value, label} tuples for payment info"
+
+  defp payment_info_card(assigns) do
+    ~H"""
+    <div class="mb-6">
+      <%!-- Section Header --%>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <.icon name="hero-banknotes" class="w-4 h-4 text-primary" />
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold text-base-content">Payment Information</h4>
+          <p class="text-xs text-base-content/60">Transfer to this account</p>
+        </div>
+      </div>
+
+      <%!-- Payment Details Card --%>
+      <div class="bg-gradient-to-br from-base-100 to-base-200/50 border border-base-300 rounded-xl p-4 shadow-sm">
+        <div class="space-y-3">
+          <%= for {key, value, label} <- @fields do %>
+            <div class="group">
+              <label class="text-xs font-medium text-base-content/60 uppercase tracking-wide mb-1 block">
+                {label}
+              </label>
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex-1 bg-base-100 border border-base-300 rounded-lg px-3 py-2.5 text-sm font-mono text-base-content break-all select-all shadow-inner"
+                  id={"payment-field-#{key}"}
+                >
+                  {value}
+                </div>
+                <button
+                  type="button"
+                  id={"copy-btn-#{key}"}
+                  phx-hook=".CopyButton"
+                  data-copy-target={"payment-field-#{key}"}
+                  class="flex-shrink-0 btn btn-ghost btn-sm h-10 w-10 p-0 min-h-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+                  aria-label={"Copy #{label}"}
+                  title={"Copy #{label}"}
+                >
+                  <.icon name="hero-clipboard-document" class="w-4 h-4 copy-icon" />
+                  <.icon name="hero-check" class="w-4 h-4 check-icon hidden" />
+                </button>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <%!-- Helper hint --%>
+        <div class="mt-4 flex items-start gap-2 text-xs text-base-content/60">
+          <.icon name="hero-information-circle" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <p>Click the copy button next to any field to copy it to your clipboard</p>
+        </div>
+      </div>
+
+      <%!-- Colocated Hook for Copy Functionality --%>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyButton">
+        export default {
+          mounted() {
+            const targetId = this.el.dataset.copyTarget;
+            const copyIcon = this.el.querySelector('.copy-icon');
+            const checkIcon = this.el.querySelector('.check-icon');
+
+            this.el.addEventListener('click', async () => {
+              const targetElement = document.getElementById(targetId);
+              if (!targetElement) return;
+
+              const textToCopy = targetElement.textContent.trim();
+
+              try {
+                await navigator.clipboard.writeText(textToCopy);
+
+                // Show success state
+                copyIcon.classList.add('hidden');
+                checkIcon.classList.remove('hidden');
+                this.el.classList.add('text-success');
+
+                // Reset after 2 seconds
+                setTimeout(() => {
+                  copyIcon.classList.remove('hidden');
+                  checkIcon.classList.add('hidden');
+                  this.el.classList.remove('text-success');
+                }, 2000);
+              } catch (err) {
+                console.error('Failed to copy:', err);
+              }
+            });
+          }
+        }
+      </script>
     </div>
     """
   end

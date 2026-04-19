@@ -491,7 +491,7 @@ defmodule Vivvo.Contracts do
     |> where([c], c.id == ^contract_id)
     |> where([c], c.tenant_id == ^user.id)
     |> where([c], c.archived == false)
-    |> preload([:property, :rent_periods, payments: [:files]])
+    |> preload([:property, :rent_periods, :user, payments: [:files]])
     |> Repo.one()
   end
 
